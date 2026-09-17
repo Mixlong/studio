@@ -7,6 +7,7 @@ import {
 import { ProjectEditor } from "project-editor/project-editor-interface";
 import { mostReadable } from "eez-studio-shared/color";
 import type { ProjectStore } from "project-editor/store";
+import { getComponentMaterialIcon } from "./component-icons";
 
 export function getAllComponentClasses(
     projectStore: ProjectStore | undefined,
@@ -162,6 +163,35 @@ export function getGroups(
     const groups = new Map<string, IObjectClassInfo[]>();
 
     allComponentClasses.forEach(componentClass => {
+        const hiddenComponents = (projectStore?.project as any)
+            .embeddedPlatform?.hiddenComponents as
+            | { name?: string; type?: "widget" | "action" }[]
+            | undefined;
+        const componentNames = [
+            componentClass.id,
+            componentClass.name,
+            componentClass.displayName,
+            getComponentName(componentClass.name)
+        ]
+            .filter((name): name is string => !!name)
+            .map(name => name.toLowerCase());
+        const componentType = isProperSubclassOf(
+            componentClass.objectClass.classInfo,
+            ProjectEditor.ActionComponentClass.classInfo
+        )
+            ? "action"
+            : "widget";
+
+        if (
+            hiddenComponents?.some(
+                hidden =>
+                    (!hidden.type || hidden.type === componentType) &&
+                    componentNames.includes((hidden.name || "").toLowerCase())
+            )
+        ) {
+            return;
+        }
+
         if (
             searchText &&
             (componentClass.displayName || componentClass.name)
@@ -227,9 +257,11 @@ export function getComponentVisualData(
 ) {
     const classInfo = componentClass.objectClass.classInfo;
 
-    let icon;
+    let icon: React.ReactNode | undefined = getComponentMaterialIcon(
+        componentClass.name
+    );
 
-    if (classInfo.getIcon) {
+    if (icon == undefined && classInfo.getIcon) {
         icon = classInfo.getIcon(undefined, componentClass, projectStore);
     }
 

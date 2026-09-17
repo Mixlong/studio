@@ -233,7 +233,7 @@ function buildFileMenu(win: IWindow | undefined) {
                             BrowserWindow.getFocusedWindow()!,
                             {
                                 type: "error",
-                                title: "EEZ Studio",
+                                title: "DigiStudio",
                                 message: "File does not exist.",
                                 detail: `The file '${mru.filePath}' does not seem to exist anymore.`
                             }

@@ -4,7 +4,11 @@ export const HOME_WINDOW_URL = "home/index.html";
 
 const HOME_WINDOW_PARAMS: IWindowParams = {
     url: HOME_WINDOW_URL,
-    hideOnClose: true
+    hideOnClose: true,
+    width: 1440,
+    height: 900,
+    minWidth: 1200,
+    minHeight: 760
 };
 
 export function openHomeWindow(params?: Partial<IWindowParams>) {

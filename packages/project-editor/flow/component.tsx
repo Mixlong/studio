@@ -4222,6 +4222,7 @@ function renderActionComponent(
     const body = actionNode.getBody(flowContext);
 
     const emptyContent = !body && !inputs.length && !outputs.length;
+    const actionIcon = getObjectIcon(actionNode);
 
     let executionStateInfo: React.ReactNode = null;
     if (flowContext.flowState) {
@@ -4230,19 +4231,7 @@ function renderActionComponent(
         if (componentState.executionState || componentState.asyncState) {
             executionStateInfo = (
                 <span className="title-info-execution">
-                    <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        strokeWidth="2"
-                        stroke="currentColor"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                    >
-                        <path d="M0 0h24v24H0z" stroke="none" />
-                        <path d="M12 6V3M16.25 7.75 18.4 5.6M18 12h3M16.25 16.25l2.15 2.15M12 18v3M7.75 16.25 5.6 18.4M6 12H3M7.75 7.75 5.6 5.6" />
-                    </svg>
+                    <Icon icon="material:progress_activity" size={16} />
                 </span>
             );
         }
@@ -4264,7 +4253,9 @@ function renderActionComponent(
                     style={titleStyle}
                 >
                     <span className="title-image">
-                        {getObjectIcon(actionNode)}
+                        {actionIcon && (
+                            <Icon icon={actionIcon as any} size={16} />
+                        )}
                     </span>
                     {executionStateInfo}
                     <span className="title-text">{getLabel(actionNode)}</span>

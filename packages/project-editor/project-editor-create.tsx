@@ -144,6 +144,10 @@ import { FlowEditor } from "project-editor/flow/editor/editor";
 import { newComponentMenuItem } from "project-editor/flow/editor/ComponentsPalette";
 
 import { LVGLPageEditorRuntime } from "project-editor/lvgl/page-runtime";
+import {
+    getLVGLWidgetPropertyInterface,
+    updateLVGLWidgetProperty
+} from "project-editor/lvgl/property-interface";
 
 export function createProjectEditor(
     homeTabs: Tabs | undefined,
@@ -262,7 +266,9 @@ export function createProjectEditor(
         FlowTabStateClass: FlowTabState,
         BuildFileClass: BuildFile,
         FlowEditorClass: FlowEditor,
-        newComponentMenuItem
+        newComponentMenuItem,
+        getLVGLWidgetPropertyInterface,
+        updateLVGLWidgetProperty
     };
 
     return projectEditor;

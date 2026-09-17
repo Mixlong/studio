@@ -26,6 +26,7 @@ import { extractAnimProperties, LVGLStylesDefinition } from "project-editor/lvgl
 import { ProjectEditor } from "project-editor/project-editor-interface";
 import { createObject } from "project-editor/store";
 import { getComponentName } from "project-editor/flow/components/components-registry";
+import { getComponentMaterialIcon } from "project-editor/flow/components/component-icons";
 import { LVGLStylesEditorRuntime } from "project-editor/lvgl/page-runtime";
 import { Checkbox } from "project-editor/ui-components/PropertyGrid/Checkbox";
 import { Icon } from "eez-studio-ui/icon";
@@ -178,7 +179,9 @@ export class LVGLStyle extends EezObject {
                 componentClass => componentClass.name == lvglStyle.forWidgetType
             );
 
-            const icon = componentClass?.objectClass.classInfo.icon;
+            const icon =
+                getComponentMaterialIcon(componentClass?.name) ??
+                componentClass?.objectClass.classInfo.icon;
 
             const isDefault =
                 ProjectEditor.getProject(lvglStyle).lvglStyles.defaultStyles[

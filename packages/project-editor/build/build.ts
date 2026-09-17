@@ -34,6 +34,14 @@ import {
 } from "project-editor/features/extension-definitions/build";
 
 import { buildAssets } from "project-editor/build/assets";
+import {
+    prepareAudioBuildForProject,
+    type AudioBuildResult
+} from "project-editor/features/audio/build";
+import {
+    prepareEmbeddedImageBuildForProject,
+    type EmbeddedImageBuildResult
+} from "project-editor/features/embedded-platform/image-build";
 import { buildScpi } from "project-editor/build/scpi";
 import { generateSourceCodeForEezFramework } from "project-editor/lvgl/build";
 import { cleanupSourceFile } from "project-editor/build/cleanup-c-source-files";
@@ -449,9 +457,179 @@ function anythingToBuild(projectStore: ProjectStore) {
     const project = projectStore.project;
     return (
         project.settings.build.files.length > 0 ||
+        (project.audio?.resources.length ?? 0) > 0 ||
+        project.bitmaps.length > 0 ||
         projectStore.masterProject ||
         project.projectTypeTraits.isDashboard ||
         project.projectTypeTraits.isLVGL
+    );
+}
+
+function getAudioIndexConstantName(
+    resourceName: string,
+    audioIndex: number,
+    usedNames: Set<string>
+) {
+    const normalized = resourceName
+        .replace(/[^a-zA-Z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .toUpperCase();
+    const baseName = normalized
+        ? `EEZ_AUDIO_INDEX_${normalized}`
+        : `EEZ_AUDIO_INDEX_RESOURCE_${audioIndex}`;
+    let name = baseName;
+    let suffix = 2;
+    while (usedNames.has(name)) {
+        name = `${baseName}_${suffix++}`;
+    }
+    usedNames.add(name);
+    return name;
+}
+
+async function writeAudioBuildFiles(
+    destinationFolderPath: string,
+    audioBuildResult: AudioBuildResult,
+    outputSectionsStore: ProjectStore["outputSectionsStore"]
+) {
+    const binaryFileName = "audio.bin";
+    const manifestFileName = "audio-manifest.json";
+
+    const headerFileName = "audio-data.h";
+    const sourceFileName = "audio-data.c";
+    const bytesPerLine = 12;
+    const dataLines: string[] = [];
+    if (audioBuildResult.manifest.accessMode === "rom") {
+        for (let offset = 0; offset < audioBuildResult.binary.length; offset += bytesPerLine) {
+            const values = Array.from(
+                audioBuildResult.binary.subarray(offset, offset + bytesPerLine)
+            ).map(value => `0x${value.toString(16).padStart(2, "0").toUpperCase()}`);
+            dataLines.push(`    ${values.join(", ")}`);
+        }
+    } else {
+        await writeBinaryData(
+            path.join(destinationFolderPath, binaryFileName),
+            audioBuildResult.binary
+        );
+    }
+    const cString = (value: string) => JSON.stringify(value);
+    const usedIndexNames = new Set(["EEZ_AUDIO_INDEX_NONE"]);
+    const indexConstants = audioBuildResult.manifest.resources
+        .map(resource => {
+            const constantName = getAudioIndexConstantName(
+                resource.name,
+                resource.audioIndex,
+                usedIndexNames
+            );
+            return `    ${constantName} = ${resource.audioIndex}`;
+        })
+        .join(",\n");
+    const resources = audioBuildResult.manifest.resources
+        .map(resource =>
+            `    { ${resource.audioIndex}u, ${resource.id}u, ${cString(resource.name)}, ${resource.flashOffset}u, ${resource.dataSize}u, ${resource.sampleRate}u, ${resource.channels}u, ${resource.bitsPerSample}u, ${resource.blockAlign}u }`
+        )
+        .join(",\n");
+    const accessModeMacro =
+        audioBuildResult.manifest.accessMode === "rom"
+            ? "EEZ_AUDIO_ACCESS_ROM"
+            : audioBuildResult.manifest.accessMode === "xip"
+              ? "EEZ_AUDIO_ACCESS_XIP"
+              : "EEZ_AUDIO_ACCESS_NON_XIP";
+    const header = `#pragma once\n#include <stdint.h>\n\n#define EEZ_AUDIO_ACCESS_ROM 1\n#define EEZ_AUDIO_ACCESS_XIP 2\n#define EEZ_AUDIO_ACCESS_NON_XIP 3\n#define EEZ_AUDIO_ACCESS_MODE ${accessModeMacro}\n\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n\ntypedef struct {\n    uint32_t id;\n    const char *name;\n    uint32_t flash_offset;\n    uint32_t data_size;\n    uint32_t sample_rate;\n    uint16_t channels;\n    uint16_t bits_per_sample;\n    uint16_t block_align;\n} eez_audio_resource_t;\n\nextern const eez_audio_resource_t eez_audio_resources[];\nextern const uint32_t eez_audio_resource_count;\nextern const uint32_t eez_audio_base_address;\nextern const uint32_t eez_audio_image_size;\n${audioBuildResult.manifest.accessMode === "rom" ? "extern const uint8_t eez_audio_data[];\nextern const uint32_t eez_audio_data_size;\n" : ""}\n#ifdef __cplusplus\n}\n#endif\n`;
+    const baseAddress = parseInt(audioBuildResult.manifest.baseAddress, 0) >>> 0;
+    const source = `#include \"${headerFileName}\"\n\nconst uint32_t eez_audio_base_address = 0x${baseAddress.toString(16).toUpperCase()}u;\nconst uint32_t eez_audio_image_size = ${audioBuildResult.manifest.imageSize}u;\nconst eez_audio_resource_t eez_audio_resources[] = {\n${resources}\n};\nconst uint32_t eez_audio_resource_count = ${audioBuildResult.manifest.resources.length}u;\n${audioBuildResult.manifest.accessMode === "rom" ? `const uint8_t eez_audio_data[] = {\n${dataLines.join(",\n")}\n};\nconst uint32_t eez_audio_data_size = ${audioBuildResult.binary.length}u;\n` : ""}`;
+    const indexedHeader = header
+        .replace(
+            `#define EEZ_AUDIO_ACCESS_MODE ${accessModeMacro}\n\n`,
+            `#define EEZ_AUDIO_ACCESS_MODE ${accessModeMacro}\n\n#define EEZ_AUDIO_INDEX_NONE 0u\n#define EEZ_AUDIO_INDEX_MIN 1u\n#define EEZ_AUDIO_INDEX_MAX 100u\n\ntypedef enum {\n${indexConstants}\n} eez_audio_index_t;\n\n`
+        )
+        .replace(
+            "    uint32_t id;\n",
+            "    uint32_t audio_index;\n    uint32_t id; /* Legacy resource order, retained for compatibility. */\n"
+        )
+        .replace(
+            "extern const uint32_t eez_audio_image_size;\n",
+            "extern const uint32_t eez_audio_image_size;\nconst eez_audio_resource_t *eez_audio_find_resource(uint32_t audio_index);\n"
+        );
+    const indexedSource = source.replace(
+        `const uint32_t eez_audio_resource_count = ${audioBuildResult.manifest.resources.length}u;\n`,
+        `const uint32_t eez_audio_resource_count = ${audioBuildResult.manifest.resources.length}u;\n\nconst eez_audio_resource_t *eez_audio_find_resource(uint32_t audio_index) {\n    if (audio_index == EEZ_AUDIO_INDEX_NONE) {\n        return 0;\n    }\n    for (uint32_t index = 0; index < eez_audio_resource_count; index++) {\n        if (eez_audio_resources[index].audio_index == audio_index) {\n            return &eez_audio_resources[index];\n        }\n    }\n    return 0;\n}\n`
+    );
+    await writeTextFile(path.join(destinationFolderPath, headerFileName), indexedHeader);
+    await writeTextFile(path.join(destinationFolderPath, sourceFileName), indexedSource);
+    await writeTextFile(path.join(destinationFolderPath, manifestFileName), JSON.stringify(audioBuildResult.manifest, null, 2) + "\n");
+    outputSectionsStore.write(
+        Section.OUTPUT,
+        MessageType.INFO,
+        `Audio package: ${audioBuildResult.manifest.accessMode === "rom" ? sourceFileName : binaryFileName} (${audioBuildResult.manifest.imageSize} bytes, ${audioBuildResult.manifest.resources.length} resources)`
+    );
+    outputSectionsStore.write(
+        Section.OUTPUT,
+        MessageType.INFO,
+        `Audio manifest: ${manifestFileName}`
+    );
+}
+
+async function writeEmbeddedImageBuildFiles(
+    destinationFolderPath: string,
+    imageBuildResult: EmbeddedImageBuildResult,
+    outputSectionsStore: ProjectStore["outputSectionsStore"]
+) {
+    const binaryFileName = "image.bin";
+    const manifestFileName = "image-manifest.json";
+    const headerFileName = "image-data.h";
+    const sourceFileName = "image-data.c";
+    const bytesPerLine = 12;
+    const dataLines: string[] = [];
+
+    if (imageBuildResult.manifest.accessMode !== "non-xip") {
+        for (let offset = 0; offset < imageBuildResult.binary.length; offset += bytesPerLine) {
+            const values = Array.from(
+                imageBuildResult.binary.subarray(offset, offset + bytesPerLine)
+            ).map(value => `0x${value.toString(16).padStart(2, "0").toUpperCase()}`);
+            dataLines.push(`    ${values.join(", ")}`);
+        }
+    } else {
+        await writeBinaryData(
+            path.join(destinationFolderPath, binaryFileName),
+            imageBuildResult.binary
+        );
+    }
+
+    const cString = (value: string) => JSON.stringify(value);
+    const resources = imageBuildResult.manifest.resources
+        .map(resource =>
+            `    { ${resource.id}, ${cString(resource.name)}, ${resource.flashOffset}u, ${resource.dataSize}u, ${resource.width}u, ${resource.height}u, ${resource.bpp}u, ${resource.flashAddress}u }`
+        )
+        .join(",\n");
+    const accessModeMacro =
+        imageBuildResult.manifest.accessMode === "rom"
+            ? "EEZ_IMAGE_ACCESS_ROM"
+            : imageBuildResult.manifest.accessMode === "xip"
+              ? "EEZ_IMAGE_ACCESS_XIP"
+              : "EEZ_IMAGE_ACCESS_NON_XIP";
+    const header = `#pragma once\n#include <stdint.h>\n\n#define EEZ_IMAGE_ACCESS_ROM 1\n#define EEZ_IMAGE_ACCESS_XIP 2\n#define EEZ_IMAGE_ACCESS_NON_XIP 3\n#define EEZ_IMAGE_ACCESS_MODE ${accessModeMacro}\n\n#ifdef __cplusplus\nextern "C" {\n#endif\n\ntypedef struct {\n    uint32_t id;\n    const char *name;\n    uint32_t flash_offset;\n    uint32_t data_size;\n    uint16_t width;\n    uint16_t height;\n    uint16_t bpp;\n    uint32_t flash_address;\n} eez_image_resource_t;\n\nextern const eez_image_resource_t eez_image_resources[];\nextern const uint32_t eez_image_resource_count;\nextern const uint32_t eez_image_base_address;\nextern const uint32_t eez_image_size;\n${imageBuildResult.manifest.accessMode !== "non-xip" ? "extern const uint8_t eez_image_data[];\nextern const uint32_t eez_image_data_size;\n" : ""}\n#ifdef __cplusplus\n}\n#endif\n`;
+    const baseAddress = parseInt(imageBuildResult.manifest.baseAddress, 0) >>> 0;
+    const xipAttribute =
+        imageBuildResult.manifest.accessMode === "xip"
+            ? `${imageBuildResult.manifest.xipSectionAttribute} `
+            : "";
+    const source = `#include \"${headerFileName}\"\n\nconst uint32_t eez_image_base_address = 0x${baseAddress.toString(16).toUpperCase()}u;\nconst uint32_t eez_image_size = ${imageBuildResult.manifest.imageSize}u;\nconst eez_image_resource_t eez_image_resources[] = {\n${resources}\n};\nconst uint32_t eez_image_resource_count = ${imageBuildResult.manifest.resources.length}u;\n${imageBuildResult.manifest.accessMode !== "non-xip" ? `${xipAttribute}const uint8_t eez_image_data[] = {\n${dataLines.join(",\n")}\n};\nconst uint32_t eez_image_data_size = ${imageBuildResult.binary.length}u;\n` : ""}`;
+
+    await writeTextFile(path.join(destinationFolderPath, headerFileName), header);
+    await writeTextFile(path.join(destinationFolderPath, sourceFileName), source);
+    await writeTextFile(
+        path.join(destinationFolderPath, manifestFileName),
+        JSON.stringify(imageBuildResult.manifest, null, 2) + "\n"
+    );
+    outputSectionsStore.write(
+        Section.OUTPUT,
+        MessageType.INFO,
+        `Image package: ${imageBuildResult.manifest.accessMode === "non-xip" ? binaryFileName : sourceFileName} (${imageBuildResult.manifest.imageSize} bytes, ${imageBuildResult.manifest.resources.length} resources)`
+    );
+    outputSectionsStore.write(
+        Section.OUTPUT,
+        MessageType.INFO,
+        `Image manifest: ${manifestFileName}`
     );
 }
 
@@ -486,6 +664,8 @@ export async function build(
     // Reset build file tracking
     currentBuildFiles = new Set();
     let previousManifest: BuildManifest | null = null;
+    let audioBuildResult: AudioBuildResult | undefined;
+    let imageBuildResult: EmbeddedImageBuildResult | undefined;
 
     try {
         let sectionNames: string[] | undefined = undefined;
@@ -577,6 +757,32 @@ export async function build(
             }
         }
 
+        if (project.bitmaps.length) {
+            const imageBuild = await prepareEmbeddedImageBuildForProject(projectStore);
+            for (const issue of imageBuild.issues) {
+                OutputSections.write(
+                    Section.OUTPUT,
+                    MessageType.ERROR,
+                    issue.message,
+                    issue.object
+                );
+            }
+            imageBuildResult = imageBuild.result;
+        }
+
+        if (project.audio?.resources.length) {
+            const audioBuild = await prepareAudioBuildForProject(projectStore);
+            for (const issue of audioBuild.issues) {
+                OutputSections.write(
+                    Section.OUTPUT,
+                    MessageType.ERROR,
+                    issue.message,
+                    issue.object
+                );
+            }
+            audioBuildResult = audioBuild.result;
+        }
+
         showCheckResult(projectStore);
 
         if (option == "check") {
@@ -589,7 +795,7 @@ export async function build(
             const buildResults =
                 configurationBuildResults[
                     defaultConfiguration?.name ?? "default"
-                ];
+                ] || [];
 
             parts = {};
             for (const buildResult of buildResults) {
@@ -604,11 +810,13 @@ export async function build(
                 } seconds`
             );
 
-            OutputSections.write(
-                Section.OUTPUT,
-                MessageType.INFO,
-                `Build successfully finished at ${new Date().toLocaleString()}`
-            );
+            if (OutputSections.getSection(Section.OUTPUT).numErrors === 0) {
+                OutputSections.write(
+                    Section.OUTPUT,
+                    MessageType.INFO,
+                    `Build successfully finished at ${new Date().toLocaleString()}`
+                );
+            }
 
             return parts;
         }
@@ -637,6 +845,21 @@ export async function build(
                 );
             }
 
+            if (audioBuildResult) {
+                await writeAudioBuildFiles(
+                    destinationFolderPath || "",
+                    audioBuildResult,
+                    OutputSections
+                );
+            }
+
+            if (imageBuildResult) {
+                await writeEmbeddedImageBuildFiles(
+                    destinationFolderPath || "",
+                    imageBuildResult,
+                    OutputSections
+                );
+            }
 
             // Disable tracking after file generation
             disableBuildTracking();
@@ -717,11 +940,13 @@ export async function build(
             } seconds`
         );
 
-        OutputSections.write(
-            Section.OUTPUT,
-            MessageType.INFO,
-            `Build successfully finished at ${new Date().toLocaleString()}`
-        );
+        if (OutputSections.getSection(Section.OUTPUT).numErrors === 0) {
+            OutputSections.write(
+                Section.OUTPUT,
+                MessageType.INFO,
+                `Build successfully finished at ${new Date().toLocaleString()}`
+            );
+        }
 
         // Save build manifest and delete orphaned files
         if (

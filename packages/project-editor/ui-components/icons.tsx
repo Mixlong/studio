@@ -2103,270 +2103,36 @@ export const PRINT_TO_PDF_ICON = (
     </svg>
 );
 
-export const RUN_ICON = (
-    <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        strokeWidth="2"
-        stroke="currentColor"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-    >
-        <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-        <circle cx="13" cy="4" r="1"></circle>
-        <path d="M4 17l5 1l.75 -1.5"></path>
-        <path d="M15 21l0 -4l-4 -3l1 -6"></path>
-        <path d="M7 12l0 -3l5 -1l3 3l3 1"></path>
-    </svg>
+const MATERIAL_SYMBOL_ICON = (name: string): JSX.Element => (
+    <i className="material-symbols-outlined" aria-hidden="true">
+        {name}
+    </i>
 );
 
-export const LANGUAGE_ICON = (
-    <svg
-        viewBox="0 0 24 24"
-        strokeWidth="2"
-        stroke="currentColor"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-    >
-        <path d="M0 0h24v24H0z" stroke="none" />
-        <path d="M4 5h7M9 3v2c0 4.418-2.239 8-5 8" />
-        <path d="M5 9c-.003 2.144 2.952 3.908 6.7 4M12 20l4-9 4 9M19.1 18h-6.2" />
-    </svg>
+export const RUN_ICON = MATERIAL_SYMBOL_ICON("directions_run");
+export const LANGUAGE_ICON = MATERIAL_SYMBOL_ICON("translate");
+export const CHANGES_ICON = MATERIAL_SYMBOL_ICON("difference");
+export const VARIABLE_ICON = MATERIAL_SYMBOL_ICON("data_object");
+export const HIERARCHY_ICON = MATERIAL_SYMBOL_ICON("account_tree");
+export const PROPERTIES_ICON = MATERIAL_SYMBOL_ICON("tune");
+export const PALETTE_ICON = MATERIAL_SYMBOL_ICON("palette");
+export const COMPONENTS_ICON = MATERIAL_SYMBOL_ICON("extension");
+export const PAGES_ICON = MATERIAL_SYMBOL_ICON("library_books");
+export const PAGE_ICON = MATERIAL_SYMBOL_ICON("description");
+export const LOG_ICON = MATERIAL_SYMBOL_ICON("terminal");
+export const WATCH_PANEL_ICON = MATERIAL_SYMBOL_ICON("visibility");
+export const QUEUE_PANEL_ICON = MATERIAL_SYMBOL_ICON("view_list");
+export const ACTIVE_FLOWS_PANEL_ICON = MATERIAL_SYMBOL_ICON("account_tree");
+export const BREAKPOINTS_PANEL_ICON = MATERIAL_SYMBOL_ICON(
+    "radio_button_checked"
 );
-
-export const CHANGES_ICON = (
-    <svg width="24" height="24" viewBox="0 0 13 16">
-        <path
-            fillRule="evenodd"
-            d="M6 7h2v1H6v2H5V8H3V7h2V5h1v2zm-3 6h5v-1H3v1zM7.5 2 11 5.5V15c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V3c0-.55.45-1 1-1h6.5zM10 6 7 3H1v12h9V6zM8.5 0H3v1h5l4 4v8h1V4.5L8.5 0z"
-            fill="currentColor"
-        />
-    </svg>
-);
-
-export const VARIABLE_ICON = (
-    <svg
-        xmlns="http://www.w3.org/2000/svg"
-        className="icon icon-tabler icon-tabler-variable"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        strokeWidth="2"
-        stroke="currentColor"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-    >
-        <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-        <path d="M5 4c-2.5 5 -2.5 10 0 16m14 -16c2.5 5 2.5 10 0 16m-10 -11h1c1 0 1 1 2.016 3.527c.984 2.473 .984 3.473 1.984 3.473h1" />
-        <path d="M8 16c1.5 0 3 -2 4 -3.5s2.5 -3.5 4 -3.5" />
-    </svg>
-);
-
-export const HIERARCHY_ICON = (
-    <svg viewBox="0 0 21 21">
-        <g
-            fill="none"
-            fillRule="evenodd"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M7.5 2.5h6v5h-6zM12.5 13.5h6v5h-6zM2.5 13.5h6v5h-6zM5.498 13.5v-3h10v3M10.5 10.5v-3" />
-        </g>
-    </svg>
-);
-
-export const PROPERTIES_ICON = (
-    <svg viewBox="0 96 960 960" fill="currentColor">
-        <path d="M427 936V711h60v83h353v60H487v82h-60Zm-307-82v-60h247v60H120Zm187-166v-82H120v-60h187v-84h60v226h-60Zm120-82v-60h413v60H427Zm166-165V216h60v82h187v60H653v83h-60Zm-473-83v-60h413v60H120Z" />
-    </svg>
-);
-
-export const PALETTE_ICON = (
-    <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-    >
-        <path stroke="none" d="M0 0h24v24H0z" />
-        <path d="M12 21a9 9 0 0 1 0-18c4.97 0 9 3.582 9 8 0 1.06-.474 2.078-1.318 2.828-.844.75-1.989 1.172-3.182 1.172H14a2 2 0 0 0-1 3.75A1.3 1.3 0 0 1 12 21" />
-        <path d="M7.5 10.5a1 1 0 1 0 2 0 1 1 0 1 0-2 0M11.5 7.5a1 1 0 1 0 2 0 1 1 0 1 0-2 0M15.5 10.5a1 1 0 1 0 2 0 1 1 0 1 0-2 0" />
-    </svg>
-);
-
-export const COMPONENTS_ICON = (
-    <svg viewBox="0 0 21 21">
-        <g
-            fill="none"
-            fillRule="evenodd"
-            stroke="currentColor"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <path d="M9.5 5.5h-4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-4M14.5 2.5v6M17.5 5.5h-6" />
-        </g>
-    </svg>
-);
-
-export const PAGES_ICON = (
-    <svg viewBox="0 96 960 960" fill="currentColor">
-        <path d="M343 636h225v-60H343v60Zm0-90h395v-60H343v60Zm0-90h395v-60H343v60Zm-83 400q-24 0-42-18t-18-42V236q0-24 18-42t42-18h560q24 0 42 18t18 42v560q0 24-18 42t-42 18H260Zm0-60h560V236H260v560ZM140 976q-24 0-42-18t-18-42V296h60v620h620v60H140Zm120-740v560-560Z" />
-    </svg>
-);
-
-export const PAGE_ICON = (
-    <svg viewBox="0 96 960 960" fill="currentColor">
-        <path d="M277 777h275v-60H277v60Zm0-171h406v-60H277v60Zm0-171h406v-60H277v60Zm-97 501q-24 0-42-18t-18-42V276q0-24 18-42t42-18h600q24 0 42 18t18 42v600q0 24-18 42t-42 18H180Zm0-60h600V276H180v600Zm0-600v600-600Z" />
-    </svg>
-);
-
-export const LOG_ICON = (
-    <svg viewBox="0 0 76 76" fill="currentColor">
-        <path d="M62 31.007c0 1.1-.9 2-2 2H16c-1.1 0-2-.9-2-2s.9-2 2-2h44c1.1 0 2 .9 2 2zm-14.2 8H16c-1.1 0-2 .9-2 2s.9 2 2 2h31.8c1.1 0 2-.9 2-2s-.9-2-2-2zm12.2-20H16c-1.1 0-2 .9-2 2s.9 2 2 2h44c1.1 0 2-.9 2-2s-.9-2-2-2zm16-12v48c0 1.1-.9 2-2 2H35l-13.6 13.4c-.5.6-3.4 1.4-3.4-1.4v-12H2c-1.1 0-2-.9-2-2v-48c0-1.1.9-2 2-2h72c1.1 0 2 .9 2 2zm-4 2H4v44h16c1.1 0 2 .9 2 2v9.2l10.8-10.6c.4-.4.9-.6 1.4-.6H72v-44z" />
-    </svg>
-);
-
-export const WATCH_PANEL_ICON = (
-    <svg viewBox="0 0 28 28">
-        <path d="m22.309 13.817-2.6-6.487a.488.488 0 0 0-.111-.168L18.18 5.738l-1.462-3.9a.492.492 0 0 0-.115-.177 2.877 2.877 0 0 0-3.707 0 .5.5 0 0 0-.146.353v4.45a.5.5 0 0 1-.526.5 8.341 8.341 0 0 0-.473-.012.5.5 0 0 1-.5-.5V2.015a.5.5 0 0 0-.147-.353 2.877 2.877 0 0 0-3.707 0 .49.49 0 0 0-.114.177L5.82 5.738 4.4 7.162a.471.471 0 0 0-.11.168l-2.599 6.487a5.5 5.5 0 1 0 9.559 3.7v-5.064a.5.5 0 0 1 .5-.5 5.337 5.337 0 0 1 .551.026.5.5 0 0 1 .45.5v5.038a5.5 5.5 0 1 0 9.559-3.7ZM9.25 17.515a3.5 3.5 0 1 1-3.5-3.5 3.5 3.5 0 0 1 3.5 3.5Zm9 3.5a3.5 3.5 0 1 1 3.5-3.5 3.5 3.5 0 0 1-3.5 3.5Z" />
-    </svg>
-);
-
-export const QUEUE_PANEL_ICON = (
-    <svg viewBox="0 0 32 32">
-        <path d="M28 28H4a2.002 2.002 0 0 1-2-2v-5h2v5h24v-5h2v5a2.002 2.002 0 0 1-2 2Z" />
-        <path d="M7 21h18v2H7zM7 16h18v2H7zM7 11h18v2H7zM7 6h18v2H7z" />
-        <path d="M0 0h32v32H0z" fill="none" />
-    </svg>
-);
-
-export const ACTIVE_FLOWS_PANEL_ICON = (
-    <svg viewBox="0 0 24 24">
-        <path fill="none" d="M0 0h24v24H0z" />
-        <path d="M10 2a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H8v2h5V9a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-1H8v6h5v-1a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-1H7a1 1 0 0 1-1-1V8H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6zm9 16h-4v2h4v-2zm0-8h-4v2h4v-2zM9 4H5v2h4V4z" />
-    </svg>
-);
-
-export const BREAKPOINTS_PANEL_ICON = (
-    <svg viewBox="0 0 24 24" fill="currentColor">
-        <circle cx="12" cy="12" r="8" />
-    </svg>
-);
-
-export const USER_WIDGET_ICON = (
-    <svg
-        strokeWidth="2"
-        stroke="currentColor"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        viewBox="0 0 24 24"
-    >
-        <path d="M0 0h24v24H0z" stroke="none" />
-        <rect x="4" y="4" width="16" height="16" rx="2" />
-        <path d="M4 9h8m0 6h8M12 4v16" />
-    </svg>
-);
-
+export const USER_WIDGET_ICON = MATERIAL_SYMBOL_ICON("dashboard_customize");
 export const USER_WIDGETS_ICON = USER_WIDGET_ICON;
 
-export const MATCH_CASE_ICON = (
-    <svg
-        width="16"
-        height="16"
-        viewBox="0 0 16 16"
-        xmlns="http://www.w3.org/2000/svg"
-    >
-        <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M7.495 9.052l.891 2.35h1.091L6.237 3h-1.02L2 11.402h1.095l.838-2.35h3.562zM5.811 4.453l.044.135 1.318 3.574H4.255l1.307-3.574.044-.135.038-.156.032-.152.021-.126h.023l.024.126.029.152.038.156zm7.984 6.011v.936h.96V7.498c0-.719-.18-1.272-.539-1.661-.359-.389-.889-.583-1.588-.583-.199 0-.401.019-.606.056a4.875 4.875 0 0 0-1.078.326 2.081 2.081 0 0 0-.343.188v.984c.266-.23.566-.411.904-.54a2.927 2.927 0 0 1 1.052-.193c.188 0 .358.028.513.085a.98.98 0 0 1 .396.267c.109.121.193.279.252.472.059.193.088.427.088.7l-1.811.252c-.344.047-.64.126-.888.237a1.947 1.947 0 0 0-.615.419 1.6 1.6 0 0 0-.36.58 2.134 2.134 0 0 0-.117.721c0 .246.042.475.124.688.082.213.203.397.363.551.16.154.36.276.598.366.238.09.513.135.826.135.402 0 .76-.092 1.075-.278.315-.186.572-.454.771-.806h.023zm-2.128-1.743c.176-.064.401-.114.674-.149l1.465-.205v.609c0 .246-.041.475-.123.688a1.727 1.727 0 0 1-.343.557 1.573 1.573 0 0 1-.524.372 1.63 1.63 0 0 1-.668.135c-.187 0-.353-.025-.495-.076a1.03 1.03 0 0 1-.357-.211.896.896 0 0 1-.22-.316A1.005 1.005 0 0 1 11 9.732a1.6 1.6 0 0 1 .055-.44.739.739 0 0 1 .202-.334 1.16 1.16 0 0 1 .41-.237z"
-            fill="%23007bff"
-        />
-    </svg>
-);
-
-export const MATCH_WHOLE_WORD_ICON = (
-    <svg
-        width="16"
-        height="16"
-        viewBox="0 0 16 16"
-        xmlns="http://www.w3.org/2000/svg"
-    >
-        <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M1 2h14v1H1V2zm13 2h-1v8h1V4zm-2.728 4.387a2.353 2.353 0 0 0-.36-.786 1.746 1.746 0 0 0-.609-.53 1.832 1.832 0 0 0-.866-.193c-.198 0-.38.024-.547.073a1.76 1.76 0 0 0-.453.205 1.724 1.724 0 0 0-.365.318l-.179.258V4.578H7V12h.893v-.575l.126.175c.087.102.189.19.304.269.117.078.249.14.398.186.149.046.314.068.498.068.353 0 .666-.071.937-.212.272-.143.499-.338.682-.586.183-.25.321-.543.414-.879.093-.338.14-.703.14-1.097a3.756 3.756 0 0 0-.12-.962zM9.793 7.78c.151.071.282.176.39.314.109.14.194.313.255.517.051.174.082.371.089.587l-.007.125c0 .327-.033.62-.1.869a1.886 1.886 0 0 1-.278.614c-.117.162-.26.285-.421.366-.322.162-.76.166-1.069.015a1.264 1.264 0 0 1-.393-.296 1.273 1.273 0 0 1-.218-.367s-.179-.447-.179-.947c0-.5.179-1.002.179-1.002.062-.177.136-.318.224-.43.114-.143.256-.259.424-.345.168-.086.365-.129.587-.129.19 0 .364.037.517.109zM15 13H1v1h14v-1zM2.813 10l-.728 2.031H1l.025-.072 2.441-7.086h.941l2.485 7.158H5.81L5.032 10H2.813zm1.121-3.578h-.022l-.905 2.753h1.841l-.914-2.753z"
-            fill="%23007bff"
-        />
-    </svg>
-);
-
-export const REPLACE_SELECTED_ICON = (
-    <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-    >
-        <path stroke="none" d="M0 0h24v24H0z" />
-        <rect width="6" height="6" x="3" y="3" rx="1" />
-        <rect width="6" height="6" x="15" y="15" rx="1" />
-        <path d="M21 11V8a2 2 0 0 0-2-2h-6l3 3m0-6-3 3M3 13v3a2 2 0 0 0 2 2h6l-3-3m0 6 3-3" />
-    </svg>
-);
-
-export const REPLACE_ALL_ICON = (
-    <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-    >
-        <path stroke="none" d="M0 0h24v24H0z" />
-        <path
-            d="M4.185 7.703h-1.58c-.554 0-1-.446-1-1v-4c0-.554.446-1 1-1h4c.554 0 1 .446 1 1v1.494"
-            strokeWidth="1.5"
-            strokeLinecap="butt"
-            strokeLinejoin="bevel"
-        />
-        <rect
-            width="6"
-            height="6"
-            x="3.912"
-            y="3.956"
-            rx="1"
-            strokeWidth="1.5"
-        />
-        <path
-            d="M16.61 20.277h-1.58c-.555 0-1-.446-1-1v-4c0-.554.445-1 1-1h4c.553 0 1 .446 1 1v1.494"
-            strokeWidth="1.5"
-            strokeLinecap="butt"
-            strokeLinejoin="bevel"
-        />
-        <rect
-            width="6"
-            height="6"
-            x="16.337"
-            y="16.531"
-            rx="1"
-            strokeWidth="1.5"
-        />
-        <path d="M21 11V8a2 2 0 0 0-2-2h-6l3 3m0-6-3 3M3 13v3a2 2 0 0 0 2 2h6l-3-3m0 6 3-3" />
-    </svg>
-);
+export const MATCH_CASE_ICON = MATERIAL_SYMBOL_ICON("match_case");
+export const MATCH_WHOLE_WORD_ICON = MATERIAL_SYMBOL_ICON("match_word");
+export const REPLACE_SELECTED_ICON = MATERIAL_SYMBOL_ICON("find_replace");
+export const REPLACE_ALL_ICON = MATERIAL_SYMBOL_ICON("find_replace");
 
 export const DASHBOARD_PROJECT_ICON = (size: number) => (
     <svg viewBox="0 0 560 510" width={size} height={size}>
@@ -3566,10 +3332,8 @@ export const SHOW_FILE_IN_FOLDER_ICON: any = (
     </svg>
 );
 
-export const PROJECT_EDITOR_SCRAPBOOK: any = (
-    <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="m19 23.3-.6-.5c-2-1.9-3.4-3.1-3.4-4.6 0-1.2 1-2.2 2.2-2.2.7 0 1.4.3 1.8.8.4-.5 1.1-.8 1.8-.8 1.2 0 2.2.9 2.2 2.2 0 1.5-1.4 2.7-3.4 4.6zM17 4v6l-2-2-2 2V4H9v16h4.08c.12.72.37 1.39.72 2H7c-1.05 0-2-.95-2-2v-1H3v-2h2v-4H3v-2h2V7H3V5h2V4a2 2 0 0 1 2-2h12c1.05 0 2 .95 2 2v9.34c-.63-.22-1.3-.34-2-.34V4zM5 19h2v-2H5zm0-6h2v-2H5zm0-6h2V5H5z" />
-    </svg>
+export const PROJECT_EDITOR_SCRAPBOOK = MATERIAL_SYMBOL_ICON(
+    "collections_bookmark"
 );
 
 export const RECORD_AUDIO_ICON: any = (

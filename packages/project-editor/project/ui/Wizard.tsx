@@ -2949,7 +2949,7 @@ export async function confirmOverwrite(description: string) {
 
     let opts: Electron.MessageBoxOptions = {
         type: "warning",
-        title: "EEZ Studio",
+        title: "DigiStudio",
         message: "Overwite?",
         detail: description,
         noLink: true,

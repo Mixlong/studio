@@ -15,6 +15,7 @@ import { MenuItem } from "@electron/remote";
 import { isArray, objectClone } from "eez-studio-shared/util";
 import { SearchInput } from "eez-studio-ui/search-input";
 import { Dialog, showDialog } from "eez-studio-ui/dialog";
+import { Icon } from "eez-studio-ui/icon";
 
 import {
     getDefaultValue,
@@ -601,7 +602,13 @@ const PaletteItem = observer(
                     }
                     style={titleStyle}
                 >
-                    {typeof icon === "string" ? <img src={icon} /> : icon}
+                    {typeof icon === "string" && icon.startsWith("material:") ? (
+                        <Icon icon={icon} size={20} />
+                    ) : typeof icon === "string" ? (
+                        <img src={icon} />
+                    ) : (
+                        icon
+                    )}
                     <span title={label}>{label}</span>
                 </div>
             );

@@ -59,6 +59,8 @@ import type { Page } from "project-editor/features/page/page";
 import type { Style } from "project-editor/features/style/style";
 import type { Font } from "project-editor/features/font/font";
 import type { Bitmap } from "project-editor/features/bitmap/bitmap";
+import type { Audio } from "project-editor/features/audio/audio";
+import type { EmbeddedPlatform } from "project-editor/features/embedded-platform/embedded-platform";
 import { ProjectEditor } from "project-editor/project-editor-interface";
 import { Texts } from "project-editor/features/texts";
 import { Readme } from "project-editor/features/readme";
@@ -1778,6 +1780,8 @@ export class Project extends EezObject {
     lvglStyles: LVGLStyles;
     lvglGroups: LVGLGroups;
     bitmaps: Bitmap[];
+    audio: Audio;
+    embeddedPlatform: EmbeddedPlatform;
     fonts: Font[];
     texts: Texts;
     readme: Readme;
@@ -1831,6 +1835,8 @@ export class Project extends EezObject {
             texts: observable,
             readme: observable,
             bitmaps: observable,
+            audio: observable,
+            embeddedPlatform: observable,
             scpi: observable,
             instrumentCommands: observable,
             shortcuts: observable,
@@ -2132,6 +2138,25 @@ export class Project extends EezObject {
             LayoutModels.BITMAPS_TAB,
             FlexLayout.DockLocation.RIGHT,
             this.bitmaps != undefined
+        );
+
+        enableTabOnBorder(
+            this._store.layoutModels.rootEditor,
+            LayoutModels.AUDIO_TAB_ID,
+            LayoutModels.AUDIO_TAB,
+            FlexLayout.DockLocation.RIGHT,
+            this.audio != undefined
+        );
+
+        enableTabOnBorder(
+            this._store.layoutModels.rootEditor,
+            LayoutModels.EMBEDDED_PLATFORM_TAB_ID,
+            LayoutModels.EMBEDDED_PLATFORM_TAB,
+            FlexLayout.DockLocation.LEFT,
+            this.embeddedPlatform != undefined &&
+                (this.projectTypeTraits.isFirmware ||
+                    this.projectTypeTraits.isFirmwareModule ||
+                    this.projectTypeTraits.isLVGL)
         );
 
         enableTabOnBorder(

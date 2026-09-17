@@ -410,6 +410,13 @@ export const SettingsContent = observer(
                             );
                         }
 
+                        if (extension.key == "audio") {
+                            // Audio resources are also valid for projects that use
+                            // the embedded platform adapter without being LVGL
+                            // projects (for example instrument/HMI projects).
+                            return true;
+                        }
+
                         if (this.context.projectTypeTraits.isLVGL) {
                             if (
                                 extension.key == "styles" ||

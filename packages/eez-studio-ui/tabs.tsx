@@ -106,7 +106,7 @@ export const TabView = observer(
             if (tab.close) {
                 closeIcon = (
                     <i
-                        className="close material-icons"
+                        className="close material-symbols-outlined"
                         onClick={this.onClose}
                         title="Close tab"
                     >

@@ -45,7 +45,12 @@ import type { Flow } from "project-editor/flow/flow";
 
 import { isArray } from "eez-studio-shared/util";
 
-import { getClass, getClassInfo } from "project-editor/core/object";
+import {
+    eezClassToClassNameMap,
+    getClass,
+    getClassInfo
+} from "project-editor/core/object";
+import { getComponentMaterialIcon } from "project-editor/flow/components/component-icons";
 export { getClass, getClassInfo } from "project-editor/core/object";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,6 +318,13 @@ export function getChildren(parent: IEezObject): IEezObject[] {
 
 export function getObjectIcon(object: IEezObject) {
     const classInfo = getClassInfo(object);
+
+    const componentIcon = getComponentMaterialIcon(
+        eezClassToClassNameMap.get(getClass(object))
+    );
+    if (componentIcon) {
+        return componentIcon;
+    }
 
     if (classInfo.getIcon) {
         const icon = classInfo.getIcon(object);

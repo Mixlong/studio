@@ -38,11 +38,13 @@ export class RelativeFileInput extends FieldComponent {
         if (this.props.values[this.props.fieldProperties.name]) {
             clearButton = (
                 <button
-                    className="btn btn-default"
+                    className="btn btn-default EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                     type="button"
+                    title="Clear file path"
+                    aria-label="Clear file path"
                     onClick={this.onClear}
                 >
-                    <Icon icon="material:close" size={17} />
+                    <Icon icon="material:remove_circle_outline" size={16} />
                 </button>
             );
         }
@@ -60,11 +62,13 @@ export class RelativeFileInput extends FieldComponent {
                 <>
                     {clearButton}
                     <button
-                        className="btn btn-secondary"
+                        className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Browse"
                         type="button"
+                        title="Browse for file"
+                        aria-label="Browse for file"
                         onClick={this.onSelect}
                     >
-                        &hellip;
+                        <Icon icon="material:insert_drive_file" size={16} />
                     </button>
                 </>
             </div>
@@ -101,11 +105,13 @@ export class AbsoluteFileInput extends FieldComponent {
         if (this.props.values[this.props.fieldProperties.name]) {
             clearButton = (
                 <button
-                    className="btn btn-default"
+                    className="btn btn-default EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                     type="button"
+                    title="Clear file path"
+                    aria-label="Clear file path"
                     onClick={this.onClear}
                 >
-                    <Icon icon="material:close" size={17} />
+                    <Icon icon="material:remove_circle_outline" size={16} />
                 </button>
             );
         }
@@ -123,11 +129,13 @@ export class AbsoluteFileInput extends FieldComponent {
                 <>
                     {clearButton}
                     <button
-                        className="btn btn-secondary"
+                        className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Browse"
                         type="button"
+                        title="Browse for file"
+                        aria-label="Browse for file"
                         onClick={this.onSelect}
                     >
-                        &hellip;
+                        <Icon icon="material:insert_drive_file" size={16} />
                     </button>
                 </>
             </div>
@@ -177,11 +185,13 @@ export class MultipleAbsoluteFileInput extends FieldComponent {
         if (this.props.values[this.props.fieldProperties.name]) {
             clearButton = (
                 <button
-                    className="btn btn-default"
+                    className="btn btn-default EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                     type="button"
+                    title="Clear selected images"
+                    aria-label="Clear selected images"
                     onClick={this.onClear}
                 >
-                    <Icon icon="material:close" size={17} />
+                    <Icon icon="material:remove_circle_outline" size={16} />
                 </button>
             );
         }
@@ -197,11 +207,13 @@ export class MultipleAbsoluteFileInput extends FieldComponent {
                 <>
                     {clearButton}
                     <button
-                        className="btn btn-secondary"
+                        className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Browse"
                         type="button"
+                        title="Browse for image files"
+                        aria-label="Browse for image files"
                         onClick={this.onSelect}
                     >
-                        &hellip;
+                        <Icon icon="material:collections" size={16} />
                     </button>
                 </>
             </div>
@@ -238,11 +250,13 @@ export class AbsoluteFileSaveInput extends FieldComponent {
         if (this.props.values[this.props.fieldProperties.name]) {
             clearButton = (
                 <button
-                    className="btn btn-default"
+                    className="btn btn-default EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                     type="button"
+                    title="Clear output path"
+                    aria-label="Clear output path"
                     onClick={this.onClear}
                 >
-                    <Icon icon="material:close" size={17} />
+                    <Icon icon="material:remove_circle_outline" size={16} />
                 </button>
             );
         }
@@ -260,11 +274,13 @@ export class AbsoluteFileSaveInput extends FieldComponent {
                 <>
                     {clearButton}
                     <button
-                        className="btn btn-secondary"
+                        className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Save"
                         type="button"
+                        title="Choose save location"
+                        aria-label="Choose save location"
                         onClick={this.onSelect}
                     >
-                        &hellip;
+                        <Icon icon="material:save" size={16} />
                     </button>
                 </>
             </div>

@@ -53,7 +53,7 @@ async function getExtraResource() {
     ];
 }
 
-const productName = "EEZ Studio";
+const productName = "DigiStudio";
 
 let files = [
     "build/**",
@@ -123,7 +123,7 @@ files.push(
         fileAssociations: [
             {
                 ext: "eez-project",
-                name: "EEZ Studio Project",
+                name: "DigiStudio Project",
                 role: "Editor",
                 mimeType: "application/x-eez-project"
             },
@@ -209,7 +209,7 @@ files.push(
             category: "Utility",
             synopsis: packageJson.description,
             description:
-                "EEZ Studio is a free and open source cross-platform low-code tool for embedded GUIs. Built-in EEZ Flow enables the creation of complex scenarios for test and measurement automation, and the Instruments feature offers remote control of multiple T&M equipment.",
+                "DigiStudio is a cross-platform low-code tool for embedded GUIs. Built-in EEZ Flow enables the creation of complex scenarios for test and measurement automation, and the Instruments feature offers remote control of multiple T&M equipment.",
             mimeTypes: ["application/x-eez-project"]
         }
     };

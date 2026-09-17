@@ -142,6 +142,32 @@ export class LVGLBuild extends Build {
         this.buildBitmapNames();
     }
 
+    get imageExportMode(): "source" | "binary" {
+        const storage = this.project.embeddedPlatform?.storage;
+        if (storage?.enabled) {
+            return storage.image === "non-xip" ? "binary" : "source";
+        }
+        return this.project.settings.build.imageExportMode;
+    }
+
+    get isImageXip() {
+        const storage = this.project.embeddedPlatform?.storage;
+        return storage?.enabled && storage.image === "xip";
+    }
+
+    get fontExportMode(): "source" | "binary" {
+        const storage = this.project.embeddedPlatform?.storage;
+        if (storage?.enabled) {
+            return storage.font === "rom" ? "source" : "binary";
+        }
+        return this.project.settings.build.fontExportMode;
+    }
+
+    get isFontXip() {
+        const storage = this.project.embeddedPlatform?.storage;
+        return storage?.enabled && storage.font === "xip";
+    }
+
     async firtsPassStart() {
         // PASS 1 (find out which LVGL objects are accessible through global objects structure)
         this.isFirstPass = true;
@@ -732,7 +758,7 @@ export class LVGLBuild extends Build {
     }
 
     getImageAccessor(bitmap: Bitmap | string) {
-        if (this.project.settings.build.imageExportMode == "binary") {
+        if (this.imageExportMode == "binary") {
             let foundBitmap: Bitmap | undefined;
             if (typeof bitmap == "string") {
                 foundBitmap = this.bitmaps.find(
@@ -774,7 +800,7 @@ export class LVGLBuild extends Build {
 
         if (
             font.lvglUseFreeType ||
-            this.project.settings.build.fontExportMode == "binary"
+            this.fontExportMode == "binary"
         ) {
             return variableName;
         }
@@ -1986,7 +2012,7 @@ export class LVGLBuild extends Build {
             for (const font of this.fonts) {
                 if (
                     font.lvglUseFreeType ||
-                    this.project.settings.build.fontExportMode == "binary"
+                    this.fontExportMode == "binary"
                 ) {
                     build.line(`lv_font_t *${this.getFontVariableName(font)};`);
                     anyFontDef = true;
@@ -2001,7 +2027,7 @@ export class LVGLBuild extends Build {
         build.blockStart(`ext_font_desc_t fonts[] = {`);
         for (const font of this.fonts) {
             build.line(
-                `{ "${font.name}", ${font.lvglUseFreeType || this.project.settings.build.fontExportMode == "binary" ? "NULL" : this.getFontAccessor(font)} },`
+                `{ "${font.name}", ${font.lvglUseFreeType || this.fontExportMode == "binary" ? "NULL" : this.getFontAccessor(font)} },`
             );
         }
         for (const font of BUILT_IN_FONTS) {
@@ -2135,10 +2161,16 @@ export class LVGLBuild extends Build {
             const anyExternalFont = this.fonts.some(
                 font =>
                     font.lvglUseFreeType ||
-                    this.project.settings.build.fontExportMode == "binary"
+                    this.fontExportMode == "binary"
             );
             if (anyExternalFont) {
                 build.line("// Load external fonts");
+
+                if (this.isFontXip && this.isV9) {
+                    build.line(
+                        "extern const void *eez_get_xip_font_data(const char *name, uint32_t *size);"
+                    );
+                }
 
                 let path = this.project.settings.build.fileSystemPath;
                 if (!path.endsWith("/") && !path.endsWith("\\")) {
@@ -2229,7 +2261,7 @@ export class LVGLBuild extends Build {
                             build.blockEnd("}");
                         }
                     } else if (
-                        this.project.settings.build.fontExportMode == "binary"
+                        this.fontExportMode == "binary"
                     ) {
                         build.blockStart("{");
 
@@ -2240,11 +2272,23 @@ export class LVGLBuild extends Build {
                         );
 
                         if (this.isV9) {
-                            build.line(
-                                `${this.getFontVariableName(font)} = lv_binfont_create(${escapeCString(
-                                    `${path}${output}.bin`
-                                )});`
-                            );
+                            if (this.isFontXip) {
+                                build.line(
+                                    `uint32_t ${this.getFontVariableName(font)}_size = 0;`
+                                );
+                                build.line(
+                                    `const void *${this.getFontVariableName(font)}_data = eez_get_xip_font_data(${escapeCString(font.name)}, &${this.getFontVariableName(font)}_size);`
+                                );
+                                build.line(
+                                    `${this.getFontVariableName(font)} = ${this.getFontVariableName(font)}_data ? lv_binfont_create_from_buffer(${this.getFontVariableName(font)}_data, ${this.getFontVariableName(font)}_size) : NULL;`
+                                );
+                            } else {
+                                build.line(
+                                    `${this.getFontVariableName(font)} = lv_binfont_create(${escapeCString(
+                                        `${path}${output}.bin`
+                                    )});`
+                                );
+                            }
                         } else {
                             build.line(
                                 `${this.getFontVariableName(font)} = lv_font_load(${escapeCString(`${path}${output}.bin`)});`
@@ -2580,7 +2624,7 @@ export class LVGLBuild extends Build {
         this.startBuild();
         const build = this;
 
-        if (this.project.settings.build.imageExportMode == "source") {
+        if (this.imageExportMode == "source") {
             for (const bitmap of this.bitmaps) {
                 build.line(
                     `extern const lv_img_dsc_t ${this.getImageVariableName(bitmap)};`
@@ -2593,7 +2637,7 @@ export class LVGLBuild extends Build {
 #define EXT_IMG_DESC_T
 typedef struct _ext_img_desc_t {
     const char *name;
-    const ${this.project.settings.build.imageExportMode == "binary" ? "void" : "lv_img_dsc_t"} *img_dsc;
+    const ${this.imageExportMode == "binary" ? "void" : "lv_img_dsc_t"} *img_dsc;
 } ext_img_desc_t;
 #endif
 
@@ -2630,7 +2674,7 @@ extern const ext_img_desc_t images[${this.bitmaps.length || 1}];
 
         for (const font of this.fonts) {
             if (
-                this.project.settings.build.fontExportMode == "binary" ||
+                this.fontExportMode == "binary" ||
                 font.lvglUseFreeType
             ) {
                 build.line(
@@ -3057,7 +3101,7 @@ extern ext_font_desc_t fonts[];
                         "ui_image_" + this.bitmapNames.get(bitmap.objID)!;
 
                     if (
-                        this.project.settings.build.imageExportMode == "binary"
+                        this.imageExportMode == "binary"
                     ) {
                         // write BIN file
                         try {
@@ -3104,6 +3148,20 @@ extern ext_font_desc_t fonts[];
 #endif
 ${source}`;
 
+                            if (this.isImageXip) {
+                                const attribute =
+                                    this.project.embeddedPlatform.storage
+                                        .xipSectionAttribute ||
+                                    "__attribute__((section(\".qspi_xip\")))";
+                                source = `#ifndef EEZ_QSPI_XIP_ATTRIBUTE
+#define EEZ_QSPI_XIP_ATTRIBUTE ${attribute}
+#endif
+${source}`.replace(
+                                    /(#define\s+LV_ATTRIBUTE_IMG_[A-Z0-9_]+)\s*\n#endif/,
+                                    "$1 EEZ_QSPI_XIP_ATTRIBUTE\n#endif"
+                                );
+                            }
+
                             // ensure consistent newlines accross all platforms
                             // (LF only) to avoid unnecessary VCS diffs
                             source = source.replace(/\r\n/g, "\n"); // Windows
@@ -3145,8 +3203,7 @@ ${source}`;
             this.fonts.map(font =>
                 (async () => {
                     if (
-                        this.project.settings.build.fontExportMode ==
-                            "binary" &&
+                        this.fontExportMode == "binary" &&
                         !font.lvglUseFreeType
                     ) {
                         const lvglBinaryFileBase64 = await font.getLvglBinFileAsync();

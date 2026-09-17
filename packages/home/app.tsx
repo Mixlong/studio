@@ -13,7 +13,13 @@ import {
 import { TabsView } from "eez-studio-ui/tabs";
 import { makeLazyComponent } from "eez-studio-ui/lazy-component";
 
-import { HomeTab, IHomeTab, InstrumentTab, tabs } from "home/tabs-store";
+import {
+    HomeTab,
+    IHomeTab,
+    InstrumentTab,
+    ProjectEditorTab,
+    tabs
+} from "home/tabs-store";
 import "home/home-tab";
 
 import type { InstrumentObject } from "instrument/instrument-object";
@@ -31,30 +37,35 @@ import { homeTabStore } from "home/home-tab";
 const MainContent = observer(
     class Content extends React.Component {
         render() {
+            const showWorkspaceTabs =
+                !(tabs.activeTab instanceof ProjectEditorTab);
+
             return (
                 <VerticalHeaderWithBody style={{ height: "100%" }}>
-                    <Header className="EezStudio_AppHeader">
-                        <TabsView
-                            tabs={tabs.tabs}
-                            moveTab={action(
-                                (dragIndex: number, hoverIndex: number) => {
-                                    const tab = tabs.tabs[dragIndex];
+                    {showWorkspaceTabs && (
+                        <Header className="EezStudio_AppHeader">
+                            <TabsView
+                                tabs={tabs.tabs}
+                                moveTab={action(
+                                    (dragIndex: number, hoverIndex: number) => {
+                                        const tab = tabs.tabs[dragIndex];
 
-                                    tabs.tabs = update(tabs.tabs, {
-                                        $splice: [
-                                            [dragIndex, 1],
-                                            [hoverIndex, 0, tab]
-                                        ]
-                                    });
-                                }
+                                        tabs.tabs = update(tabs.tabs, {
+                                            $splice: [
+                                                [dragIndex, 1],
+                                                [hoverIndex, 0, tab]
+                                            ]
+                                        });
+                                    }
+                                )}
+                            />
+                            {((tabs.activeTab instanceof HomeTab &&
+                                homeTabStore.activeTab == "instruments") ||
+                                tabs.activeTab instanceof InstrumentTab) && (
+                                <SessionInfoContainer />
                             )}
-                        />
-                        {((tabs.activeTab instanceof HomeTab &&
-                            homeTabStore.activeTab == "instruments") ||
-                            tabs.activeTab instanceof InstrumentTab) && (
-                            <SessionInfoContainer />
-                        )}
-                    </Header>
+                        </Header>
+                    )}
                     <Body>
                         <Tabs />
                     </Body>

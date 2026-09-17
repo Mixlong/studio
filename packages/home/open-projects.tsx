@@ -300,7 +300,7 @@ export const Projects = observer(
                             <ButtonAction
                                 className="btn-primary"
                                 text={"Open Project"}
-                                title="Open a local EEZ Studio Project"
+                                title="Open a local DigiStudio Project"
                                 icon={HOME_TAB_OPEN_ICON}
                                 onClick={() => {
                                     ipcRenderer.send("open-project");

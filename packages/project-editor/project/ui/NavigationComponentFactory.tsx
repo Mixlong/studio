@@ -13,6 +13,7 @@ import {
     LayoutModels
 } from "project-editor/store";
 import { Bitmap } from "project-editor/features/bitmap/bitmap";
+import { Audio, AudioResource } from "project-editor/features/audio/audio";
 import { Font, Glyph } from "project-editor/features/font/font";
 import { Page } from "project-editor/features/page/page";
 import {
@@ -54,6 +55,16 @@ export function getNavigationObject(
     }
 
     ancestor = getAncestorOfType(object, Bitmap.classInfo);
+    if (ancestor) {
+        return ancestor;
+    }
+
+    ancestor = getAncestorOfType(object, AudioResource.classInfo);
+    if (ancestor) {
+        return ancestor;
+    }
+
+    ancestor = getAncestorOfType(object, Audio.classInfo);
     if (ancestor) {
         return ancestor;
     }
@@ -225,6 +236,24 @@ export const navigateTo = action((object: IEezObject) => {
         return;
     }
 
+    ancestor = getAncestorOfType(object, Audio.classInfo);
+    if (ancestor) {
+        projectStore.layoutModels.selectTab(
+            projectStore.layoutModels.root,
+            LayoutModels.AUDIO_TAB_ID
+        );
+        const audioResource = getAncestorOfType(
+            object,
+            AudioResource.classInfo
+        );
+        if (audioResource) {
+            projectStore.navigationStore.selectedAudioResourceObject.set(
+                audioResource
+            );
+        }
+        return;
+    }
+
     ancestor = getAncestorOfType(object, ExtensionDefinition.classInfo);
     if (ancestor) {
         projectStore.layoutModels.selectTab(
@@ -320,6 +349,20 @@ export function selectObject(object: IEezObject) {
     ancestor = getAncestorOfType(object, Bitmap.classInfo);
     if (ancestor) {
         projectStore.navigationStore.selectedBitmapObject.set(ancestor);
+        return;
+    }
+
+    ancestor = getAncestorOfType(object, Audio.classInfo);
+    if (ancestor) {
+        const audioResource = getAncestorOfType(
+            object,
+            AudioResource.classInfo
+        );
+        if (audioResource) {
+            projectStore.navigationStore.selectedAudioResourceObject.set(
+                audioResource
+            );
+        }
         return;
     }
 

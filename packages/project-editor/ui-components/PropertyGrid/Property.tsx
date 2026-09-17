@@ -1060,11 +1060,13 @@ export const Property = observer(
                 if (this._value !== undefined && !readOnly) {
                     clearButton = (
                         <button
-                            className="btn btn-secondary"
+                            className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                             type="button"
+                            title="Clear folder path"
+                            aria-label="Clear folder path"
                             onClick={() => this.changeValue(undefined)}
                         >
-                            <Icon icon="material:close" size={14} />
+                            <Icon icon="material:remove_circle_outline" size={15} />
                         </button>
                     );
                 }
@@ -1082,8 +1084,10 @@ export const Property = observer(
                             <>
                                 {clearButton}
                                 <button
-                                    className="btn btn-secondary"
+                                    className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Browse"
                                     type="button"
+                                    title="Browse for folder"
+                                    aria-label="Browse for folder"
                                     onClick={async () => {
                                         if (this.context.filePath) {
                                             const result =
@@ -1114,13 +1118,14 @@ export const Property = observer(
                                         }
                                     }}
                                 >
-                                    &hellip;
+                                    <Icon icon="material:folder_open" size={15} />
                                 </button>
                                 {this._value && (
                                     <button
-                                        className="btn btn-secondary"
+                                        className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Open"
                                         type="button"
                                         title="Open in system explorer"
+                                        aria-label="Open folder in system explorer"
                                         onClick={async () => {
                                             if (
                                                 this.context.filePath &&
@@ -1143,10 +1148,7 @@ export const Property = observer(
                                             }
                                         }}
                                     >
-                                        <Icon
-                                            icon="material:folder_open"
-                                            size={14}
-                                        />
+                                        <Icon icon="material:open_in_new" size={15} />
                                     </button>
                                 )}
                             </>
@@ -1159,11 +1161,13 @@ export const Property = observer(
                 if (this._value !== undefined && !readOnly) {
                     clearButton = (
                         <button
-                            className="btn btn-secondary"
+                            className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Clear"
                             type="button"
+                            title="Clear file path"
+                            aria-label="Clear file path"
                             onClick={() => this.changeValue(undefined)}
                         >
-                            <Icon icon="material:close" size={14} />
+                            <Icon icon="material:remove_circle_outline" size={15} />
                         </button>
                     );
                 }
@@ -1181,8 +1185,10 @@ export const Property = observer(
                             <>
                                 {clearButton}
                                 <button
-                                    className="btn btn-secondary"
+                                    className="btn btn-secondary EezStudio_PathInput_Action EezStudio_PathInput_Action_Browse"
                                     type="button"
+                                    title="Browse for file"
+                                    aria-label="Browse for file"
                                     onClick={async () => {
                                         if (this.context.filePath) {
                                             const result =
@@ -1215,7 +1221,10 @@ export const Property = observer(
                                         }
                                     }}
                                 >
-                                    &hellip;
+                                    <Icon
+                                        icon="material:insert_drive_file"
+                                        size={15}
+                                    />
                                 </button>
                             </>
                         )}

@@ -1131,17 +1131,10 @@ export class Tabs {
             );
 
             autorun(() => {
-                let title;
-
-                if (this.activeTab) {
-                    title = `${this.activeTab.modified ? MODIFED_MARK : ""}${
-                        this.activeTab.titleStr
-                    } - EEZ Studio`;
-                } else {
-                    title = `EEZ Studio`;
-                }
-
-                document.title = title;
+                // Keep the native window title stable. The active project is
+                // already identified by the editor toolbar context, so adding
+                // it here creates a duplicate heading above the workspace.
+                document.title = "DigiStudio";
             });
 
             onSimpleMessage(

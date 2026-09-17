@@ -19,7 +19,12 @@ import {
     PageTabState
 } from "project-editor/features/page/PageEditor";
 import { ProjectContext } from "project-editor/project/context";
-import { Editor, LayoutModels, Section } from "project-editor/store";
+import {
+    Editor,
+    LayoutModels,
+    Section,
+    getActivityBarTabTitle
+} from "project-editor/store";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { ComponentsPalette } from "project-editor/flow/editor/ComponentsPalette";
 import { BreakpointsPanel } from "project-editor/flow/debugger/BreakpointsPanel";
@@ -34,6 +39,8 @@ import { VariablesTab } from "project-editor/features/variable/VariablesNavigati
 import { StylesTab } from "project-editor/features/style/StylesNavigation";
 import { FontsTab } from "project-editor/features/font/FontsNavigation";
 import { BitmapsTab } from "project-editor/features/bitmap/BitmapsNavigation";
+import { AudioTab } from "project-editor/features/audio/AudioNavigation";
+import { EmbeddedPlatformTab } from "project-editor/features/embedded-platform/EmbeddedPlatformTab";
 import { TextsTab } from "project-editor/features/texts/navigation";
 import { ScpiTab } from "project-editor/features/scpi/ScpiNavigation";
 import { InstrumentCommandsList } from "project-editor/features/instrument-commands/InstrumentCommandsNavigation";
@@ -81,7 +88,17 @@ export const ProjectEditorView = observer(
                 <div className="EezStudio_ProjectEditorWrapper">
                     <div className="EezStudio_ProjectEditor_MainContentWrapper">
                         {this.props.showToolbar && <Toolbar />}
-                        <Content />
+                        <Content
+                            key={
+                                this.context.layoutModels.isDockerSimulatorMode
+                                    ? "full-simulator"
+                                    : this.context.runtime
+                                      ? this.context.runtime.isDebuggerActive
+                                          ? "debugger"
+                                          : "runtime"
+                                      : "editor"
+                            }
+                        />
                     </div>
                 </div>
             );
@@ -92,9 +109,13 @@ export const ProjectEditorView = observer(
 ////////////////////////////////////////////////////////////////////////////////
 
 const Content = observer(
-    class Content extends React.Component {
+    class Content extends React.Component<{}, { layoutRevision: number }> {
         static contextType = ProjectContext;
         declare context: React.ContextType<typeof ProjectContext>;
+
+        state = {
+            layoutRevision: 0
+        };
 
         _prevPageTabState: PageTabState | undefined;
 
@@ -164,6 +185,14 @@ const Content = observer(
 
             if (component === "bitmaps") {
                 return <BitmapsTab />;
+            }
+
+            if (component === "audio") {
+                return <AudioTab />;
+            }
+
+            if (component === "embedded-platform") {
+                return <EmbeddedPlatformTab />;
             }
 
             if (component === "changes") {
@@ -383,17 +412,8 @@ const Content = observer(
                     );
                 }
             } else if (node.getComponent() == "editor") {
-                const editor = this.context.editorsStore.tabIdToEditorMap.get(
-                    node.getId()
-                );
                 renderValues.content = (
-                    <div
-                        className={classNames({
-                            "fst-italic": !editor?.permanent
-                        })}
-                    >
-                        {node.getName()}
-                    </div>
+                    <div>{node.getName()}</div>
                 );
             }
         };
@@ -464,6 +484,10 @@ const Content = observer(
             model: FlexLayout.Model,
             action: FlexLayout.Action
         ) => {
+            // Keep the overlay controls in sync with border selection.
+            this.setState(state => ({
+                layoutRevision: state.layoutRevision + 1
+            }));
             this.context.editorsStore.refresh(false);
         };
 
@@ -560,12 +584,294 @@ const Content = observer(
                                 size: "small"
                             }}
                         />
+                        <SidebarCollapseControls
+                            model={this.context.layoutModels.root}
+                            revision={this.state.layoutRevision}
+                        />
+                        <ActivityBarTooltip
+                            layoutModels={this.context.layoutModels}
+                        />
                     </div>
                 </div>
             );
         }
     }
 );
+
+interface IActivityBarTooltipProps {
+    layoutModels: LayoutModels;
+}
+
+interface IActivityBarTooltipState {
+    visible: boolean;
+    text: string;
+    top: number;
+    left: number;
+    side: "left" | "right";
+}
+
+interface ISidebarCollapseControlsProps {
+    model: FlexLayout.Model;
+    revision: number;
+}
+
+/** IDE-style collapse actions anchored to the top of each side rail. */
+const SidebarCollapseControls = observer(
+    ({ model }: ISidebarCollapseControlsProps) => {
+        const controls: React.ReactNode[] = [];
+
+        model.visitNodes(node => {
+            if (!(node instanceof FlexLayout.BorderNode)) {
+                return;
+            }
+            const border = node;
+            const location = border.getLocation().getName();
+            if (location !== "left" && location !== "right") {
+                return;
+            }
+
+            const selectedTab = border.getSelectedNode();
+            if (!(selectedTab instanceof FlexLayout.TabNode)) {
+                return;
+            }
+
+            const isLeft = location === "left";
+            const title = isLeft
+                ? "Hide left sidebar"
+                : "Hide right sidebar";
+
+            controls.push(
+                <button
+                    key={`collapse-${border.getId()}`}
+                    type="button"
+                    className={classNames(
+                        "DigiStudio_SidebarCollapseControl",
+                        isLeft
+                            ? "DigiStudio_SidebarCollapseControl_Left"
+                            : "DigiStudio_SidebarCollapseControl_Right"
+                    )}
+                    title={title}
+                    aria-label={title}
+                    onMouseDown={event => event.stopPropagation()}
+                    onTouchStart={event => event.stopPropagation()}
+                    onClick={event => {
+                        event.stopPropagation();
+                        model.doAction(
+                            FlexLayout.Actions.selectTab(selectedTab.getId())
+                        );
+                    }}
+                >
+                    <Icon
+                        icon={
+                            isLeft
+                                ? "material:chevron_left"
+                                : "material:chevron_right"
+                        }
+                        size={18}
+                    />
+                </button>
+            );
+        });
+
+        return <>{controls}</>;
+    }
+);
+
+export class ActivityBarTooltip extends React.Component<
+    IActivityBarTooltipProps,
+    IActivityBarTooltipState
+> {
+    state: IActivityBarTooltipState = {
+        visible: false,
+        text: "",
+        top: 0,
+        left: 0,
+        side: "left"
+    };
+
+    containerRef = React.createRef<HTMLDivElement>();
+    hideTimer: any = null;
+    showTimer: any = null;
+
+    componentDidMount() {
+        document.addEventListener("mouseover", this.onMouseOver);
+        document.addEventListener("mouseout", this.onMouseOut);
+        document.addEventListener("mousedown", this.onMouseDown);
+    }
+
+    componentWillUnmount() {
+        document.removeEventListener("mouseover", this.onMouseOver);
+        document.removeEventListener("mouseout", this.onMouseOut);
+        document.removeEventListener("mousedown", this.onMouseDown);
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+    }
+
+    onMouseDown = () => {
+        this.hideTooltip(true);
+    };
+
+    onMouseOver = (e: MouseEvent) => {
+        const target = (e.target as HTMLElement).closest(
+            ".flexlayout__border_left.DigiStudio_ActivityBar .flexlayout__border_button, " +
+                ".flexlayout__border_right.DigiStudio_AuxiliaryBar .flexlayout__border_button"
+        ) as HTMLElement | null;
+
+        if (!target) {
+            return;
+        }
+
+        const wrapper = this.containerRef.current?.parentElement;
+        if (wrapper && !wrapper.contains(target)) {
+            return;
+        }
+
+        // Suppress native browser title tooltip so it doesn't clash
+        const existingTitle = target.getAttribute("title");
+        if (existingTitle) {
+            target.setAttribute("data-tooltip-text", existingTitle);
+            target.removeAttribute("title");
+        }
+
+        const side = target.closest(
+            ".flexlayout__border_right.DigiStudio_AuxiliaryBar"
+        )
+            ? "right"
+            : "left";
+
+        let text = target.getAttribute("data-tooltip-text") || "";
+        if (!text) {
+            const path = target.getAttribute("data-layout-path");
+            const match = path && path.match(/\/tb(\d+)$/);
+            if (match) {
+                const index = parseInt(match[1], 10);
+                let border: FlexLayout.BorderNode | undefined;
+                const model = this.props.layoutModels.root;
+                if (model) {
+                    model.visitNodes(node => {
+                        if (
+                            !border &&
+                            node instanceof FlexLayout.BorderNode &&
+                            node.getLocation().getName() === side
+                        ) {
+                            border = node;
+                        }
+                    });
+                }
+                const tabNode = border?.getChildren()[index] as
+                    | FlexLayout.TabNode
+                    | undefined;
+                if (tabNode) {
+                    text =
+                        tabNode.getHelpText() ||
+                        getActivityBarTabTitle(
+                            tabNode.getId(),
+                            tabNode.getName()
+                        );
+                }
+            }
+        }
+
+        if (!text) {
+            return;
+        }
+
+        clearTimeout(this.hideTimer);
+        clearTimeout(this.showTimer);
+
+        const btnRect = target.getBoundingClientRect();
+        const wrapperRect = wrapper
+            ? wrapper.getBoundingClientRect()
+            : { top: 0, left: 0 };
+
+        const top = btnRect.top - wrapperRect.top + btnRect.height / 2;
+        const left =
+            side === "right"
+                ? btnRect.left - wrapperRect.left - 8
+                : btnRect.right - wrapperRect.left + 8;
+
+        if (this.state.visible) {
+            this.setState({
+                visible: true,
+                text,
+                top,
+                left,
+                side
+            });
+        } else {
+            this.showTimer = setTimeout(() => {
+                this.setState({
+                    visible: true,
+                    text,
+                    top,
+                    left,
+                    side
+                });
+            }, 120);
+        }
+    };
+
+    onMouseOut = (e: MouseEvent) => {
+        const target = (e.target as HTMLElement).closest(
+            ".flexlayout__border_left.DigiStudio_ActivityBar .flexlayout__border_button, " +
+                ".flexlayout__border_right.DigiStudio_AuxiliaryBar .flexlayout__border_button"
+        ) as HTMLElement | null;
+
+        if (!target) {
+            return;
+        }
+
+        const related = e.relatedTarget as HTMLElement | null;
+        if (related && target.contains(related)) {
+            return;
+        }
+
+        const savedTitle = target.getAttribute("data-tooltip-text");
+        if (savedTitle) {
+            target.setAttribute("title", savedTitle);
+        }
+
+        clearTimeout(this.showTimer);
+        this.hideTimer = setTimeout(() => {
+            this.setState({ visible: false });
+        }, 80);
+    };
+
+    hideTooltip = (immediate = false) => {
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+        if (immediate) {
+            this.setState({ visible: false });
+        } else {
+            this.hideTimer = setTimeout(() => {
+                this.setState({ visible: false });
+            }, 80);
+        }
+    };
+
+    render() {
+        const { visible, text, top, left, side } = this.state;
+        return (
+            <div
+                ref={this.containerRef}
+                className={classNames("DigiStudio_ActivityBarTooltip", {
+                    "is-visible": visible,
+                    "is-right": side === "right"
+                })}
+                style={{
+                    top: `${top}px`,
+                    left: `${left}px`,
+                    opacity: visible ? 1 : 0
+                }}
+            >
+                <div className="DigiStudio_ActivityBarTooltip_Arrow" />
+                <span className="DigiStudio_ActivityBarTooltip_Text">
+                    {text}
+                </span>
+            </div>
+        );
+    }
+}
 
 const MissingExtensions = observer(
     class MissingExtensions extends React.Component {

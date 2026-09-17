@@ -52,7 +52,7 @@ const OtherReleases = observer(
                         aria-controls="allMasterReleases"
                     >
                         Other versions{" "}
-                        <i className="material-icons chevron-right">
+                        <i className="material-symbols-outlined chevron-right">
                             chevron_right
                         </i>
                     </a>

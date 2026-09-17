@@ -60,7 +60,7 @@ input::-webkitcalendar-picker-indicator {
 }
 
 input::placeholder {
-    font-style: italic;
+    font-style: normal;
 }
 
 .input-group {
@@ -598,7 +598,7 @@ button.EezStudio_Action {
         width: 100%;
         border: none;
         &.empty {
-            font-family: "Material Icons";
+            font-family: "Material Symbols Outlined";
         }
         color: var(--bs-body-color);
         background-color: var(--bs-body-bg);
@@ -740,11 +740,7 @@ button.EezStudio_Action {
         padding-left: 10px;
         padding-right: 5px;
         cursor: pointer;
-        font-style: italic;
-
-        &.permanent {
-            font-style: normal;
-        }
+        font-style: normal;
 
         &.active {
             background-color: @activeTabBackgroundColor;
@@ -1437,6 +1433,306 @@ button.EezStudio_Action {
 
 .flexlayout__tab_toolbar {
     padding: 0;
+}
+
+// DigiStudio Activity Bar (Left Border)
+.flexlayout__border_left.DigiStudio_ActivityBar {
+    background: @backgroundColor;
+    border-right: 1px solid @borderColor;
+
+    .flexlayout__border_inner {
+        overflow: hidden;
+    }
+
+    .flexlayout__border_tab_divider {
+        display: none;
+    }
+
+    .flexlayout__border_button {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 48px !important;
+        height: 48px !important;
+        min-height: 48px !important;
+        max-height: 48px !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border-radius: 0 !important;
+        border: none !important;
+        background: transparent;
+        box-shadow: none;
+        cursor: pointer;
+        position: relative;
+        transition: background-color 150ms ease, color 150ms ease;
+
+        .flexlayout__border_button_content {
+            display: none !important;
+        }
+
+        .flexlayout__border_button_leading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+
+            .EezStudio_Icon {
+                color: var(--bs-secondary-color);
+                opacity: 0.8;
+                // FlexLayout rotates the left border tab strip; keep icon glyphs upright.
+                transform: rotate(90deg);
+                transition: color 150ms ease, opacity 150ms ease;
+            }
+        }
+
+        &:hover {
+            background: var(--bs-tertiary-bg) !important;
+
+            .flexlayout__border_button_leading .EezStudio_Icon {
+                color: @textColor;
+                opacity: 1;
+            }
+        }
+
+        &.flexlayout__border_button--selected {
+            background: var(--bs-tertiary-bg) !important;
+            box-shadow: inset 0 2px 0 @selectionBackgroundColor !important;
+
+            .flexlayout__border_button_leading .EezStudio_Icon {
+                color: @selectionBackgroundColor;
+                opacity: 1;
+            }
+        }
+    }
+}
+
+.EezStudio_ProjectEditor_MainContentWrapper {
+    .flexlayout__tabset {
+        .flexlayout__tabset_header,
+        .flexlayout__tabset_tabbar_outer {
+            min-height: 30px;
+        }
+    }
+
+    .flexlayout__border_bottom {
+        .flexlayout__border_button {
+            min-height: 28px;
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+    }
+}
+
+.DigiStudio_ActivityBarTab {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 48px !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+}
+
+// Activity Bar Hover Tooltip (IDE style speech bubble)
+.DigiStudio_ActivityBarTooltip {
+    position: absolute;
+    z-index: 10000;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--bs-font-sans-serif, system-ui, -apple-system, sans-serif);
+    font-weight: 500;
+    color: @textColor;
+    background: var(--bs-body-bg, @backgroundColor);
+    border: 1px solid @borderColor;
+    border-radius: 4px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
+    transform: translateY(-50%);
+    transition: opacity 120ms ease;
+    opacity: 0;
+    font-style: normal;
+
+    &.is-visible {
+        opacity: 1;
+    }
+
+    &.is-right {
+        transform: translate(-100%, -50%);
+
+        .DigiStudio_ActivityBarTooltip_Arrow {
+            right: -6px;
+            left: auto;
+            border-right: 0;
+            border-left: 6px solid @borderColor;
+
+            &::after {
+                right: 1px;
+                left: auto;
+                border-right: 0;
+                border-left: 5px solid var(--bs-body-bg, @backgroundColor);
+            }
+        }
+    }
+
+    .DigiStudio_ActivityBarTooltip_Arrow {
+        position: absolute;
+        left: -6px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-right: 6px solid @borderColor;
+
+        &::after {
+            content: "";
+            position: absolute;
+            left: 1px;
+            top: -4px;
+            width: 0;
+            height: 0;
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+            border-right: 5px solid var(--bs-body-bg, @backgroundColor);
+        }
+    }
+
+    .DigiStudio_ActivityBarTooltip_Text {
+        line-height: 18px;
+        letter-spacing: 0.2px;
+    }
+}
+
+.flexlayout__border_right {
+    &.DigiStudio_AuxiliaryBar {
+        background: @backgroundColor;
+        border-left: 1px solid @borderColor;
+
+        .flexlayout__border_inner {
+            overflow: hidden;
+        }
+
+        .flexlayout__border_tab_divider {
+            display: none;
+        }
+
+        .flexlayout__border_button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
+            max-height: 44px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            background: transparent;
+            box-shadow: none;
+            cursor: pointer;
+            transition: background-color 150ms ease, color 150ms ease;
+
+            .flexlayout__border_button_content {
+                display: none !important;
+            }
+
+            .flexlayout__border_button_leading {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 100%;
+
+                .EezStudio_Icon {
+                    color: var(--bs-secondary-color);
+                    opacity: 0.8;
+                    // FlexLayout rotates the right border tab strip in the opposite direction.
+                    transform: rotate(-90deg);
+                    transition: color 150ms ease, opacity 150ms ease;
+                }
+            }
+
+            &:hover {
+                background: var(--bs-tertiary-bg) !important;
+
+                .flexlayout__border_button_leading .EezStudio_Icon {
+                    color: @textColor;
+                    opacity: 1;
+                }
+            }
+
+            &.flexlayout__border_button--selected {
+                background: var(--bs-tertiary-bg) !important;
+                box-shadow: inset 2px 0 0 @selectionBackgroundColor !important;
+
+                .flexlayout__border_button_leading .EezStudio_Icon {
+                    color: @selectionBackgroundColor;
+                    opacity: 1;
+                }
+            }
+        }
+    }
+}
+
+.flexlayout__border_left.DigiStudio_ActivityBar .flexlayout__border_toolbar,
+.flexlayout__border_right.DigiStudio_AuxiliaryBar .flexlayout__border_toolbar {
+    // The collapse action is rendered as an overlay so it stays at the top of
+    // both vertical rails instead of following FlexLayout's rotated toolbar.
+    display: none !important;
+}
+
+.DigiStudio_SidebarCollapseControl {
+    position: absolute;
+    z-index: 20;
+    top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid fade(@borderColor, 76%);
+    border-radius: 4px;
+    color: var(--bs-secondary-color);
+    background: rgba(var(--bs-tertiary-bg-rgb), 0.86);
+    cursor: pointer;
+    font-style: normal;
+    opacity: 0.92;
+    transition: color 120ms ease, background-color 120ms ease,
+        border-color 120ms ease, opacity 120ms ease;
+
+    &.DigiStudio_SidebarCollapseControl_Left {
+        left: 9px;
+    }
+
+    &.DigiStudio_SidebarCollapseControl_Right {
+        right: 9px;
+    }
+
+    &:hover,
+    &:focus-visible {
+        color: @textColor;
+        background: var(--bs-tertiary-bg);
+        border-color: @selectionBackgroundColor;
+        opacity: 1;
+        outline: none;
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 1px @selectionBackgroundColor;
+    }
+
+    .EezStudio_Icon {
+        display: block;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

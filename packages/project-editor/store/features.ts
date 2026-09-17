@@ -19,6 +19,7 @@ import userWidgetFeature from "project-editor/features/user-widget/user-widget";
 import styleFeature from "project-editor/features/style/style";
 import fontFeature from "project-editor/features/font/font";
 import bitmapFeature from "project-editor/features/bitmap/bitmap";
+import audioFeature from "project-editor/features/audio/audio";
 import scpiFeature from "project-editor/features/scpi/scpi";
 import instrumentCommandsFeature from "project-editor/features/instrument-commands/instrument-commands";
 import shortcutsFeature from "project-editor/features/shortcuts/project-shortcuts";
@@ -28,6 +29,7 @@ import readmeFeature from "project-editor/features/readme";
 import diffFeature from "project-editor/features/changes";
 import jsonStylesFeature from "project-editor/lvgl/style";
 import lvglGroupsFeature from "project-editor/lvgl/groups";
+import embeddedPlatformFeature from "project-editor/features/embedded-platform/embedded-platform";
 
 export type BuildResult = { [key: string]: string };
 
@@ -71,6 +73,7 @@ let features: ProjectEditorFeature[] = [
     jsonStylesFeature,
     fontFeature,
     bitmapFeature,
+    audioFeature,
     textsFeature,
     extensionDefinitionsFeature,
     scpiFeature,
@@ -79,7 +82,8 @@ let features: ProjectEditorFeature[] = [
     microPythonFeature,
     diffFeature,
     readmeFeature,
-    lvglGroupsFeature
+    lvglGroupsFeature,
+    embeddedPlatformFeature
 ];
 
 export function getProjectFeatures() {

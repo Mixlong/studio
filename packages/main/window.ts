@@ -28,6 +28,10 @@ export interface IWindowParams {
     hideOnClose?: boolean;
     showHidden?: boolean;
     utilityWindow?: boolean;
+    width?: number;
+    height?: number;
+    minWidth?: number;
+    minHeight?: number;
 }
 
 type ActiveTabType =
@@ -66,6 +70,10 @@ export function createWindow(params: IWindowParams) {
     }
 
     var windowContructorParams: Electron.BrowserWindowConstructorOptions = {
+        width: params.width,
+        height: params.height,
+        minWidth: params.minWidth,
+        minHeight: params.minHeight,
         webPreferences: {
             nodeIntegration: true,
             webSecurity: false,
@@ -328,7 +336,7 @@ ipcMain.on("printPDF", (event: any, { content, options }: any) => {
             data = await printWindow.webContents.printToPDF(options);
         } catch (err: any) {
             await dialog.showMessageBox(senderWindow, {
-                title: "Print to PDF - EEZ Studio",
+                title: "Print to PDF - DigiStudio",
                 message: err.toString()
             });
         } finally {
@@ -348,7 +356,7 @@ ipcMain.on("printPDF", (event: any, { content, options }: any) => {
                 shell.openPath(filePath);
             } catch (err: any) {
                 await dialog.showMessageBox(senderWindow, {
-                    title: "Print to PDF - EEZ Studio",
+                title: "Print to PDF - DigiStudio",
                     message: err.toString()
                 });
             }

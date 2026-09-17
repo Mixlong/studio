@@ -1,65 +1,93 @@
 .EezStudio_HomeTab {
     display: flex;
-    flex-direction: column;
+    flex: 1;
+    flex-direction: row;
+    min-width: 0;
+    min-height: 0;
     overflow: hidden;
 
-    .EezStudio_HomeTab_Header {
-        display: flex;
-        justify-content: space-between;
-        border-bottom: 1px solid @borderColor;
+    .EezStudio_HomeTab_Navigation {
+        flex: 0 0 196px;
+        width: 196px;
+        padding: 14px 8px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background-color: @panelHeaderColor;
+        border-right: 1px solid @borderColor;
+        font-style: normal;
 
-        .EezStudio_HomeTab_Tabs {
-            display: flex;
-            align-items: center;
+        .EezStudio_HomeTab_NavigationGroup {
+            margin-bottom: 18px;
 
-            button {
-                margin-right: 10px;
+            &:last-child {
+                margin-bottom: 0;
             }
         }
 
-        .EezStudio_HomeTab_Navigation {
-            flex: 1;
+        .EezStudio_HomeTab_NavigationGroupTitle {
+            padding: 0 8px 5px;
+            color: var(--bs-secondary-color);
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 16px;
+            text-transform: uppercase;
+        }
 
+        .EezStudio_HomeTab_NavigationItem {
             display: flex;
-            justify-content: center;
-            padding: 10px;
+            align-items: center;
+            width: 100%;
+            min-height: 30px;
+            margin: 1px 0;
+            padding: 5px 8px;
+            gap: 8px;
+            overflow: hidden;
+            color: @textColor;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-style: normal;
+            line-height: 18px;
+            text-align: left;
+            white-space: nowrap;
 
-            .EezStudio_HomeTab_NavigationItem {
-                display: inline-flex;
-                flex-direction: column;
-                align-items: center;
+            .EezStudio_Icon,
+            .EezStudio_AttentionContainer {
+                flex: 0 0 18px;
+            }
 
-                &:not(.selected) {
-                    cursor: pointer;
-                    &:hover {
-                        border-bottom: 4px solid @borderColor;
-                    }
-                }
-                text-transform: uppercase;
-                font-size: 150%;
-                margin: 0 30px;
-                padding: 0px 10px;
-                &.selected {
-                    border-bottom: 4px solid @selectionBackgroundColor;
-                }
-
-                .badge {
-                    margin-left: 10px;
-                    transform: translateY(-2px);
-                }
+            .EezStudio_AttentionContainer {
+                width: 18px;
+                height: 18px;
 
                 .EezStudio_AttentionDiv {
-                    bottom: 12px;
                     right: -4px;
+                    bottom: -2px;
                 }
+            }
 
-                .EezStudio_AttentionContainer {
-                    width: 32px;
-                    height: 32px;
-                    .EezStudio_AttentionDiv {
-                        bottom: 2px;
-                    }
-                }
+            span {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            &:hover {
+                color: @hoverColor;
+                background-color: @hoverBackgroundColor;
+            }
+
+            &.selected {
+                color: @selectionBackgroundColor;
+                background-color: fade(@selectionBackgroundColor, 12%);
+                font-weight: 600;
+            }
+
+            &:focus-visible {
+                outline: 1px solid @selectionBackgroundColor;
+                outline-offset: -1px;
             }
         }
     }
@@ -67,6 +95,7 @@
     .EezStudio_HomeTab_Body {
         display: flex;
         flex: 1;
+        min-width: 0;
         overflow: hidden;
     }
 }

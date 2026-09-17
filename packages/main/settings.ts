@@ -279,25 +279,36 @@ export function settingsSetWindowBoundsIntoParams(
 ) {
     const initialWidth = params.width || 1200;
     const initialHeight = params.height || 900;
-
+    const minWidth = params.minWidth || Math.round(initialWidth / 2);
+    const minHeight = params.minHeight || Math.round(initialHeight / 2);
     let windowState = settings.windowStates[windowId];
     if (isValidWindowState(windowState)) {
+        const bounds = { ...windowState.bounds! };
+
         if (windowState.isMaximized) {
-            if (windowState.bounds!.width < initialWidth) {
-                windowState.bounds!.width = initialWidth;
+            if (bounds.width < initialWidth) {
+                bounds.width = initialWidth;
             }
-            if (windowState.bounds!.height < initialHeight) {
-                windowState.bounds!.height = initialHeight;
+            if (bounds.height < initialHeight) {
+                bounds.height = initialHeight;
             }
         } else {
-            if (windowState.bounds!.width < Math.round(initialWidth / 2)) {
-                windowState.bounds!.width = Math.round(initialWidth / 2);
+            if (bounds.width < minWidth) {
+                bounds.width = minWidth;
             }
-            if (windowState.bounds!.height < Math.round(initialHeight / 2)) {
-                windowState.bounds!.height = Math.round(initialHeight / 2);
+            if (bounds.height < minHeight) {
+                bounds.height = minHeight;
             }
         }
-        Object.assign(params, windowState.bounds);
+
+        if (
+            bounds.width != windowState.bounds!.width ||
+            bounds.height != windowState.bounds!.height
+        ) {
+            runInAction(() => (windowState!.bounds = bounds));
+        }
+
+        Object.assign(params, bounds);
     } else {
         params.width = initialWidth;
         params.height = initialHeight;

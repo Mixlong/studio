@@ -71,6 +71,7 @@ export class NavigationStore {
     selectedFontObject = observable.box<IEezObject>();
     selectedGlyphObject = observable.box<IEezObject>();
     selectedBitmapObject = observable.box<IEezObject>();
+    selectedAudioResourceObject = observable.box<IEezObject>();
     selectedExtensionDefinitionObject = observable.box<IEezObject>();
     selectedScpiSubsystemObject = observable.box<IEezObject>();
     selectedScpiCommandObject = observable.box<IEezObject>();
@@ -250,6 +251,14 @@ export class NavigationStore {
                 );
             }
 
+            if (state.selectedAudioResourceObject) {
+                this.selectedAudioResourceObject.set(
+                    this.projectStore.getObjectFromStringPath(
+                        state.selectedAudioResourceObject
+                    )
+                );
+            }
+
             if (state.selectedExtensionDefinitionObject) {
                 this.selectedExtensionDefinitionObject.set(
                     this.projectStore.getObjectFromStringPath(
@@ -361,6 +370,11 @@ export class NavigationStore {
                 : undefined,
             selectedBitmapObject: this.selectedBitmapObject.get()
                 ? getObjectPathAsString(this.selectedBitmapObject.get())
+                : undefined,
+            selectedAudioResourceObject: this.selectedAudioResourceObject.get()
+                ? getObjectPathAsString(
+                      this.selectedAudioResourceObject.get()
+                  )
                 : undefined,
             selectedExtensionDefinitionObject:
                 this.selectedExtensionDefinitionObject.get()

@@ -11,6 +11,7 @@ gulp.task("copy", function () {
         .src(
             [
                 SRC + "/**/*.*",
+                "tools/embedded/*.py",
                 "!" + SRC + "/**/*.ts",
                 "!" + SRC + "/**/*.tsx",
                 "!" + SRC + "/**/*.less",

@@ -22,6 +22,10 @@ export class FlexLayoutContainer extends React.Component<{
         renderValues: FlexLayout.ITabRenderValues
     ) => void;
     iconFactory?: IconFactory;
+    onRenderTabSet?: (
+        node: FlexLayout.TabSetNode | FlexLayout.BorderNode,
+        renderValues: FlexLayout.ITabSetRenderValues
+    ) => void;
     onAuxMouseClick?: FlexLayout.NodeMouseEvent;
     onContextMenu?: FlexLayout.NodeMouseEvent;
     onModelChange?: (
@@ -49,6 +53,7 @@ export class FlexLayoutContainer extends React.Component<{
                 factory={this.props.factory}
                 realtimeResize={true}
                 onRenderTab={this.onRenderTab}
+                onRenderTabSet={this.props.onRenderTabSet}
                 onAuxMouseClick={this.props.onAuxMouseClick}
                 onContextMenu={this.props.onContextMenu}
                 onModelChange={this.props.onModelChange}

@@ -468,7 +468,7 @@ export const BootstrapDialog = observer(
             }
 
             let formClassName = classNames(
-                "modal-dialog",
+                "modal-dialog modal-dialog-centered",
                 this.props.className,
                 {
                     "modal-lg": props.size === "large",

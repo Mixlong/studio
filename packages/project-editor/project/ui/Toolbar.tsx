@@ -8,7 +8,11 @@ import {
     runInAction
 } from "mobx";
 import { observer } from "mobx-react";
-import { ButtonAction, IconAction } from "eez-studio-ui/action";
+import {
+    ButtonAction,
+    DropdownIconAction,
+    IconAction
+} from "eez-studio-ui/action";
 import { BuildConfiguration } from "project-editor/project/project";
 import { ProjectContext } from "project-editor/project/context";
 import { PageTabState } from "project-editor/features/page/PageEditor";
@@ -45,6 +49,8 @@ export const Toolbar = observer(
     class Toolbar extends React.Component {
         static contextType = ProjectContext;
         declare context: React.ContextType<typeof ProjectContext>;
+
+        toolbarRef = React.createRef<HTMLElement>();
 
         get globalVariableStatuses() {
             let globalVariablesStatus: React.ReactNode[] = [];
@@ -118,28 +124,503 @@ export const Toolbar = observer(
                 ? this.globalVariableStatuses
                 : [];
 
+            const showWorkspaceSwitcher =
+                this.context.context.type == "project-editor" ||
+                this.context.context.type == "run-tab";
+
             if (
                 !showEditorButtons &&
                 !showRunEditSwitchControls &&
-                globalVariablesStatuses.length == 0
+                globalVariablesStatuses.length == 0 &&
+                !showWorkspaceSwitcher
             ) {
+                return null;
+            }
+            return (
+                <nav
+                    ref={this.toolbarRef}
+                    className="EezStudio_ProjectEditor_ToolbarNav"
+                >
+                    <div className="EezStudio_ProjectEditor_ToolbarNav_LeftGroup">
+                        <WorkspaceSwitcher />
+                        {showEditorButtons && <EditorButtons />}
+                    </div>
+
+                    <ToolbarProjectContext />
+
+                    <div className="EezStudio_ProjectEditor_ToolbarNav_RightGroup">
+                        {showRunEditSwitchControls && (
+                            <RunEditSwitchControls />
+                        )}
+                        <div className="EezStudio_ProjectEditor_ToolbarNav_FlowRuntimeControls">
+                            {globalVariablesStatuses}
+                        </div>
+                    </div>
+                    <ToolbarTooltip toolbarRef={this.toolbarRef} />
+                </nav>
+            );
+        }
+    }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+interface IToolbarTooltipProps {
+    toolbarRef: React.RefObject<HTMLElement>;
+}
+
+interface IToolbarTooltipState {
+    visible: boolean;
+    text: string;
+    top: number;
+    left: number;
+    placement: "above" | "below";
+}
+
+const TOOLBAR_TOOLTIP_SELECTOR =
+    'button[title]:not([title=""]), select[title]:not([title=""]), ' +
+    'button[data-toolbar-tooltip-text]:not([data-toolbar-tooltip-text=""]), ' +
+    'select[data-toolbar-tooltip-text]:not([data-toolbar-tooltip-text=""])';
+const TOOLBAR_TOOLTIP_DATA_ATTRIBUTE = "data-toolbar-tooltip-text";
+const TOOLBAR_TOOLTIP_ARIA_ATTRIBUTE = "data-toolbar-tooltip-aria-label";
+
+/**
+ * A single delegated tooltip keeps the toolbar quiet and prevents native
+ * browser tooltips from competing with the IDE-style hint.
+ */
+class ToolbarTooltip extends React.Component<
+    IToolbarTooltipProps,
+    IToolbarTooltipState
+> {
+    state: IToolbarTooltipState = {
+        visible: false,
+        text: "",
+        top: 0,
+        left: 0,
+        placement: "below"
+    };
+
+    tooltipRef = React.createRef<HTMLDivElement>();
+    toolbarElement: HTMLElement | null = null;
+    activeTarget: HTMLElement | null = null;
+    hideTimer: any = null;
+    showTimer: any = null;
+    bindTimer: any = null;
+
+    componentDidMount() {
+        // The portal mounts before the parent nav ref is consistently available
+        // in React's commit phase, so bind once on the next task as a fallback.
+        this.bindTimer = setTimeout(this.bindToolbarListeners, 0);
+    }
+
+    bindToolbarListeners = () => {
+        this.bindTimer = null;
+        this.toolbarElement = this.props.toolbarRef.current;
+        if (!this.toolbarElement) {
+            return;
+        }
+
+        this.toolbarElement.addEventListener("mouseover", this.onMouseOver);
+        this.toolbarElement.addEventListener("mouseout", this.onMouseOut);
+        this.toolbarElement.addEventListener("focusin", this.onFocusIn);
+        this.toolbarElement.addEventListener("focusout", this.onFocusOut);
+        this.toolbarElement.addEventListener("mousedown", this.onMouseDown);
+        window.addEventListener("resize", this.onWindowChange);
+        window.addEventListener("scroll", this.onWindowChange, true);
+    }
+
+    componentDidUpdate(
+        previousProps: IToolbarTooltipProps,
+        previousState: IToolbarTooltipState
+    ) {
+        if (
+            this.state.visible &&
+            (!previousState.visible || previousState.text !== this.state.text)
+        ) {
+            this.adjustTooltipPosition();
+        }
+    }
+
+    componentWillUnmount() {
+        clearTimeout(this.bindTimer);
+        if (this.toolbarElement) {
+            this.toolbarElement.removeEventListener(
+                "mouseover",
+                this.onMouseOver
+            );
+            this.toolbarElement.removeEventListener(
+                "mouseout",
+                this.onMouseOut
+            );
+            this.toolbarElement.removeEventListener(
+                "focusin",
+                this.onFocusIn
+            );
+            this.toolbarElement.removeEventListener(
+                "focusout",
+                this.onFocusOut
+            );
+            this.toolbarElement.removeEventListener(
+                "mousedown",
+                this.onMouseDown
+            );
+        }
+        window.removeEventListener("resize", this.onWindowChange);
+        window.removeEventListener("scroll", this.onWindowChange, true);
+        this.restoreTitle(this.activeTarget);
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+    }
+
+    getTarget = (eventTarget: EventTarget | null) => {
+        if (!(eventTarget instanceof Element) || !this.toolbarElement) {
+            return null;
+        }
+
+        const target = eventTarget.closest(TOOLBAR_TOOLTIP_SELECTOR);
+        return target && this.toolbarElement.contains(target)
+            ? (target as HTMLElement)
+            : null;
+    };
+
+    getText = (target: HTMLElement) => {
+        return (
+            target.getAttribute("title") ||
+            target.getAttribute(TOOLBAR_TOOLTIP_DATA_ATTRIBUTE) ||
+            ""
+        ).trim();
+    };
+
+    suppressNativeTitle = (target: HTMLElement, text: string) => {
+        if (target.hasAttribute("title")) {
+            target.setAttribute(TOOLBAR_TOOLTIP_DATA_ATTRIBUTE, text);
+            if (!target.hasAttribute("aria-label")) {
+                target.setAttribute("aria-label", text);
+                target.setAttribute(TOOLBAR_TOOLTIP_ARIA_ATTRIBUTE, "true");
+            }
+            target.removeAttribute("title");
+        }
+    };
+
+    restoreTitle = (target: HTMLElement | null) => {
+        if (!target) {
+            return;
+        }
+
+        const savedTitle = target.getAttribute(TOOLBAR_TOOLTIP_DATA_ATTRIBUTE);
+        if (savedTitle !== null) {
+            target.setAttribute("title", savedTitle);
+            target.removeAttribute(TOOLBAR_TOOLTIP_DATA_ATTRIBUTE);
+            if (target.hasAttribute(TOOLBAR_TOOLTIP_ARIA_ATTRIBUTE)) {
+                target.removeAttribute("aria-label");
+                target.removeAttribute(TOOLBAR_TOOLTIP_ARIA_ATTRIBUTE);
+            }
+        }
+    };
+
+    showForTarget = (target: HTMLElement) => {
+        const text = this.getText(target);
+        if (!text) {
+            return;
+        }
+
+        if (this.activeTarget && this.activeTarget !== target) {
+            this.restoreTitle(this.activeTarget);
+        }
+        this.activeTarget = target;
+        this.suppressNativeTitle(target, text);
+
+        clearTimeout(this.hideTimer);
+        clearTimeout(this.showTimer);
+
+        const rect = target.getBoundingClientRect();
+        const placement: IToolbarTooltipState["placement"] =
+            rect.bottom + 44 <= window.innerHeight ? "below" : "above";
+        const top = placement === "below" ? rect.bottom + 8 : rect.top - 8;
+
+        if (this.state.visible) {
+            this.setState(
+                {
+                    visible: true,
+                    text,
+                    top,
+                    left: rect.left + rect.width / 2,
+                    placement
+                },
+                this.adjustTooltipPosition
+            );
+        } else {
+            this.showTimer = setTimeout(() => {
+                if (this.activeTarget !== target) {
+                    return;
+                }
+
+                this.setState(
+                    {
+                        visible: true,
+                        text,
+                        top,
+                        left: rect.left + rect.width / 2,
+                        placement
+                    },
+                    this.adjustTooltipPosition
+                );
+            }, 140);
+        }
+    };
+
+    hideForTarget = (target: HTMLElement) => {
+        this.restoreTitle(target);
+        if (this.activeTarget !== target) {
+            return;
+        }
+
+        this.activeTarget = null;
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+        this.hideTimer = setTimeout(() => {
+            this.setState({ visible: false });
+        }, 80);
+    };
+
+    onMouseOver = (event: MouseEvent) => {
+        const target = this.getTarget(event.target);
+        if (!target) {
+            return;
+        }
+
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (relatedTarget && target.contains(relatedTarget)) {
+            return;
+        }
+
+        this.showForTarget(target);
+    };
+
+    onMouseOut = (event: MouseEvent) => {
+        const target = this.getTarget(event.target);
+        if (!target) {
+            return;
+        }
+
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (relatedTarget && target.contains(relatedTarget)) {
+            return;
+        }
+
+        this.hideForTarget(target);
+    };
+
+    onFocusIn = (event: FocusEvent) => {
+        const target = this.getTarget(event.target);
+        if (target) {
+            this.showForTarget(target);
+        }
+    };
+
+    onFocusOut = (event: FocusEvent) => {
+        const target = this.getTarget(event.target);
+        if (target) {
+            this.hideForTarget(target);
+        }
+    };
+
+    onMouseDown = () => {
+        clearTimeout(this.showTimer);
+        clearTimeout(this.hideTimer);
+        this.restoreTitle(this.activeTarget);
+        this.activeTarget = null;
+        this.setState({ visible: false });
+    };
+
+    onWindowChange = () => {
+        if (this.state.visible && this.activeTarget) {
+            this.updateTooltipPosition(this.activeTarget);
+        }
+    };
+
+    updateTooltipPosition = (target: HTMLElement) => {
+        const rect = target.getBoundingClientRect();
+        const placement: IToolbarTooltipState["placement"] =
+            rect.bottom + 44 <= window.innerHeight ? "below" : "above";
+
+        this.setState({
+            top: placement === "below" ? rect.bottom + 8 : rect.top - 8,
+            left: rect.left + rect.width / 2,
+            placement
+        }, this.adjustTooltipPosition);
+    };
+
+    adjustTooltipPosition = () => {
+        if (!this.state.visible || !this.tooltipRef.current) {
+            return;
+        }
+
+        const tooltipRect = this.tooltipRef.current.getBoundingClientRect();
+        const margin = 10;
+        let left = this.state.left;
+        let top = this.state.top;
+        let placement = this.state.placement;
+
+        if (tooltipRect.left < margin) {
+            left += margin - tooltipRect.left;
+        } else if (tooltipRect.right > window.innerWidth - margin) {
+            left -= tooltipRect.right - (window.innerWidth - margin);
+        }
+
+        if (
+            placement === "below" &&
+            tooltipRect.bottom > window.innerHeight - margin &&
+            this.activeTarget
+        ) {
+            const targetRect = this.activeTarget.getBoundingClientRect();
+            placement = "above";
+            top = targetRect.top - 8;
+        } else if (
+            placement === "above" &&
+            tooltipRect.top < margin &&
+            this.activeTarget
+        ) {
+            const targetRect = this.activeTarget.getBoundingClientRect();
+            placement = "below";
+            top = targetRect.bottom + 8;
+        }
+
+        if (
+            left !== this.state.left ||
+            top !== this.state.top ||
+            placement !== this.state.placement
+        ) {
+            this.setState({ left, top, placement });
+        }
+    };
+
+    render() {
+        if (typeof document === "undefined") {
+            return null;
+        }
+
+        const { visible, text, top, left, placement } = this.state;
+        return ReactDOM.createPortal(
+            <div
+                ref={this.tooltipRef}
+                className={`EezStudio_ProjectEditor_ToolbarTooltip is-${placement}`}
+                role="tooltip"
+                aria-hidden={!visible}
+                style={{
+                    top: `${top}px`,
+                    left: `${left}px`,
+                    opacity: visible ? 1 : 0
+                }}
+            >
+                <span className="EezStudio_ProjectEditor_ToolbarTooltip_Text">
+                    {text}
+                </span>
+            </div>,
+            document.body
+        );
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+const ToolbarProjectContext = observer(
+    class ToolbarProjectContext extends React.Component {
+        static contextType = ProjectContext;
+        declare context: React.ContextType<typeof ProjectContext>;
+
+        render() {
+            const bspName =
+                this.context.project.embeddedPlatform?.bsp?.name ||
+                "No target configured";
+
+            return (
+                <div
+                    className="EezStudio_ProjectEditor_ToolbarNav_ProjectContext"
+                    title={`${this.context.title} - ${bspName}`}
+                >
+                    <span className="ProjectContext_ProjectName">
+                        {this.context.title}
+                    </span>
+                    <span className="ProjectContext_Separator" aria-hidden="true">
+                        ·
+                    </span>
+                    <span className="ProjectContext_TargetName">{bspName}</span>
+                </div>
+            );
+        }
+    }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+const WorkspaceSwitcher = observer(
+    class WorkspaceSwitcher extends React.Component {
+        render() {
+            // Resolve lazily to avoid eagerly coupling the editor toolbar to the
+            // tab store while the project editor is being bootstrapped.
+            const { tabs } = require("home/tabs-store") as typeof import("home/tabs-store");
+
+            if (!tabs) {
                 return null;
             }
 
             return (
-                <nav className="navbar justify-content-between EezStudio_ProjectEditor_ToolbarNav">
-                    {showEditorButtons ? <EditorButtons /> : <div />}
-
-                    {showRunEditSwitchControls ? (
-                        <RunEditSwitchControls />
-                    ) : (
-                        <div />
-                    )}
-
-                    <div className="EezStudio_ProjectEditor_ToolbarNav_FlowRuntimeControls">
-                        {globalVariablesStatuses}
+                <DropdownIconAction
+                    className="EezStudio_ProjectEditor_WorkspaceSwitcher"
+                    icon="material:apps"
+                    iconSize={18}
+                    title="Switch workspace"
+                >
+                    <div className="EezStudio_ProjectEditor_WorkspaceMenu">
+                        <div className="EezStudio_ProjectEditor_WorkspaceMenuHeader">
+                            Open workspaces
+                        </div>
+                        {tabs.tabs.map(tab => (
+                            <div
+                                className="EezStudio_ProjectEditor_WorkspaceMenuRow"
+                                key={tab.id}
+                            >
+                                <button
+                                    type="button"
+                                    className={
+                                        "dropdown-item EezStudio_ProjectEditor_WorkspaceMenuItem" +
+                                        (tab === tabs.activeTab ? " active" : "")
+                                    }
+                                    title={tab.titleStr}
+                                    onClick={() => tab.makeActive()}
+                                >
+                                    <Icon
+                                        icon={
+                                            tab.icon ||
+                                            "material:description"
+                                        }
+                                        size={17}
+                                    />
+                                    <span>{tab.titleStr}</span>
+                                    {tab === tabs.activeTab && (
+                                        <Icon icon="material:check" size={16} />
+                                    )}
+                                </button>
+                                {tab.close && (
+                                    <button
+                                        type="button"
+                                        className="EezStudio_ProjectEditor_WorkspaceMenuClose"
+                                        title={`Close ${tab.titleStr}`}
+                                        aria-label={`Close ${tab.titleStr}`}
+                                        onClick={event => {
+                                            event.preventDefault();
+                                            event.stopPropagation();
+                                            tab.close!();
+                                        }}
+                                    >
+                                        <Icon icon="material:close" size={16} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
                     </div>
-                </nav>
+                </DropdownIconAction>
             );
         }
     }
@@ -277,7 +758,7 @@ const EditorButtons = observer(
                                     title={
                                         this.context.undoManager.canUndo
                                             ? `Undo "${this.context.undoManager.undoDescription}"`
-                                            : ""
+                                            : "Undo"
                                     }
                                     icon="material:undo"
                                     onClick={() =>
@@ -289,7 +770,7 @@ const EditorButtons = observer(
                                     title={
                                         this.context.undoManager.canRedo
                                             ? `Redo "${this.context.undoManager.redoDescription}"`
-                                            : ""
+                                            : "Redo"
                                     }
                                     icon="material:redo"
                                     onClick={() =>
@@ -542,6 +1023,7 @@ const SelectLanguage = observer(
             return (
                 <select
                     className="form-select"
+                    title="Select language"
                     value={
                         this.context.uiStateStore.selectedLanguage.languageID
                     }
@@ -884,6 +1366,8 @@ const PageZoomButton = observer(
                         ref={this.buttonRef}
                         className="btn btn-primary dropdown-toggle EezStudio_PageZoomButton"
                         type="button"
+                        title="Change zoom level"
+                        aria-label="Change zoom level"
                         onClick={this.openDropdown}
                     >
                         {Math.round(this.zoom * 100)}%
@@ -922,81 +1406,53 @@ const RunEditSwitchControls = observer(
         }
 
         render() {
-            const iconSize = 30;
+            const iconSize = 18;
+            const isExecuting =
+                !!this.context.runtime || this.isFullSimulatorMode;
+
             return (
                 <div className="EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls">
-                    <ButtonAction
-                        text="Edit"
-                        title="Enter edit mode (Shift+F5)"
-                        icon="material:mode_edit"
-                        iconSize={iconSize}
-                        onClick={this.context.onSetEditorMode}
-                        selected={
-                            !this.context.runtime && !this.isFullSimulatorMode
-                        }
-                    />
-
-                    <ButtonAction
-                        text="Run"
-                        title="Enter run mode (F5)"
-                        icon={RUN_ICON}
-                        iconSize={iconSize}
-                        onClick={this.context.onSetRuntimeMode}
-                        selected={
-                            this.context.runtime &&
-                            !this.context.runtime.isDebuggerActive &&
-                            !this.isFullSimulatorMode
-                        }
-                    />
-
-                    <ButtonAction
-                        text="Debug"
-                        title="Enter debug mode (Ctrl+F5)"
-                        icon={
-                            <svg viewBox="0 0 64 64" fill="currentColor">
-                                <g transform="translate(-1,-1)">
-                                    <path
-                                        id="path2"
-                                        d="m64 32h-3c-0.5-13.4-10.8-24.9-24.1-26.7-1-0.2-1.9-0.2-2.9-0.3v-3c0-0.6-0.4-1-1-1s-1 0.4-1 1v3c-6.5 0.2-12.7 2.7-17.6 7.1-5.7 5.1-9.1 12.3-9.4 19.9h-3c-0.6 0-1 0.4-1 1s0.4 1 1 1h3c0.5 13.4 10.8 24.9 24.1 26.7 1 0.1 1.9 0.2 2.9 0.2v3c0 0.6 0.4 1 1 1s1-0.4 1-1v-3c6.5-0.2 12.7-2.7 17.6-7.1 5.7-5.1 9.1-12.3 9.4-19.9h3c0.6 0 1-0.4 1-1s-0.4-0.9-1-0.9zm-13.7 20.4c-4.5 4-10.3 6.3-16.3 6.6v-3c0-0.6-0.4-1-1-1s-1 0.4-1 1v3c-0.9 0-1.7-0.1-2.6-0.2-12.4-1.7-21.9-12.3-22.4-24.8h3c0.6 0 1-0.4 1-1s-0.4-1-1-1h-3c0.3-7.1 3.4-13.7 8.7-18.4 4.6-4.1 10.3-6.3 16.3-6.5v2.9c0 0.6 0.4 1 1 1s1-0.4 1-1v-3c0.9 0 1.8 0.1 2.6 0.2 12.4 1.8 21.9 12.4 22.4 24.8h-3c-0.6 0-1 0.4-1 1s0.4 1 1 1h3c-0.3 7.1-3.4 13.7-8.7 18.4z"
-                                    />
-                                    <g>
-                                        <g transform="matrix(1.237 0 0 1.2197 -7.8175 -7.1947)">
-                                            <g>
-                                                <g transform="matrix(.92683 0 0 .92683 2.4138 2.3964)">
-                                                    <path d="m27.4 18.3c1.2 0 2.4 0.5 3.2 1.4-2 0.9-3.2 3-3.3 5.1-0.1 2.6 1.7 4.9 5.7 4.9 4.1 0 5.7-2 5.7-4.6 0-2.4-1.3-4.6-3.3-5.5 0.9-0.9 2-1.4 3.2-1.4 0.5 0 0.9-0.4 0.9-0.9s-0.4-0.9-0.9-0.9c-2.1 0-3.9 1-5.2 2.7h-0.8c-1.2-1.7-3.1-2.7-5.2-2.7-0.5 0-0.9 0.4-0.9 0.9 0 0.6 0.4 1 0.9 1z" />
-                                                    <path d="m47.9 45.4c0.3 0.4 0.1 1-0.3 1.3s-1 0.1-1.3-0.3l-1.8-3h-2.9c-1.3 2.7-3.3 4.8-5.8 5.7l-2.8-13.2-2.9 13.1c-2.5-0.9-4.6-3-5.8-5.7h-2.9l-1.8 3c-0.3 0.4-0.8 0.6-1.3 0.3-0.4-0.3-0.6-0.8-0.3-1.3l2.1-3.4c0.2-0.3 0.5-0.5 0.8-0.5h2.7c-0.4-1.2-0.6-2.6-0.6-4 0-0.4 0-0.9 0.1-1.3h-1.7l-1.8 3c-0.3 0.4-0.8 0.6-1.3 0.3s-0.6-0.8-0.3-1.3l2.1-3.5c0.2-0.3 0.5-0.4 0.8-0.4h2.5c0.5-2.3 1.6-4.3 3.1-5.9 1.5 2.4 3.7 3.1 6.5 3.1 2.7 0 5.2-0.7 6.6-3 1.4 1.5 2.5 3.5 3 5.8h2.5c0.3 0 0.6 0.2 0.8 0.4l2.1 3.5c0.3 0.4 0.1 1-0.3 1.3s-1 0.1-1.3-0.3l-1.8-3h-1.7c0 0.4 0.1 0.9 0.1 1.3 0 1.4-0.2 2.7-0.6 4h2.7c0.3 0 0.6 0.2 0.8 0.5z" />
-                                                </g>
-                                            </g>
-                                        </g>
-                                    </g>
-                                </g>
-                            </svg>
-                        }
-                        iconSize={iconSize}
-                        onClick={this.context.onSetDebuggerMode}
-                        selected={
-                            this.context.runtime &&
-                            this.context.runtime.isDebuggerActive &&
-                            !this.isFullSimulatorMode
-                        }
-                        attention={
-                            !!(
-                                this.context.runtime &&
-                                this.context.runtime.error
-                            )
-                        }
-                    />
-
-                    {this.showFullSimulatorButton && (
+                    {isExecuting ? (
                         <ButtonAction
-                            text="Full Sim"
-                            title="Run in Full Simulator (F7)"
-                            icon="material:computer"
+                            className="DigiStudio_StopExecution"
+                            text="Stop"
+                            title="Stop and return to editor (Shift+F5)"
+                            icon="material:stop"
                             iconSize={iconSize}
-                            onClick={this.context.onSetFullSimulatorMode}
-                            selected={this.isFullSimulatorMode}
-                            loader={this.isFullSimulatorBuilding}
+                            onClick={this.context.onSetEditorMode}
                         />
+                    ) : (
+                        <>
+                            <ButtonAction
+                                className="DigiStudio_RunAction"
+                                text="Run"
+                                title="Enter run mode (F5)"
+                                icon={RUN_ICON}
+                                iconSize={iconSize}
+                                onClick={this.context.onSetRuntimeMode}
+                            />
+
+                            <ButtonAction
+                                text="Debug"
+                                title="Enter debug mode (Ctrl+F5)"
+                                icon="material:bug_report"
+                                iconSize={iconSize}
+                                onClick={this.context.onSetDebuggerMode}
+                            />
+
+                            {this.showFullSimulatorButton && (
+                                <ButtonAction
+                                    text="Full Sim"
+                                    title="Run in Full Simulator (F7)"
+                                    icon="material:computer"
+                                    iconSize={iconSize}
+                                    onClick={
+                                        this.context.onSetFullSimulatorMode
+                                    }
+                                    loader={this.isFullSimulatorBuilding}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             );

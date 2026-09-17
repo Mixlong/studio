@@ -66,29 +66,229 @@
     flex-direction: column;
 
     > .EezStudio_ProjectEditor_ToolbarNav {
-        padding: 3px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        align-items: center;
+        column-gap: 12px;
+        min-height: 38px;
+        padding: 3px 8px;
         background-color: @panelHeaderColor;
         border-bottom: 1px solid @borderColor;
-        min-height: 45px;
 
         .btn {
-            padding: 0.25rem 0.75rem;
+            min-height: 30px;
+            padding: 3px 7px;
+            border-radius: 4px;
         }
 
-        .btn-group:not(:last-child) {
-            margin-right: 20px;
+        .EezStudio_ProjectEditor_ToolbarNav_LeftGroup,
+        .EezStudio_ProjectEditor_ToolbarNav_RightGroup,
+        .EezStudio_ProjectEditor_ToolbarNav_EditorButtons,
+        .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls,
+        .EezStudio_ProjectEditor_ToolbarNav_FlowRuntimeControls {
+            display: flex;
+            align-items: center;
+            min-width: 0;
         }
 
-        select {
-            height: 36px;
+        .EezStudio_ProjectEditor_ToolbarNav_LeftGroup {
+            justify-content: flex-start;
+            gap: 6px;
+
+            .EezStudio_ProjectEditor_WorkspaceSwitcher {
+                flex: 0 0 auto;
+                display: flex;
+                align-items: center;
+
+                & > button {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 28px;
+                    height: 28px;
+                    padding: 0;
+                    color: var(--bs-secondary-color);
+                    background: transparent;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    cursor: pointer;
+
+                    &:hover,
+                    &:focus-visible {
+                        color: @textColor;
+                        background-color: @hoverBackgroundColor;
+                        border-color: fade(@borderColor, 80%);
+                        outline: none;
+                    }
+
+                    &:focus-visible {
+                        box-shadow: 0 0 0 1px @selectionBackgroundColor;
+                    }
+                }
+
+                .dropdown-menu {
+                    min-width: 230px;
+                    margin-top: 4px;
+                    padding: 4px;
+                    color: @textColor;
+                    background-color: @backgroundColor;
+                    border-color: @borderColor;
+                    border-radius: 4px;
+                    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
+                }
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuHeader {
+                padding: 4px 8px 5px;
+                color: var(--bs-secondary-color);
+                font-size: 10px;
+                font-weight: 600;
+                line-height: 16px;
+                text-transform: uppercase;
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuItem {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex: 1 1 auto;
+                min-width: 0;
+                min-height: 30px;
+                padding: 5px 8px;
+                color: @textColor;
+                border-radius: 3px;
+                font-size: 12px;
+                font-style: normal;
+                line-height: 18px;
+                text-align: left;
+
+                & > span {
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                & > .EezStudio_Icon:last-child {
+                    margin-left: auto;
+                    color: @selectionBackgroundColor;
+                }
+
+                &:hover,
+                &:focus-visible {
+                    color: @hoverColor;
+                    background-color: @hoverBackgroundColor;
+                    outline: none;
+                }
+
+                &.active,
+                &:active {
+                    color: @textColor;
+                    background-color: fade(@selectionBackgroundColor, 12%);
+                }
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuRow {
+                display: flex;
+                align-items: center;
+                width: 100%;
+
+                &:hover {
+                    background-color: @hoverBackgroundColor;
+                    border-radius: 3px;
+
+                    .EezStudio_ProjectEditor_WorkspaceMenuItem,
+                    .EezStudio_ProjectEditor_WorkspaceMenuClose {
+                        background-color: transparent;
+                    }
+                }
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuClose {
+                display: flex;
+                flex: 0 0 28px;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 30px;
+                padding: 0;
+                color: var(--bs-secondary-color);
+                background: transparent;
+                border: 0;
+                border-radius: 3px;
+                cursor: pointer;
+
+                &:hover,
+                &:focus-visible {
+                    color: @textColor;
+                    background-color: fade(@borderColor, 55%);
+                    outline: none;
+                }
+
+                &:focus-visible {
+                    box-shadow: 0 0 0 1px @selectionBackgroundColor;
+                }
+            }
+        }
+
+        .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+            justify-content: flex-end;
+            gap: 8px;
         }
 
         .EezStudio_ProjectEditor_ToolbarNav_EditorButtons {
-            @media (min-width: 1600px) {
-                width: 0;
-            }
             justify-content: flex-start;
+            overflow: hidden;
+
+            > .btn-group {
+                display: flex;
+                align-items: center;
+            }
+
+            > .btn-group:not(:last-child)::after {
+                width: 1px;
+                height: 18px;
+                margin: 0 7px;
+                background-color: @borderColor;
+                content: "";
+            }
+        }
+
+        .EezStudio_ProjectEditor_ToolbarNav_ProjectContext {
             display: flex;
+            align-items: center;
+            max-width: 40vw;
+            min-width: 0;
+            height: 26px;
+            padding: 0 9px;
+            color: @textColor;
+            font-size: 12px;
+            line-height: 26px;
+            background-color: fade(@borderColor, 22%);
+            border: 1px solid fade(@borderColor, 70%);
+            border-radius: 5px;
+
+            > span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .ProjectContext_ProjectName {
+                font-weight: 600;
+            }
+
+            .ProjectContext_Separator {
+                flex: 0 0 auto;
+                margin: 0 7px;
+                color: @textColor;
+                opacity: 0.62;
+            }
+
+            .ProjectContext_TargetName {
+                color: @textColor;
+                opacity: 0.62;
+            }
         }
 
         .EezStudio_ProjectEditor_PreviewBackgroundColor {
@@ -127,18 +327,135 @@
         }
 
         .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
-            display: flex;
-            z-index: 1;
-            background-color: @panelHeaderColor;
+            gap: 2px;
+
+            .EezStudio_ButtonAction {
+                color: @textColor;
+                background: transparent;
+                border-color: transparent;
+                box-shadow: none;
+                transition: color 120ms ease, background-color 120ms ease;
+
+                &:hover,
+                &:focus-visible {
+                    background-color: fade(@borderColor, 35%);
+                    border-color: transparent;
+                    box-shadow: none;
+                }
+            }
+
+            .DigiStudio_RunAction {
+                color: #17844c;
+
+                &:hover,
+                &:focus-visible {
+                    color: #126b3d;
+                    background-color: fade(#17844c, 13%);
+                }
+            }
+
+            .DigiStudio_StopExecution {
+                color: #b93831;
+
+                &:hover,
+                &:focus-visible {
+                    color: #942d28;
+                    background-color: fade(#b93831, 12%);
+                }
+            }
         }
 
         .EezStudio_ProjectEditor_ToolbarNav_FlowRuntimeControls {
-            display: flex;
-            @media (min-width: 1600px) {
-                width: 0;
-            }
-            justify-content: flex-end;
+            gap: 4px;
         }
+
+        @media (max-width: 960px) {
+            grid-template-columns: minmax(0, 1fr) auto;
+
+            .EezStudio_ProjectEditor_ToolbarNav_ProjectContext {
+                display: none;
+            }
+        }
+    }
+}
+
+// Toolbar hover tooltip. It is rendered in a body portal so it can float over
+// the toolbar and adjacent panels without being clipped by their containers.
+.EezStudio_ProjectEditor_ToolbarTooltip {
+    position: fixed;
+    z-index: 20000;
+    pointer-events: none;
+    display: block;
+    box-sizing: border-box;
+    width: max-content;
+    max-width: min(320px, calc(100vw - 20px));
+    padding: 6px 10px;
+    color: @textColor;
+    background-color: @backgroundColor;
+    border: 1px solid @borderColor;
+    border-radius: 4px;
+    box-shadow: 0 5px 16px rgba(0, 0, 0, 0.28);
+    font-family: var(--bs-font-sans-serif, system-ui, -apple-system, sans-serif);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 17px;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    transform: translateX(-50%);
+    transition: opacity 120ms ease;
+
+    &::before,
+    &::after {
+        position: absolute;
+        left: 50%;
+        width: 0;
+        height: 0;
+        content: "";
+        transform: translateX(-50%);
+    }
+
+    &::before {
+        border-right: 6px solid transparent;
+        border-left: 6px solid transparent;
+    }
+
+    &::after {
+        border-right: 5px solid transparent;
+        border-left: 5px solid transparent;
+    }
+
+    &.is-below {
+        &::before {
+            top: -6px;
+            border-bottom: 6px solid @borderColor;
+        }
+
+        &::after {
+            top: -5px;
+            border-bottom: 5px solid @backgroundColor;
+        }
+    }
+
+    &.is-above {
+        transform: translate(-50%, -100%);
+
+        &::before {
+            bottom: -6px;
+            border-top: 6px solid @borderColor;
+        }
+
+        &::after {
+            bottom: -5px;
+            border-top: 5px solid @backgroundColor;
+        }
+    }
+
+    .EezStudio_ProjectEditor_ToolbarTooltip_Text {
+        display: block;
+        min-width: 0;
+        font-style: normal;
     }
 }
 
@@ -354,7 +671,8 @@
             border-radius: 3px;
 
             & > img,
-            & > svg {
+            & > svg,
+            & > i.material-symbols-outlined {
                 flex-shrink: 0;
                 height: 20px;
                 object-fit: contain;
@@ -430,7 +748,7 @@
                 }
 
                 & > input.search-input.empty {
-                    font-family: "Material Icons";
+                    font-family: "Material Symbols Outlined";
                 }
             }
 
@@ -571,7 +889,7 @@
             margin-right: 4px;
         }
 
-        & > i.material-icons {
+        & > i.material-symbols-outlined {
             margin-right: 4px;
         }
     }
@@ -606,6 +924,182 @@
         &:last-child {
             margin-right: 0;
         }
+    }
+}
+
+.EezStudio_AudioPreview,
+.EezStudio_AudioPreview_Empty {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+}
+
+.EezStudio_AudioPreview {
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    min-width: 360px;
+    color: @textColor;
+    background-color: @backgroundColor;
+
+    .EezStudio_AudioPreview_Header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px;
+        border-bottom: 1px solid @borderColor;
+        background-color: @panelHeaderColor;
+
+        > div:first-child {
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+    }
+
+    .EezStudio_AudioPreview_Title {
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .EezStudio_AudioPreview_Path {
+        margin-top: 2px;
+        color: @textColor;
+        font-size: 12px;
+        opacity: 0.7;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 560px;
+    }
+
+    .EezStudio_AudioPreview_FormatBadge {
+        flex: 0 0 auto;
+        padding: 1px 5px;
+        border: 1px solid @borderColor;
+        border-radius: 2px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    .EezStudio_AudioPreview_WaveformSection {
+        padding: 10px 10px 0;
+    }
+
+    .EezStudio_AudioPreview_SectionHeader {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .EezStudio_AudioPreview_Waveform {
+        position: relative;
+        height: 180px;
+        overflow: hidden;
+        border: 1px solid @borderColor;
+        color: @textColor;
+        background-color: @panelHeaderColor;
+
+        &.is-mp3 {
+            height: 92px;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    }
+
+    .EezStudio_AudioPreview_WaveformMessage {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        text-align: center;
+        font-size: 12px;
+        opacity: 0.75;
+    }
+
+    .EezStudio_AudioPreview_Player {
+        width: calc(100% - 20px);
+        height: 32px;
+        margin: 10px;
+    }
+
+    .EezStudio_AudioPreview_Metadata {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        margin: 0 10px 10px;
+        border-top: 1px solid @borderColor;
+        border-left: 1px solid @borderColor;
+    }
+
+    .EezStudio_AudioPreview_MetadataItem {
+        min-width: 0;
+        padding: 6px 8px;
+        border-right: 1px solid @borderColor;
+        border-bottom: 1px solid @borderColor;
+
+        span,
+        strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        span {
+            font-size: 11px;
+            font-weight: 400;
+            opacity: 0.7;
+        }
+
+        strong {
+            margin-top: 2px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+    }
+
+    .EezStudio_AudioPreview_Description {
+        margin: 0 10px 10px;
+        padding: 8px 0 0;
+        border-top: 1px solid @borderColor;
+        white-space: pre-wrap;
+        font-size: 12px;
+    }
+}
+
+.EezStudio_AudioPreview_Empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: @textColor;
+    background-color: @backgroundColor;
+    text-align: center;
+    opacity: 0.7;
+}
+
+.EezStudio_AudioFlashLayout {
+    flex-grow: 1;
+    min-height: 0;
+    overflow: auto;
+    min-width: 360px;
+
+    .EezStudio_PropertyGrid {
+        min-width: 340px;
     }
 }
 
@@ -867,6 +1361,11 @@
                         img {
                             height: 16px;
                             object-fit: contain;
+                        }
+
+                        i.material-symbols-outlined {
+                            font-size: 16px;
+                            line-height: 16px;
                         }
                     }
 
@@ -1821,7 +2320,7 @@
 
     span.hint {
         opacity: 0.5;
-        font-style: italic;
+        font-style: normal;
     }
 }
 
@@ -1909,7 +2408,7 @@
                     content: ">";
                 }
                 margin-left: 10px;
-                font-style: italic;
+                font-style: normal;
             }
 
             .EezStudio_ExpressionBuilder_OperatorSign {
@@ -3276,6 +3775,54 @@
     }
 }
 
+// File and folder fields use icon-only actions. Keep their hit areas stable
+// and make the distinction between clearing and browsing visible on hover.
+.EezStudio_PathInput_Action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 31px;
+    width: 31px;
+    min-width: 31px;
+    height: 31px;
+    padding: 0 !important;
+    font-style: normal;
+    line-height: 1;
+    vertical-align: middle;
+
+    & > .EezStudio_Icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-style: normal;
+        line-height: 1;
+    }
+
+    &:hover,
+    &:focus-visible {
+        color: @textColor;
+        background-color: @hoverBackgroundColor;
+        border-color: @borderColor;
+        outline: none;
+    }
+
+    &:focus-visible {
+        position: relative;
+        z-index: 1;
+        box-shadow: 0 0 0 1px @selectionBackgroundColor inset;
+    }
+}
+
+.EezStudio_PathInput_Action_Clear {
+    color: var(--bs-secondary-color);
+}
+
+.EezStudio_PathInput_Action_Browse,
+.EezStudio_PathInput_Action_Save,
+.EezStudio_PathInput_Action_Open {
+    color: @textColor;
+}
+
 .EezStudio_PropertyGrid {
     flex-grow: 1;
     overflow-x: hidden;
@@ -4344,7 +4891,7 @@
     justify-content: center;
     height: 100%;
     color: var(--bs-secondary);
-    font-style: italic;
+    font-style: normal;
 }
 
 .EezStudio_ProjectEditor_TextsNavigation {
@@ -4355,4 +4902,654 @@
 
 .EezStudio_ArrayElementProperty_Body_Property>.editGlyphs>div>div:first-child {
     display: none;
+}
+
+// Embedded platform workspace
+.EezStudio_EmbeddedPlatform,
+.EezStudio_EmbeddedPlatform_Window {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    background: @backgroundColor;
+    overflow: hidden;
+    font-style: normal;
+
+    // Embedded platform is a dense IDE surface; keep every control upright.
+    &, * {
+        font-style: inherit;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_Header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    height: 42px;
+    padding: 0 16px;
+    border-bottom: 1px solid @borderColor;
+    background: @panelHeaderColor;
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.EezStudio_EmbeddedPlatform_Title,
+.EezStudio_EmbeddedPlatform_Actions,
+.EezStudio_EmbeddedPlatform_InlineForm,
+.EezStudio_EmbeddedPlatform_FirmwarePicker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.EezStudio_EmbeddedPlatform_Title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+    font-size: 13px;
+    white-space: nowrap;
+    color: @textColor;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.EezStudio_EmbeddedPlatform_Actions {
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+
+    .EezStudio_ButtonAction {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        line-height: 1.2;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_Content {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0;
+    align-items: stretch;
+}
+
+.EezStudio_EmbeddedPlatform_WorkspaceNav {
+    width: 170px;
+    min-width: 170px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 6px;
+    border-right: 1px solid @borderColor;
+    border-left: none;
+    border-top: none;
+    border-bottom: none;
+    background: @panelHeaderColor;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: width 140ms ease, min-width 140ms ease, padding 140ms ease;
+
+    .EezStudio_EmbeddedPlatform_WorkspaceNavLabel {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 34px;
+        padding: 6px 12px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--bs-secondary-color);
+        font-size: 12.5px;
+        font-weight: 500;
+        text-align: left;
+        cursor: pointer;
+        transition: all 120ms ease;
+        box-sizing: border-box;
+
+        .EezStudio_Icon {
+            color: inherit;
+            opacity: 0.85;
+            font-size: 18px;
+        }
+
+        &:hover {
+            background: var(--bs-tertiary-bg);
+            color: @textColor;
+        }
+
+        &.is-active {
+            background: var(--bs-tertiary-bg);
+            color: @selectionBackgroundColor;
+            font-weight: 600;
+
+            .EezStudio_Icon {
+                opacity: 1;
+                color: @selectionBackgroundColor;
+            }
+        }
+    }
+
+    .EezStudio_EmbeddedPlatform_WorkspaceNavToggle {
+        flex: 0 0 auto;
+        min-height: 30px;
+        margin-bottom: 4px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid @borderColor;
+        border-radius: 3px;
+        color: var(--bs-secondary-color);
+
+        &:hover,
+        &:focus-visible {
+            color: @textColor;
+            background: var(--bs-tertiary-bg);
+        }
+    }
+
+    &.is-collapsed {
+        width: 48px;
+        min-width: 48px;
+        padding-right: 5px;
+        padding-left: 5px;
+
+        button {
+            justify-content: center;
+            gap: 0;
+            padding-right: 5px;
+            padding-left: 5px;
+        }
+
+        .EezStudio_EmbeddedPlatform_WorkspaceNavLabel {
+            display: none;
+        }
+    }
+}
+
+.EezStudio_EmbeddedPlatform_Configuration {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-sizing: border-box;
+    overscroll-behavior: contain;
+
+    & > .EezStudio_PanelContainer {
+        flex: 1 1 auto;
+        width: 100%;
+        height: auto;
+        min-height: 0;
+        box-sizing: border-box;
+    }
+
+    .EezStudio_PanelContainer {
+        border: 1px solid @borderColor;
+        border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        background: @backgroundColor;
+        overflow: hidden;
+
+        .EezStudio_PanelHeader {
+            background: @panelHeaderColor;
+            border-bottom: 1px solid @borderColor;
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+    }
+}
+
+.EezStudio_EmbeddedPlatform_StatusBar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 26px;
+    height: 26px;
+    padding: 0 16px;
+    border-top: 1px solid @borderColor;
+    background: @panelHeaderColor;
+    color: var(--bs-secondary-color);
+    font-size: 11px;
+    flex-shrink: 0;
+
+    span:not(:first-child) + span {
+        padding-left: 12px;
+        border-left: 1px solid @borderColor;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_StatusDot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #46a758;
+}
+
+.EezStudio_EmbeddedPlatform_Column,
+.EezStudio_EmbeddedPlatform_WindowGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.EezStudio_EmbeddedPlatform_ColumnWide {
+    min-height: 460px;
+}
+
+.EezStudio_EmbeddedPlatform .EezStudio_PanelContainer,
+.EezStudio_EmbeddedPlatform_Window .EezStudio_PanelContainer {
+    min-width: 0;
+    border: 1px solid @borderColor;
+}
+
+.EezStudio_EmbeddedPlatform_PropertyGrid {
+    min-width: 0;
+    padding: 10px 14px;
+
+    .EezStudio_PropertyGrid_Property {
+        display: flex;
+        align-items: center;
+        margin-bottom: 6px;
+
+        & > .property-name {
+            min-width: 150px;
+            max-width: 180px;
+            width: auto;
+            flex-shrink: 0;
+            font-size: 12.5px;
+            color: var(--bs-body-color);
+        }
+
+        & > .embedded-property-cell {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+}
+
+.EezStudio_EmbeddedPlatform_StorageSummary {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 4px 8px 8px;
+    padding: 8px;
+    border: 1px solid @borderColor;
+    background: var(--bs-tertiary-bg);
+}
+
+.EezStudio_EmbeddedPlatform_StorageSummaryHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.EezStudio_EmbeddedPlatform_StorageSummaryGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.EezStudio_EmbeddedPlatform_StorageSummaryItem {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+    padding: 5px 6px;
+    border: 1px solid @borderColor;
+    background: @backgroundColor;
+    font-size: 12px;
+
+    strong,
+    span,
+    small {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    small {
+        color: var(--bs-secondary-color);
+    }
+}
+
+.EezStudio_EmbeddedPlatform_Visibility,
+.EezStudio_EmbeddedPlatform_ProtocolCenter {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    width: 100%;
+    gap: 8px;
+    min-width: 0;
+    min-height: 0;
+    padding: 8px;
+    box-sizing: border-box;
+    overflow: auto;
+}
+
+.EezStudio_EmbeddedPlatform_CloudSearch {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 8px;
+    min-width: 0;
+    padding: 8px;
+    border: 1px solid @borderColor;
+    background: var(--bs-tertiary-bg);
+    box-sizing: border-box;
+
+    .EezStudio_EmbeddedPlatform_EndpointField {
+        grid-column-start: 1;
+        grid-column-end: -1;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_EndpointField,
+.EezStudio_EmbeddedPlatform_SearchField {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    width: 100%;
+
+    label {
+        color: var(--bs-secondary-color);
+        font-size: 11px;
+        font-weight: 600;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_SearchControl {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    width: 100%;
+    height: 30px;
+    padding-left: 7px;
+    border: 1px solid @borderColor;
+    background: @backgroundColor;
+    color: var(--bs-secondary-color);
+    box-sizing: border-box;
+
+    input {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
+        border: 0;
+        outline: 0;
+        font-style: normal;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_SearchButton {
+    display: inline-flex;
+    height: 30px;
+    flex: 0 0 auto;
+    align-self: flex-end;
+    justify-self: start;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    min-width: 148px;
+    white-space: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform .EezStudio_ButtonAction > .EezStudio_Icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    line-height: 1;
+}
+
+.EezStudio_EmbeddedPlatform_Configuration
+    .EezStudio_PanelHeader
+    .btn-toolbar {
+    display: flex;
+    align-items: center;
+    height: 100%;
+
+    & > button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_InlineForm input,
+.EezStudio_EmbeddedPlatform_CloudSearch input,
+.EezStudio_EmbeddedPlatform_FirmwarePicker input {
+    min-width: 0;
+    width: 100%;
+    height: 30px;
+    padding: 4px 8px;
+    border: 1px solid @borderColor;
+    background: @backgroundColor;
+    color: @textColor;
+    box-sizing: border-box;
+    font-style: normal;
+}
+
+.EezStudio_EmbeddedPlatform_EndpointField input,
+.EezStudio_EmbeddedPlatform_SearchField input {
+    flex: 1 1 auto;
+}
+
+.EezStudio_EmbeddedPlatform_InlineForm select {
+    flex: 0 0 86px;
+    height: 30px;
+    border: 1px solid @borderColor;
+    background: @backgroundColor;
+    color: @textColor;
+}
+
+.EezStudio_EmbeddedPlatform_CompactList,
+.EezStudio_EmbeddedPlatform_ProtocolList {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+    border-top: 1px solid @borderColor;
+    overscroll-behavior: contain;
+}
+
+.EezStudio_EmbeddedPlatform_ListRow,
+.EezStudio_EmbeddedPlatform_ProtocolRow {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 7px 8px;
+    border-bottom: 1px solid @borderColor;
+
+    &:hover {
+        background: var(--bs-tertiary-bg);
+    }
+}
+
+.EezStudio_EmbeddedPlatform_ListRow {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.EezStudio_EmbeddedPlatform_ProtocolInfo {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 1px;
+}
+
+.EezStudio_EmbeddedPlatform_ProtocolInfo strong,
+.EezStudio_EmbeddedPlatform_ProtocolInfo span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform_ProtocolInfo small {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    line-height: 1.35;
+}
+
+.EezStudio_EmbeddedPlatform_EmptyState {
+    padding: 18px 8px;
+    color: var(--bs-secondary-color);
+    font-size: 12px;
+    text-align: center;
+}
+
+.EezStudio_EmbeddedPlatform_ProtocolInfo small,
+.EezStudio_EmbeddedPlatform_Muted,
+.EezStudio_EmbeddedPlatform_Status {
+    color: var(--bs-secondary-color);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.EezStudio_EmbeddedPlatform_CloudResult {
+    background: color-mix(in srgb, var(--bs-tertiary-bg) 70%, transparent);
+}
+
+.EezStudio_EmbeddedPlatform_ListSectionLabel {
+    padding: 8px 8px 5px;
+    border-bottom: 1px solid @borderColor;
+    color: var(--bs-secondary-color);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.EezStudio_EmbeddedPlatform_CategoryTabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+    padding: 2px 0;
+    overflow-x: auto;
+}
+
+.EezStudio_EmbeddedPlatform_CategoryTab {
+    flex: 0 0 auto;
+    min-height: 28px;
+    padding: 3px 10px;
+    border: 1px solid @borderColor;
+    border-radius: 2px;
+    background: @backgroundColor;
+    color: @textColor;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover,
+    &.is-selected {
+        background: @selectionBackgroundColor;
+        color: @selectionColor;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_Window {
+    justify-content: space-between;
+    overflow: hidden;
+}
+
+.EezStudio_EmbeddedPlatform_WindowGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(300px, 1fr));
+    align-content: start;
+    padding: 10px;
+    overflow: auto;
+}
+
+.EezStudio_EmbeddedPlatform_WindowGridSingle {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.EezStudio_EmbeddedPlatform_WindowFooter {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 280px) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px;
+    border-top: 1px solid @borderColor;
+    background: @panelHeaderColor;
+}
+
+.EezStudio_EmbeddedPlatform_Progress {
+    height: 22px;
+    margin: 0;
+}
+
+.EezStudio_EmbeddedPlatform_FirmwarePicker {
+    padding: 8px;
+}
+
+@media (max-width: 760px) {
+    .EezStudio_EmbeddedPlatform_Content,
+    .EezStudio_EmbeddedPlatform_WindowGrid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .EezStudio_EmbeddedPlatform_WorkspaceNav {
+        flex-direction: row;
+        overflow-x: auto;
+
+        button {
+            flex: 0 0 auto;
+        }
+    }
+
+    .EezStudio_EmbeddedPlatform_StatusBar {
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .EezStudio_EmbeddedPlatform_WindowFooter {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .EezStudio_EmbeddedPlatform_StorageSummaryGrid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .EezStudio_EmbeddedPlatform_CloudSearch {
+        grid-template-columns: minmax(0, 1fr);
+
+        .EezStudio_EmbeddedPlatform_SearchButton {
+            grid-column: 1;
+        }
+    }
+
+    .EezStudio_EmbeddedPlatform_SearchButton {
+        justify-self: start;
+    }
 }

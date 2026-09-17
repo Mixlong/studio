@@ -25,6 +25,19 @@ import {
 const MATERIAL_PREFIX = "material:";
 const SVG_PREFIX = "svg:";
 
+// Material Symbols removed several style-specific Material Icons aliases.
+// Keep existing icon references working while rendering the canonical symbol.
+const MATERIAL_SYMBOL_ALIASES: { [icon: string]: string } = {
+    error_outline: "error",
+    file_download: "download",
+    file_upload: "upload",
+    cloud_search: "travel_explore",
+    lightbulb_outline: "lightbulb",
+    mode_edit: "edit",
+    play_circle_filled: "play_circle",
+    play_circle_outline: "play_circle"
+};
+
 const SVG_ICONS: { [icon: string]: JSX.Element } = {
     language: LANGUAGE_ICON,
     changes: CHANGES_ICON,
@@ -76,9 +89,14 @@ export const Icon = observer(
                 if (icon.startsWith(MATERIAL_PREFIX)) {
                     let iconClassName = classnames(
                         "EezStudio_Icon",
-                        "material-icons",
+                        "material-symbols-outlined",
                         className
                     );
+
+                    const materialSymbol = icon.slice(MATERIAL_PREFIX.length);
+                    const materialSymbolName =
+                        MATERIAL_SYMBOL_ALIASES[materialSymbol] ||
+                        materialSymbol;
 
                     let iconStyle = {
                         fontSize: iconSize + "px"
@@ -91,10 +109,11 @@ export const Icon = observer(
                         <i
                             className={iconClassName}
                             style={iconStyle}
+                            aria-hidden="true"
                             onClick={onClick}
                             title={this.props.title}
                         >
-                            {icon.slice(MATERIAL_PREFIX.length)}
+                            {materialSymbolName}
                         </i>
                     );
 
@@ -131,9 +150,32 @@ export const Icon = observer(
                     );
                 }
             } else {
-                result = React.cloneElement(icon as React.ReactElement<any>, {
-                    className: classnames("EezStudio_Icon", className),
-                    style,
+                const iconElement = icon as React.ReactElement<any>;
+                let iconStyle: React.CSSProperties = Object.assign(
+                    {},
+                    iconElement.props.style
+                );
+                if (
+                    typeof iconElement.props.className === "string" &&
+                    iconElement.props.className.includes(
+                        "material-symbols-outlined"
+                    )
+                ) {
+                    iconStyle = Object.assign(iconStyle, {
+                        fontSize: iconSize + "px"
+                    });
+                }
+                if (style) {
+                    iconStyle = Object.assign(iconStyle, style);
+                }
+
+                result = React.cloneElement(iconElement, {
+                    className: classnames(
+                        "EezStudio_Icon",
+                        iconElement.props.className,
+                        className
+                    ),
+                    style: iconStyle,
                     width: iconSize,
                     height: iconSize,
                     onClick: onClick,

@@ -121,6 +121,10 @@ import type { FlowEditor } from "project-editor/flow/editor/editor";
 import type { newComponentMenuItem } from "project-editor/flow/editor/ComponentsPalette";
 
 import type { LVGLPageEditorRuntime } from "project-editor/lvgl/page-runtime";
+import type {
+    getLVGLWidgetPropertyInterface,
+    updateLVGLWidgetProperty
+} from "project-editor/lvgl/property-interface";
 
 export interface IProjectEditor {
     homeTabs?: Tabs;
@@ -220,6 +224,8 @@ export interface IProjectEditor {
     BuildFileClass: typeof BuildFile;
     FlowEditorClass: typeof FlowEditor;
     newComponentMenuItem: typeof newComponentMenuItem;
+    getLVGLWidgetPropertyInterface: typeof getLVGLWidgetPropertyInterface;
+    updateLVGLWidgetProperty: typeof updateLVGLWidgetProperty;
 }
 
 export const ProjectEditor: IProjectEditor = {} as any;

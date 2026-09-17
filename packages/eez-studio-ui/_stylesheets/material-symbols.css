@@ -1,0 +1,97 @@
+/* Material Symbols by Google, licensed under Apache License 2.0. */
+/* https://fonts.google.com/icons */
+@font-face {
+    font-family: "Material Symbols Outlined";
+    font-style: normal;
+    font-weight: 100 700;
+    font-display: block;
+    src: url(MaterialSymbolsOutlined.ttf) format("truetype");
+}
+
+@font-face {
+    font-family: "Font Awesome Icons";
+    font-style: normal;
+    font-weight: 400;
+    src: local("FontAwesome5-Solid+Brands+Regular"),
+        url(FontAwesome5-Solid+Brands+Regular.woff) format("woff");
+}
+
+.font-awesome-icons {
+    font-family: "Font Awesome Icons";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "liga";
+    vertical-align: middle !important;
+}
+
+.material-symbols-outlined,
+.material-icons {
+    font-family: "Material Symbols Outlined";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "liga";
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    vertical-align: middle !important;
+}
+
+.material-symbols-outlined.md-18,
+.material-icons.md-18 {
+    font-size: 18px;
+}
+
+.material-symbols-outlined.md-24,
+.material-icons.md-24 {
+    font-size: 24px;
+}
+
+.material-symbols-outlined.md-36,
+.material-icons.md-36 {
+    font-size: 36px;
+}
+
+.material-symbols-outlined.md-48,
+.material-icons.md-48 {
+    font-size: 48px;
+}
+
+.material-symbols-outlined.md-dark,
+.material-icons.md-dark {
+    color: rgba(0, 0, 0, 0.54);
+}
+
+.material-symbols-outlined.md-dark.md-inactive,
+.material-icons.md-dark.md-inactive {
+    color: rgba(0, 0, 0, 0.26);
+}
+
+.material-symbols-outlined.md-light,
+.material-icons.md-light {
+    color: rgba(255, 255, 255, 1);
+}
+
+.material-symbols-outlined.md-light.md-inactive,
+.material-icons.md-light.md-inactive {
+    color: rgba(255, 255, 255, 0.3);
+}

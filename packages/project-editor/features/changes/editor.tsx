@@ -778,7 +778,17 @@ export const ObjectChangesComponent = observer(
                 }
 
                 if (icon && typeof icon == "string") {
-                    icon = <Icon icon={`material:${icon}`} size={18} />;
+                    icon = (
+                        <Icon
+                            icon={
+                                icon.startsWith("material:") ||
+                                icon.startsWith("svg:")
+                                    ? icon
+                                    : `material:${icon}`
+                            }
+                            size={18}
+                        />
+                    );
                 }
 
                 const valueBefore = (propertyChange.objectBefore as any)[

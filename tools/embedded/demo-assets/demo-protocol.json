@@ -1,0 +1,27 @@
+{
+    "name": "demo-battery-can",
+    "version": 1,
+    "transport": "can",
+    "messages": [
+        {
+            "id": "0x180",
+            "name": "battery_status",
+            "signals": [
+                {
+                    "name": "voltage",
+                    "startBit": 0,
+                    "length": 16,
+                    "scale": 0.01,
+                    "unit": "V"
+                },
+                {
+                    "name": "soc",
+                    "startBit": 16,
+                    "length": 8,
+                    "scale": 1,
+                    "unit": "%"
+                }
+            ]
+        }
+    ]
+}
