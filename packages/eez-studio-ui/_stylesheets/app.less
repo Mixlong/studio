@@ -1700,7 +1700,9 @@ button.EezStudio_Action {
 
 .DigiStudio_SidebarCollapseControl {
     position: absolute;
-    z-index: 20;
+    // Keep the collapse action above the activity-bar tooltip and the
+    // FlexLayout border buttons it overlays.
+    z-index: 10001;
     top: 6px;
     display: flex;
     align-items: center;
@@ -1711,10 +1713,11 @@ button.EezStudio_Action {
     border: 1px solid fade(@borderColor, 76%);
     border-radius: 4px;
     color: var(--bs-secondary-color);
-    background: @backgroundColor;
+    background: @backgroundColor !important;
+    background-color: @backgroundColor !important;
     cursor: pointer;
     font-style: normal;
-    opacity: 1;
+    opacity: 1 !important;
     transition: color 120ms ease, background-color 120ms ease,
         border-color 120ms ease;
 
@@ -1729,7 +1732,8 @@ button.EezStudio_Action {
     &:hover,
     &:focus-visible {
         color: @textColor;
-        background: @backgroundColor;
+        background: @backgroundColor !important;
+        background-color: @backgroundColor !important;
         border-color: @selectionBackgroundColor;
         outline: none;
     }
