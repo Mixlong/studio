@@ -484,7 +484,7 @@ const Content = observer(
             model: FlexLayout.Model,
             action: FlexLayout.Action
         ) => {
-            // Keep the overlay controls in sync with border selection.
+            // Keep the sidebar collapse controls in sync with border selection.
             this.setState(state => ({
                 layoutRevision: state.layoutRevision + 1
             }));

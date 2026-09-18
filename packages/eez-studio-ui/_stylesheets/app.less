@@ -1440,7 +1440,13 @@ button.EezStudio_Action {
     background: @backgroundColor;
     border-right: 1px solid @borderColor;
 
+    // flexlayout-react measures vertical border bars from the horizontal
+    // border sizer (29px by default). The activity-bar buttons are 48px wide,
+    // so the default rail clips their icons inside the border's overflow box.
     .flexlayout__border_inner {
+        width: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
         overflow: hidden;
     }
 
@@ -1616,6 +1622,9 @@ button.EezStudio_Action {
         border-left: 1px solid @borderColor;
 
         .flexlayout__border_inner {
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
             overflow: hidden;
         }
 
@@ -1702,12 +1711,12 @@ button.EezStudio_Action {
     border: 1px solid fade(@borderColor, 76%);
     border-radius: 4px;
     color: var(--bs-secondary-color);
-    background: rgba(var(--bs-tertiary-bg-rgb), 0.86);
+    background: @backgroundColor;
     cursor: pointer;
     font-style: normal;
-    opacity: 0.92;
+    opacity: 1;
     transition: color 120ms ease, background-color 120ms ease,
-        border-color 120ms ease, opacity 120ms ease;
+        border-color 120ms ease;
 
     &.DigiStudio_SidebarCollapseControl_Left {
         left: 9px;
@@ -1720,9 +1729,8 @@ button.EezStudio_Action {
     &:hover,
     &:focus-visible {
         color: @textColor;
-        background: var(--bs-tertiary-bg);
+        background: @backgroundColor;
         border-color: @selectionBackgroundColor;
-        opacity: 1;
         outline: none;
     }
 
