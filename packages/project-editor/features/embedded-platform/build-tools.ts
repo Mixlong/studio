@@ -20,8 +20,15 @@ import {
     DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY,
     getEmbeddedWebSocketEndpoint
 } from "project-editor/features/embedded-platform/embedded-platform";
-import { EmbeddedWebSocketClient } from "project-editor/features/embedded-platform/embedded-websocket";
-import type { EmbeddedOutgoingMessage } from "project-editor/features/embedded-platform/embedded-protocol";
+import {
+    EmbeddedWebSocketClient,
+    type EmbeddedWebSocketState
+} from "project-editor/features/embedded-platform/embedded-websocket";
+import type {
+    EmbeddedOutgoingMessage,
+    EmbeddedTransformModel,
+    EmbeddedTransformType
+} from "project-editor/features/embedded-platform/embedded-protocol";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,11 +51,140 @@ export interface EmbeddedResourceSummary {
 
 export interface EmbeddedOperationOptions {
     onProgress?: (value: number) => void;
+    onLog?: (message: string) => void;
+    onStateChange?: (state: EmbeddedWebSocketState) => void;
 }
 
 const activeProcesses = new Map<ProjectStore, ChildProcess>();
 const websocketClients = new WeakMap<ProjectStore, EmbeddedWebSocketClient>();
 const websocketOperationOptions = new WeakMap<ProjectStore, EmbeddedOperationOptions>();
+const websocketOperationCancellers = new WeakMap<ProjectStore, () => void>();
+type RemoteBuildCommand = "cmake" | "build" | "download";
+type RemoteLogWaiter = (message: string) => void;
+const websocketLogWaiters = new WeakMap<ProjectStore, Set<RemoteLogWaiter>>();
+const REMOTE_COMMAND_COMPLETION_TIMEOUT_MS = 15 * 60 * 1000;
+
+function remoteCommandLogResult(
+    command: RemoteBuildCommand,
+    message: string
+): boolean | undefined {
+    for (const line of message.split(/\r?\n/)) {
+        const normalized = line.trim();
+        if (!normalized) {
+            continue;
+        }
+
+        if (
+            /(?:^|[\s:：])(?:cmake|build|compile|firmware|download|flash|program|burn)?\s*(?:failed|failure|fatal(?:\s+error)?|exception|error)(?=\s|[:：]|$)|(?:失败|错误|异常|无法(?:生成|编译|构建|下载|烧录|刷写))(?=\s|[:：]|$)/i.test(
+                normalized
+            )
+        ) {
+            return false;
+        }
+
+        if (command === "cmake") {
+            if (
+                /\bcmake\s+(?:completed?|success(?:ful|fully)?|succeed(?:ed)?|done)\b/i.test(
+                    normalized
+                ) ||
+                /(?:成功|生成|完成).*CMakeLists(?:\.txt)?\b|\bCMakeLists(?:\.txt)?\b.*(?:成功|生成|完成)/i.test(
+                    normalized
+                )
+            ) {
+                return true;
+            }
+        } else if (command === "build") {
+            if (
+                /\b(?:build|compile|firmware)\s+(?:completed?|success(?:ful|fully)?|succeed(?:ed)?|done)\b/i.test(
+                    normalized
+                ) ||
+                /(?:构建|编译|固件).*(?:成功|完成)|(?:成功|完成).*(?:构建|编译|固件)/i.test(
+                    normalized
+                )
+            ) {
+                return true;
+            }
+        } else if (
+            /\b(?:download|flash|program|burn)\s+(?:completed?|success(?:ful|fully)?|succeed(?:ed)?|done)\b/i.test(
+                normalized
+            ) ||
+            /(?:下载|烧录|刷写).*(?:成功|完成)|(?:成功|完成).*(?:下载|烧录|刷写)/i.test(
+                normalized
+            )
+        ) {
+            return true;
+        }
+    }
+
+    return undefined;
+}
+
+function notifyRemoteLogWaiters(projectStore: ProjectStore, message: string) {
+    const waiters = websocketLogWaiters.get(projectStore);
+    if (!waiters) {
+        return;
+    }
+    for (const waiter of [...waiters]) {
+        waiter(message);
+    }
+}
+
+function waitForRemoteCommandCompletion(
+    projectStore: ProjectStore,
+    command: RemoteBuildCommand
+) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let resolvePromise: (result: { success: boolean; message: string }) => void;
+    const waiters = websocketLogWaiters.get(projectStore) || new Set<RemoteLogWaiter>();
+    websocketLogWaiters.set(projectStore, waiters);
+
+    const promise = new Promise<{ success: boolean; message: string }>(resolve => {
+        resolvePromise = resolve;
+    });
+
+    const cleanup = () => {
+        waiters.delete(waiter);
+        if (waiters.size === 0) {
+            websocketLogWaiters.delete(projectStore);
+        }
+        if (timer !== undefined) {
+            clearTimeout(timer);
+        }
+    };
+
+    const finish = (result: { success: boolean; message: string }) => {
+        cleanup();
+        resolvePromise(result);
+    };
+
+    const waiter: RemoteLogWaiter = message => {
+        const success = remoteCommandLogResult(command, message);
+        if (success === undefined) {
+            return;
+        }
+        finish({
+            success,
+            message: message.trim() || `Remote ${command} command completed.`
+        });
+    };
+
+    waiters.add(waiter);
+    timer = setTimeout(() => {
+        finish({
+            success: false,
+            message: `Timed out waiting for remote ${command} completion.`
+        });
+    }, REMOTE_COMMAND_COMPLETION_TIMEOUT_MS);
+
+    return {
+        promise,
+        cancel: () =>
+            finish({
+                success: false,
+                message: `Remote ${command} command was cancelled before completion.`
+            })
+    };
+}
 
 function assertSavedProject(projectStore: ProjectStore) {
     if (!projectStore.filePath) {
@@ -67,14 +203,6 @@ function normalizeCMakePath(value: string) {
 
 function toProjectRelativePath(projectRoot: string, filePath: string) {
     return normalizeCMakePath(path.relative(projectRoot, filePath));
-}
-
-function toWebSocketPath(projectRoot: string, filePath: string) {
-    const relativePath = toProjectRelativePath(projectRoot, filePath) || ".";
-    if (relativePath === ".") {
-        return "./";
-    }
-    return relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
 }
 
 function resolveConfiguredPath(projectStore: ProjectStore, filePath: string) {
@@ -109,6 +237,35 @@ function isWebSocketEnabled(platform: EmbeddedPlatform) {
     return platform.websocket?.enabled === true;
 }
 
+function normalizeRemotePath(value: string) {
+    return value.trim().replace(/\\/g, "/");
+}
+
+function getMissingRemoteBuildField(platform: EmbeddedPlatform) {
+    const build = platform.remote.build;
+    if (!build.projectDirectory.trim()) {
+        return "Project directory (remote)";
+    }
+    if (!build.configFile.trim()) {
+        return "CMake config file (remote)";
+    }
+    if (!build.outputDirectory.trim()) {
+        return "Build directory (remote)";
+    }
+    return undefined;
+}
+
+function getMissingRemoteDownloadField(platform: EmbeddedPlatform) {
+    const download = platform.remote.download;
+    if (!download.target.trim()) {
+        return "Target identifier";
+    }
+    if (!download.firmwarePath.trim()) {
+        return "Firmware path (remote)";
+    }
+    return undefined;
+}
+
 function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
     const platform = projectStore.project.embeddedPlatform;
     const websocketSettings = platform.websocket;
@@ -125,8 +282,10 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
                     const data =
                         typeof message.data === "string"
                             ? message.data
-                            : JSON.stringify(message.data);
+                            : JSON.stringify(message.data ?? null, null, 2);
                     output(projectStore, MessageType.INFO, data);
+                    websocketOperationOptions.get(projectStore)?.onLog?.(data);
+                    notifyRemoteLogWaiters(projectStore, data);
                     const progress = parseProgress(data);
                     if (progress !== undefined) {
                         websocketOperationOptions
@@ -136,13 +295,18 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
                     return;
                 }
 
-                output(
-                    projectStore,
-                    MessageType.INFO,
-                    `WebSocket ${message.command}: ${JSON.stringify(message)}`
-                );
+                // Non-log protocol responses must also be visible in the
+                // remote log panel, not only in the global output console.
+                const data = `WebSocket ${message.command}: ${JSON.stringify(
+                    message,
+                    null,
+                    2
+                )}`;
+                output(projectStore, MessageType.INFO, data);
+                websocketOperationOptions.get(projectStore)?.onLog?.(data);
             },
             onStateChange: state => {
+                websocketOperationOptions.get(projectStore)?.onStateChange?.(state);
                 const activeEndpoint = platform.websocket
                     ? getEmbeddedWebSocketEndpoint(platform.websocket)
                     : endpoint;
@@ -153,19 +317,20 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
                         `Connected to embedded middleware WebSocket (${platform.websocket?.environment || "local"}): ${activeEndpoint}`
                     );
                 } else if (state === "disconnected") {
-                    output(
-                        projectStore,
-                        MessageType.WARNING,
-                        "Embedded middleware WebSocket disconnected."
-                    );
+                    const message =
+                        "WebSocket error: connection closed before the remote command completed.";
+                    output(projectStore, MessageType.WARNING, message);
+                    websocketOperationOptions.get(projectStore)?.onLog?.(message);
+                    // Do not leave a build waiting for the 15-minute timeout
+                    // when its transport is already closed.
+                    notifyRemoteLogWaiters(projectStore, message);
                 }
             },
             onError: error => {
-                output(
-                    projectStore,
-                    MessageType.ERROR,
-                    `Embedded middleware WebSocket error: ${error.message}`
-                );
+                const message = `WebSocket error: ${error.message}`;
+                output(projectStore, MessageType.ERROR, message);
+                websocketOperationOptions.get(projectStore)?.onLog?.(message);
+                notifyRemoteLogWaiters(projectStore, message);
             }
         });
         websocketClients.set(projectStore, client);
@@ -177,6 +342,30 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
     return client;
 }
 
+export async function connectEmbeddedWebSocket(
+    projectStore: ProjectStore
+): Promise<EmbeddedOperationResult> {
+    const platform = projectStore.project.embeddedPlatform;
+    if (!isWebSocketEnabled(platform)) {
+        const message = "Enable WebSocket middleware before connecting.";
+        output(projectStore, MessageType.WARNING, message);
+        return { success: false, message };
+    }
+
+    try {
+        await getEmbeddedWebSocketClient(projectStore).connect();
+        return {
+            success: true,
+            message: "Embedded middleware WebSocket connected."
+        };
+    } catch (error) {
+        return {
+            success: false,
+            message: `Embedded middleware WebSocket connection failed: ${error}`
+        };
+    }
+}
+
 async function sendEmbeddedWebSocketCommand(
     projectStore: ProjectStore,
     message: EmbeddedOutgoingMessage,
@@ -186,14 +375,44 @@ async function sendEmbeddedWebSocketCommand(
     const client = getEmbeddedWebSocketClient(projectStore);
     websocketOperationOptions.set(projectStore, options);
     options.onProgress?.(0);
+    const command =
+        message.command === "cmake" ||
+        message.command === "build" ||
+        message.command === "download"
+            ? message.command
+            : undefined;
+    const completion = command
+        ? waitForRemoteCommandCompletion(projectStore, command)
+        : undefined;
+    const cancelRemoteCommand = completion ? () => completion.cancel() : undefined;
+    if (cancelRemoteCommand) {
+        websocketOperationCancellers.set(projectStore, cancelRemoteCommand);
+    }
 
     try {
         await client.send(message);
-        // §5.7 defines command submission and log messages, but not a
-        // completion response. Keep the progress below 100 until middleware
-        // reports execution progress through a log message.
         options.onProgress?.(10);
-        const resultMessage = `WebSocket ${message.command} command sent.`;
+        const completionResult = completion
+            ? await completion.promise
+            : { success: true, message: "" };
+        if (!completionResult.success) {
+            output(projectStore, MessageType.ERROR, completionResult.message);
+            return {
+                success: false,
+                message: completionResult.message,
+                ...metadata
+            };
+        }
+
+        if (command === "cmake") {
+            options.onProgress?.(50);
+        } else if (command === "build" || command === "download") {
+            options.onProgress?.(100);
+        }
+
+        const resultMessage = command
+            ? `WebSocket ${command} command completed.`
+            : `WebSocket ${message.command} command sent.`;
         output(projectStore, MessageType.INFO, resultMessage);
         return {
             success: true,
@@ -201,6 +420,7 @@ async function sendEmbeddedWebSocketCommand(
             ...metadata
         };
     } catch (error) {
+        completion?.cancel();
         const resultMessage = `WebSocket ${message.command} command failed: ${error}`;
         output(projectStore, MessageType.ERROR, resultMessage);
         return {
@@ -208,6 +428,13 @@ async function sendEmbeddedWebSocketCommand(
             message: resultMessage,
             ...metadata
         };
+    } finally {
+        if (cancelRemoteCommand && websocketOperationCancellers.get(projectStore) === cancelRemoteCommand) {
+            websocketOperationCancellers.delete(projectStore);
+        }
+        if (websocketOperationOptions.get(projectStore) === options) {
+            websocketOperationOptions.delete(projectStore);
+        }
     }
 }
 
@@ -224,9 +451,10 @@ function tokenizeArguments(value: string) {
 }
 
 function substituteArguments(value: string, variables: Record<string, string>) {
-    return value.replace(/\{(firmware|offset|target|interface|speed|output)\}/g, (_match, key) => {
-        return variables[key] ?? "";
-    });
+    return value.replace(
+        /\{(firmware|offset|target|interface|pack|script|frequency|speed|output)\}/g,
+        (_match, key) => variables[key] ?? ""
+    );
 }
 
 async function runCommand(
@@ -557,6 +785,14 @@ export async function synchronizeEmbeddedResources(
 }
 
 export function stopEmbeddedOperation(projectStore: ProjectStore) {
+    const cancelRemoteCommand = websocketOperationCancellers.get(projectStore);
+    if (cancelRemoteCommand) {
+        cancelRemoteCommand();
+        websocketOperationCancellers.delete(projectStore);
+        output(projectStore, MessageType.WARNING, "Remote embedded operation stopped by user.");
+        return true;
+    }
+
     const process = activeProcesses.get(projectStore);
     if (!process) {
         return false;
@@ -587,6 +823,41 @@ export async function runEmbeddedBuild(
     const platform = projectStore.project.embeddedPlatform;
     options.onProgress?.(0);
 
+    if (isWebSocketEnabled(platform)) {
+        const missingField = getMissingRemoteBuildField(platform);
+        if (missingField) {
+            const message = `Set ${missingField} before starting the remote firmware build.`;
+            output(projectStore, MessageType.ERROR, message);
+            return { success: false, message };
+        }
+
+        const remoteBuild = platform.remote.build;
+        const cmakeResult = await sendEmbeddedWebSocketCommand(
+            projectStore,
+            {
+                command: "cmake",
+                output_dir: normalizeRemotePath(remoteBuild.projectDirectory),
+                config_file: normalizeRemotePath(remoteBuild.configFile)
+            },
+            options,
+            { outputDirectory: normalizeRemotePath(remoteBuild.outputDirectory) }
+        );
+        if (!cmakeResult.success) {
+            return cmakeResult;
+        }
+
+        return sendEmbeddedWebSocketCommand(
+            projectStore,
+            {
+                command: "build",
+                src: normalizeRemotePath(remoteBuild.projectDirectory),
+                dst: normalizeRemotePath(remoteBuild.outputDirectory)
+            },
+            options,
+            { outputDirectory: normalizeRemotePath(remoteBuild.outputDirectory) }
+        );
+    }
+
     try {
         await ProjectEditor.build.buildProject(projectStore, "buildFiles");
         if (projectStore.outputSectionsStore.getSection(Section.OUTPUT).numErrors) {
@@ -604,19 +875,6 @@ export async function runEmbeddedBuild(
     const outputDirectory = getOutputDirectory(projectStore, platform);
     const sourceDirectory = getBspSourceDirectory(projectStore, platform);
     const cwd = projectDirectory(projectStore);
-
-    if (isWebSocketEnabled(platform)) {
-        return sendEmbeddedWebSocketCommand(
-            projectStore,
-            {
-                command: "build",
-                src: toWebSocketPath(cwd, cwd),
-                dst: toWebSocketPath(cwd, outputDirectory)
-            },
-            options,
-            { outputDirectory }
-        );
-    }
 
     try {
         if (platform.build.scriptPath) {
@@ -797,8 +1055,8 @@ export async function detectEmbeddedTarget(
 
 export async function runEmbeddedTransform(
     projectStore: ProjectStore,
-    type: string,
-    model: string,
+    type: EmbeddedTransformType,
+    model: EmbeddedTransformModel,
     options: EmbeddedOperationOptions = {}
 ): Promise<EmbeddedOperationResult> {
     const platform = projectStore.project.embeddedPlatform;
@@ -823,6 +1081,33 @@ export async function runEmbeddedDownload(
 ): Promise<EmbeddedOperationResult> {
     const platform = projectStore.project.embeddedPlatform;
     const settings = platform.download;
+
+    if (isWebSocketEnabled(platform)) {
+        const missingField = getMissingRemoteDownloadField(platform);
+        if (missingField) {
+            const message = `Set ${missingField} before starting the remote firmware download.`;
+            output(projectStore, MessageType.ERROR, message);
+            return { success: false, message };
+        }
+
+        const remoteDownload = platform.remote.download;
+        const remoteFirmwarePath = normalizeRemotePath(remoteDownload.firmwarePath);
+        return sendEmbeddedWebSocketCommand(
+            projectStore,
+            {
+                command: "download",
+                target: remoteDownload.target.trim(),
+                pack: remoteDownload.pack.trim() || "null",
+                script: remoteDownload.script.trim() || "null",
+                frequency: remoteDownload.frequency.trim() || "500000",
+                firmware: remoteFirmwarePath,
+                addr: remoteDownload.addressOffset.trim() || "0x0"
+            },
+            options,
+            { outputDirectory: normalizeRemotePath(platform.remote.build.outputDirectory), firmwarePath: remoteFirmwarePath }
+        );
+    }
+
     const outputDirectory = getOutputDirectory(projectStore, platform);
     const resolvedFirmware = firmwarePath || findFirmwareFile(outputDirectory);
 
@@ -833,30 +1118,15 @@ export async function runEmbeddedDownload(
     }
 
     const offset = settings.addressOffset || "0x0";
-    const projectRoot = projectDirectory(projectStore);
-
-    if (isWebSocketEnabled(platform)) {
-        return sendEmbeddedWebSocketCommand(
-            projectStore,
-            {
-                command: "download",
-                interface: settings.interfaceName || "",
-                target: settings.targetId || "",
-                speed: settings.speed || "5000",
-                firmware: toWebSocketPath(projectRoot, resolvedFirmware),
-                addr: offset
-            },
-            options,
-            { outputDirectory, firmwarePath: resolvedFirmware }
-        );
-    }
-
     const command = settings.executablePath || defaultDownloadExecutable(settings.tool);
     const variables = {
         firmware: resolvedFirmware,
         offset,
         target: settings.targetId,
         interface: settings.interfaceName,
+        pack: settings.pack || "null",
+        script: settings.script || "null",
+        frequency: settings.frequency || "500000",
         speed: settings.speed || "5000",
         output: outputDirectory
     };

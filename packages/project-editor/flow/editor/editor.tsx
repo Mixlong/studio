@@ -511,7 +511,16 @@ export const Canvas = observer(
                         "EezStudio_FlowEditorSelection"
                     ) &&
                     !event.shiftKey &&
-                    !event.ctrlKey
+                    !event.ctrlKey &&
+                    // For a single selected LVGL widget, hit-test the canvas
+                    // underneath the selection overlay before dragging.
+                    // Otherwise the overlay intercepts clicks on children.
+                    !(
+                        flowContext.projectStore.projectTypeTraits.isLVGL &&
+                        flowContext.viewState.selectedObjects.length === 1 &&
+                        flowContext.viewState.selectedObjects[0].object instanceof
+                            ProjectEditor.LVGLWidgetClass
+                    )
                 ) {
                     return isMoveable ? new DragMouseHandler() : undefined;
                 } else {

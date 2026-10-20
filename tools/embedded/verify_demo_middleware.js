@@ -39,6 +39,7 @@ function waitFor(predicate, messages, timeoutMs = 3000) {
 async function main() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "eez-p1-demo-"));
     fs.mkdirSync(path.join(root, "src"));
+    fs.writeFileSync(path.join(root, "config_MH2457.py"), "# demo config\n");
     const middleware = startDemoMiddleware({ host: "127.0.0.1", port: 0, root });
     const address = await middleware.ready;
     const messages = [];
@@ -56,6 +57,16 @@ async function main() {
             messages
         );
 
+        await client.send({
+            command: "cmake",
+            output_dir: "./",
+            config_file: "./config_MH2457.py"
+        });
+        await waitFor(
+            message => message.command === "log" && /cmake completed/.test(message.data),
+            messages
+        );
+
         await client.send({ command: "build", src: "./", dst: "./build" });
         await waitFor(
             message => message.command === "log" && /build completed/.test(message.data),
@@ -66,9 +77,10 @@ async function main() {
 
         await client.send({
             command: "download",
-            interface: "cmsis-dap.cfg",
-            target: "stm32f4x.cfg",
-            speed: "5000",
+            target: "stm32f407ve",
+            pack: "null",
+            script: "null",
+            frequency: "500000",
             firmware: "./build/firmware.bin",
             addr: "0x08000000"
         });

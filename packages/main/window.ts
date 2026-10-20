@@ -53,6 +53,7 @@ export interface IWindow {
     state: IWindowSate;
     focused: boolean;
     activeTabType: ActiveTabType;
+    activeTabId?: string;
 }
 
 export const windows = observable<IWindow>([]);
@@ -148,7 +149,7 @@ export function createWindow(params: IWindowParams) {
                     return;
                 }
 
-                if (!window?.readyToClose) {
+                if (!forceQuit && !window?.readyToClose) {
                     try {
                         browserWindow.webContents.send("beforeClose");
                         event.preventDefault();
@@ -293,13 +294,23 @@ ipcMain.on("tabs-change", (event, tabs: { id: string; active: boolean }[]) => {
                     activeTabType = "project";
                 } else if (activeTab.id.startsWith(RUN_PROJECT_TAB_ID_PREFIX)) {
                     activeTabType = "run-project";
-                } else if (Number.parseInt(activeTab.id) != undefined) {
+                } else if (/^\d+$/.test(activeTab.id)) {
                     activeTabType = "instrument";
                 } else {
                     activeTabType = activeTab.id as ActiveTabType;
                 }
             }
 
+            // The selected project tab owns native Undo/Redo state. When
+            // switching between projects, clear the previous project's
+            // history while the newly active tab loads and reports its state.
+            // Do not reset it for unrelated tab-list changes.
+            const activeTabId = activeTab?.id;
+            if (window.activeTabId !== activeTabId) {
+                window.state.undo = null;
+                window.state.redo = null;
+                window.activeTabId = activeTabId;
+            }
             window.activeTabType = activeTabType;
         });
     }

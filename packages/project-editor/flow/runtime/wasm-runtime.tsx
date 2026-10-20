@@ -1366,21 +1366,21 @@ export const WasmCanvas = observer(
             const width = wasmRuntime.selectedPage.width;
             const height = wasmRuntime.selectedPage.height;
 
+            // getBoundingClientRect already includes the CSS Run-mode zoom.
+            // Convert pointer pixels to logical framebuffer coordinates first,
+            // then subtract the device-space page offset. Subtracting before
+            // scaling shifts touches on oversized / auto-fitted screens.
             const x =
-                (event.clientX -
-                    bbox.left -
-                    (wasmRuntime.isDebuggerActive
-                        ? 0
-                        : left + (wasmRuntime.displayWidth - width) / 2)) *
-                (canvas.width / bbox.width);
+                (event.clientX - bbox.left) * (canvas.width / bbox.width) -
+                (wasmRuntime.isDebuggerActive
+                    ? 0
+                    : left + (wasmRuntime.displayWidth - width) / 2);
 
             const y =
-                (event.clientY -
-                    bbox.top -
-                    (wasmRuntime.isDebuggerActive
-                        ? 0
-                        : top + (wasmRuntime.displayHeight - height) / 2)) *
-                (canvas.height / bbox.height);
+                (event.clientY - bbox.top) * (canvas.height / bbox.height) -
+                (wasmRuntime.isDebuggerActive
+                    ? 0
+                    : top + (wasmRuntime.displayHeight - height) / 2);
 
             const pressed = event.buttons == 1 ? 1 : 0;
 

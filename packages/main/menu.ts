@@ -469,7 +469,6 @@ function buildEditMenu(win: IWindow | undefined) {
             id: "undo",
             label: "Undo",
             accelerator: "CmdOrCtrl+Z",
-            role: "undo",
             click: function (item, focusedWindow) {
                 if (focusedWindow) {
                     const win = findWindowByBrowserWindow(focusedWindow);
@@ -486,7 +485,6 @@ function buildEditMenu(win: IWindow | undefined) {
             id: "redo",
             label: "Redo",
             accelerator: "CmdOrCtrl+Y",
-            role: "redo",
             click: function (item, focusedWindow) {
                 if (focusedWindow) {
                     const win = findWindowByBrowserWindow(focusedWindow);
@@ -580,7 +578,7 @@ function buildEditMenu(win: IWindow | undefined) {
     enableMenuItem(
         <Electron.MenuItemConstructorOptions[]>editMenu.submenu,
         "undo",
-        win !== undefined && win.state.undo != null
+        win?.activeTabType === "project"
             ? !!win.state.undo
             : undoManager.canUndo
     );
@@ -588,7 +586,7 @@ function buildEditMenu(win: IWindow | undefined) {
     enableMenuItem(
         <Electron.MenuItemConstructorOptions[]>editMenu.submenu,
         "redo",
-        win !== undefined && win.state.redo != null
+        win?.activeTabType === "project"
             ? !!win.state.redo
             : undoManager.canRedo
     );

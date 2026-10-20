@@ -865,29 +865,178 @@ export const LVGLSelectedStyleEditor = observer(
         }
 
         render() {
-            this.selectedStyle;
+            const selectedStyle = this.selectedStyle;
+            const runtime = this.runtime;
+            const supported = selectedStyle
+                ? runtime.lvglWidgetsMap.has(selectedStyle.forWidgetType)
+                : false;
+
+            // The native LVGL engine can load asynchronously in Electron.
+            // Show a clearly labeled CSS approximation derived from the
+            // actual selected style while waiting, rather than empty pixels.
+            const sampleStyle = selectedStyle?.fullDefinition?.MAIN?.DEFAULT as
+                | Record<string, any>
+                | undefined;
+            const sampleType = selectedStyle?.forWidgetType;
+            const fontMatch = String(sampleStyle?.text_font || "").match(
+                /_(\d+)$/
+            );
+            const fontSize = fontMatch ? Math.min(40, Number(fontMatch[1])) : 14;
+            const bgOpacity = Number(sampleStyle?.bg_opa);
+            const fallbackButtonStyle: React.CSSProperties = {
+                width: sampleType === "LVGLButtonWidget" ? 160 : "auto",
+                minHeight: sampleType === "LVGLButtonWidget" ? 56 : 40,
+                padding: sampleType === "LVGLButtonWidget" ? "8px 18px" : 6,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: Number(sampleStyle?.radius) || 4,
+                backgroundColor:
+                    sampleType === "LVGLButtonWidget"
+                        ? String(sampleStyle?.bg_color || "#637483")
+                        : "transparent",
+                opacity:
+                    sampleType === "LVGLButtonWidget" &&
+                    Number.isFinite(bgOpacity)
+                        ? Math.max(0, Math.min(1, bgOpacity / 255))
+                        : 1,
+                color: String(sampleStyle?.text_color || "#303030"),
+                fontSize,
+                fontFamily: "Arial, sans-serif",
+                fontWeight: 500,
+                boxSizing: "border-box",
+                whiteSpace: "nowrap"
+            };
+
             this.context.project.settings.general.lvglVersion;
 
             return (
                 <div
+                    className="EezStudio_LVGLStylePreview"
                     style={{
                         width: "100%",
                         height: "100%",
+                        boxSizing: "border-box",
                         padding: 10,
                         display: "flex",
+                        minHeight: 0,
+                        flexDirection: "column",
                         alignItems: "center",
-                        justifyContent: "center"
+                        overflow: "auto"
                     }}
                 >
-                    <canvas
-                        ref={this.canvasRef}
-                        width={this.runtime.displayWidth}
-                        height={this.runtime.displayHeight}
-                        style={{
-                            maxWidth: "100%",
-                            maxHeight: "100%"
-                        }}
-                    ></canvas>
+                    {selectedStyle ? (
+                        <>
+                            <div style={{
+                                alignSelf: "stretch",
+                                fontSize: 12,
+                                marginBottom: 6,
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden"
+                            }}>
+                                Style Sample: {selectedStyle.name} ({selectedStyle.forWidgetType.replace(/^LVGL/, "").replace(/Widget$/, "")})
+                            </div>
+                            {supported ? (
+                                <div style={{
+                                    flex: "0 0 auto",
+                                    minHeight: runtime.displayHeight,
+                                    width: "100%",
+                                    display: "flex",
+                                    justifyContent: "center",
+                                    alignItems: "center",
+                                    position: "relative"
+                                }}>
+                                    <canvas
+                                        ref={this.canvasRef}
+                                        width={runtime.displayWidth}
+                                        height={runtime.displayHeight}
+                                        aria-label={"LVGL preview of " + selectedStyle.name}
+                                        style={{
+                                            display: "block",
+                                            width: runtime.displayWidth,
+                                            height: runtime.displayHeight,
+                                            maxWidth: "100%",
+                                            flex: "0 0 auto",
+                                            border: "1px solid rgba(127, 127, 127, 0.35)",
+                                            boxSizing: "border-box",
+                                            visibility: runtime.previewFrameReady
+                                                ? "visible"
+                                                : "hidden"
+                                        }}
+                                    />
+                                    {!runtime.previewFrameReady && (
+                                        <div
+                                            role="img"
+                                            aria-label="Approximate style sample while LVGL loads"
+                                            style={{
+                                                position: "absolute",
+                                                width: runtime.displayWidth,
+                                                height: runtime.displayHeight,
+                                                maxWidth: "100%",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                border: "1px solid rgba(127, 127, 127, 0.35)",
+                                                backgroundColor: "#f5f5f5",
+                                                boxSizing: "border-box"
+                                            }}
+                                        >
+                                            <div style={fallbackButtonStyle}>
+                                                {sampleType === "LVGLButtonWidget"
+                                                    ? "Button"
+                                                    : sampleType === "LVGLLabelWidget"
+                                                      ? "Aa Sample"
+                                                      : "Sample"}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                                    Preview is unavailable for this widget type:
+                                    {" "}{selectedStyle.forWidgetType}
+                                </div>
+                            )}
+                            {!runtime.previewError && (
+                                <div
+                                    style={{
+                                        alignSelf: "stretch",
+                                        marginTop: 6,
+                                        fontSize: 11,
+                                        opacity: 0.65
+                                    }}
+                                >
+                                    {runtime.previewFrameReady
+                                        ? "Ready"
+                                        : runtime.previewObjectReady
+                                          ? "Rendering..."
+                                          : "Approximate preview - " +
+                                            runtime.previewStage}
+                                </div>
+                            )}
+                            {runtime.previewError && (
+                                <div
+                                    role="alert"
+                                    title={runtime.previewError}
+                                    style={{
+                                        fontSize: 11,
+                                        color: "#c43d38",
+                                        alignSelf: "stretch",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap"
+                                    }}
+                                >
+                                    Style sample failed: {runtime.previewError}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div style={{ fontSize: 12, opacity: 0.7 }}>
+                            Select a style to preview it.
+                        </div>
+                    )}
                 </div>
             );
         }

@@ -36,6 +36,8 @@ import { Icon } from "eez-studio-ui/icon";
 
 import { openProject } from "home/tabs-store";
 import { settingsController } from "home/settings";
+import { productConfig } from "eez-studio-shared/product-config";
+import { resolveProjectTemplateFile } from "eez-studio-shared/project-templates";
 
 import {
     DASHBOARD_PROJECT_ICON,
@@ -129,43 +131,36 @@ interface IProjectType {
     authorLink?: string;
 }
 
-// Base URL for eez-project-templates on GitHub
-const EEZ_PROJECT_TEMPLATES_BASE_URL =
-    "https://raw.githubusercontent.com/eez-open/eez-project-templates/master/";
-
-// Helper function to convert GitHub URL to local path if local templates are enabled
+// Built-in templates ship with DigiStudio and work without Git/network.
+// Users can override them explicitly in Settings > Project Templates.
 function getTemplatePathOrUrl(relativePath: string): string {
-    if (
-        settingsController.useLocalTemplates &&
-        settingsController.localTemplatesPath
-    ) {
-        // Convert to local path
-        return path.join(settingsController.localTemplatesPath, relativePath);
-    }
-    // Use GitHub URL
-    return EEZ_PROJECT_TEMPLATES_BASE_URL + relativePath;
+    return resolveProjectTemplateFile(
+        relativePath,
+        settingsController.useLocalTemplates
+            ? settingsController.localTemplatesPath
+            : undefined
+    );
 }
 
-// Helper function to load template file (either from local path or URL)
 async function loadTemplateFile(
     pathOrUrl: string,
     resultType: "json" | "buffer"
 ): Promise<any> {
-    if (
-        settingsController.useLocalTemplates &&
-        settingsController.localTemplatesPath &&
-        !pathOrUrl.startsWith("http://") &&
-        !pathOrUrl.startsWith("https://")
-    ) {
-        // Load from local file system
-        if (resultType === "json") {
-            return readJsObjectFromFile(pathOrUrl);
-        } else {
-            return fs.promises.readFile(pathOrUrl);
-        }
+    // Explicitly selected online Examples may still provide a URL.
+    // The standard New Project templates never use this path.
+    if (/^https?:\/\//.test(pathOrUrl)) {
+        return fetchUrlOrReadFromCache(pathOrUrl, resultType);
     }
-    // Load from URL
-    return fetchUrlOrReadFromCache(pathOrUrl, resultType);
+    if (!fs.existsSync(pathOrUrl)) {
+        throw new Error(
+            "Local project template not found: " + pathOrUrl +
+            ". Reinstall DigiStudio or choose a valid templates folder in Settings."
+        );
+    }
+    if (resultType === "json") {
+        return readJsObjectFromFile(pathOrUrl);
+    }
+    return fs.promises.readFile(pathOrUrl);
 }
 
 const SAVED_OPTIONS_VERSION = 12;
@@ -229,7 +224,7 @@ export class WizardModel {
 
     createDirectory: boolean = true;
 
-    bb3ProjectOption: "download" | "local" = "download";
+    bb3ProjectOption: "bundled" | "local" = "bundled";
     bb3ProjectFileDownloadError: string | undefined;
     bb3ProjectFile: string | undefined;
     bb3ProjectFileError: string | undefined;
@@ -255,7 +250,7 @@ export class WizardModel {
     lastOptions: {
         location: string | undefined;
         createDirectory: boolean;
-        bb3ProjectOption: "download" | "local";
+        bb3ProjectOption: "bundled" | "local";
         bb3ProjectFile: string | undefined;
         projectVersion: string;
         gitClone: boolean;
@@ -311,7 +306,10 @@ export class WizardModel {
 
         this.loadOptions();
 
-        if (this.section == "examples") {
+        if (
+            this.section == "examples" &&
+            productConfig.examplesCatalog.enabled
+        ) {
             examplesCatalog.onNewCatalog = () => {
                 if (this.exampleProjectTypes.get("_newExamples")!.length > 0) {
                     runInAction(() => {
@@ -331,13 +329,23 @@ export class WizardModel {
             try {
                 const options = JSON.parse(optionsJSON);
                 if (options.version == SAVED_OPTIONS_VERSION) {
-                    this.section = options.section;
-                    this.folder = options.folder;
-                    this.type = options.type;
+                    const examplesDisabled =
+                        options.section == "examples" &&
+                        !productConfig.examplesCatalog.enabled;
 
-                    this.location = options.location;
+                    this.section = examplesDisabled
+                        ? "templates"
+                        : options.section;
+                    this.folder = examplesDisabled
+                        ? "_allTemplates"
+                        : options.folder;
+                    this.type = examplesDisabled ? "dashboard" : options.type;
+
+                    this.location = examplesDisabled
+                        ? getHomePath("eez-projects")
+                        : options.location;
                     this.createDirectory = options.createDirectory;
-                    this.bb3ProjectOption = options.bb3ProjectOption;
+                    this.bb3ProjectOption = options.bb3ProjectOption == "local" ? "local" : "bundled";
                     this.bb3ProjectFile = options.bb3ProjectFile;
                     this.projectVersion = options.projectVersion;
                     this.gitClone = options.gitClone;
@@ -424,8 +432,12 @@ export class WizardModel {
     }
 
     async fetchTemplateProjects() {
+        if (!productConfig.projectTemplates.onlineCatalog.enabled) {
+            return;
+        }
+
         const result = await fetch(
-            "https://envox.eu/gitea/api/v1/repos/search?q=eez-flow-template&topic=true"
+            productConfig.projectTemplates.onlineCatalog.searchUrl
         );
         const data = await result.json();
         const templateProjects = data.data.map(
@@ -506,11 +518,17 @@ export class WizardModel {
             this.searchText = "";
         });
 
-        if (this.section == "templates") {
+        if (
+            this.section == "templates" &&
+            productConfig.projectTemplates.onlineCatalog.enabled
+        ) {
             this.fetchTemplateProjects();
         }
 
-        if (this.section == "examples") {
+        if (
+            this.section == "examples" &&
+            productConfig.examplesCatalog.enabled
+        ) {
             examplesCatalog.load();
         }
 
@@ -549,6 +567,10 @@ export class WizardModel {
 
         const _newExamples: IProjectType[] = [];
         map.set("_newExamples", _newExamples);
+
+        if (!productConfig.examplesCatalog.enabled) {
+            return map;
+        }
 
         const packageJSON: {
             version: string;
@@ -959,7 +981,10 @@ export class WizardModel {
                     id: "_templates",
                     label: (
                         <Count
-                            label="From envox.eu/gitea"
+                            label={
+                                productConfig.projectTemplates.onlineCatalog
+                                    .displayName
+                            }
                             count={this.templateProjectTypes.length}
                             attention={false}
                         ></Count>
@@ -1213,7 +1238,7 @@ export class WizardModel {
     validateBB3ProjectFile() {
         this.bb3ProjectFileDownloadError = undefined;
 
-        if (this.bb3ProjectOption == "download") {
+        if (this.bb3ProjectOption == "bundled") {
             this.bb3ProjectFileError = undefined;
             return true;
         }
@@ -1233,45 +1258,24 @@ export class WizardModel {
         return true;
     }
 
-    downloadBB3ProjectFile() {
-        return new Promise<void>((resolve, reject) => {
-            const bb3ProjectFileUrl =
-                this.projectVersion == "v3"
-                    ? "https://raw.githubusercontent.com/eez-open/modular-psu-firmware/master/modular-psu-firmware.eez-project"
-                    : "https://raw.githubusercontent.com/eez-open/modular-psu-firmware/1.7.3/modular-psu-firmware.eez-project";
-
-            let req = new XMLHttpRequest();
-            req.responseType = "json";
-            req.open("GET", bb3ProjectFileUrl);
-
-            req.addEventListener("load", async () => {
-                if (req.readyState == 4) {
-                    if (req.status != 200 || !req.response) {
-                        reject("Download failed!");
-                        return;
-                    }
-                    try {
-                        await fs.promises.writeFile(
-                            this.projectFolderPath +
-                                path.sep +
-                                "modular-psu-firmware.eez-project",
-                            JSON.stringify(req.response, undefined, 2),
-                            "utf8"
-                        );
-
-                        resolve();
-                    } catch (err) {
-                        reject(err);
-                    }
-                }
-            });
-
-            req.addEventListener("error", error => {
-                reject("Network error");
-            });
-
-            req.send();
-        });
+    async copyBundledBB3ProjectFile() {
+        const version = this.projectVersion == "v3" ? "v3" : "v2";
+        const source = resolveProjectTemplateFile(
+            "templates/firmware-dependencies/" +
+                version +
+                "/modular-psu-firmware.eez-project"
+        );
+        if (!fs.existsSync(source)) {
+            throw new Error(
+                "Bundled BB3 firmware template is missing: " +
+                    source +
+                    ". Reinstall DigiStudio."
+            );
+        }
+        await fs.promises.copyFile(
+            source,
+            path.join(this.projectFolderPath!, "modular-psu-firmware.eez-project")
+        );
     }
 
     createProject = async (
@@ -1628,9 +1632,9 @@ export class WizardModel {
 
                     if (this.type == "applet" || this.type == "resource") {
                         // set masterProject
-                        if (this.bb3ProjectOption == "download") {
+                        if (this.bb3ProjectOption == "bundled") {
                             try {
-                                await this.downloadBB3ProjectFile();
+                                await this.copyBundledBB3ProjectFile();
                             } catch (err: any) {
                                 runInAction(() => {
                                     this.bb3ProjectFileDownloadError =
@@ -1818,6 +1822,7 @@ export class WizardModel {
         );
 
         if (
+            productConfig.examplesCatalog.enabled &&
             this.section == "templates" &&
             this.templateProjectTypes.length == 0 &&
             this.exampleProjectTypes.get("_allExamples")!.length > 0
@@ -1825,10 +1830,17 @@ export class WizardModel {
             this.section = "examples";
         } else if (
             this.section == "examples" &&
+            productConfig.examplesCatalog.enabled &&
             this.exampleProjectTypes.get("_allExamples")!.length == 0 &&
             this.templateProjectTypes.length > 0
         ) {
             this.section = "templates";
+        } else if (
+            this.section == "examples" &&
+            !productConfig.examplesCatalog.enabled
+        ) {
+            this.section = "templates";
+            this.folder = "_allTemplates";
         }
     }
 
@@ -1842,6 +1854,7 @@ export class WizardModel {
     get isSelectedExampleWithGitRepository() {
         return (
             this.section == "examples" &&
+            productConfig.examplesCatalog.enabled &&
             this.selectedProjectType &&
             this.isGitProject(this.selectedProjectType)
         );
@@ -2465,34 +2478,34 @@ const ProjectProperties = observer(
 
                                             <div className="form-check ms-4">
                                                 <input
-                                                    id="new-project-wizard-bb3-project-download"
+                                                    id="new-project-wizard-bb3-project-bundled"
                                                     className="form-check-input"
                                                     type="radio"
                                                     name="new-project-wizard-bb3-project"
-                                                    value={"download"}
+                                                    value={"bundled"}
                                                     checked={
                                                         wizardModel.bb3ProjectOption ==
-                                                        "download"
+                                                        "bundled"
                                                     }
                                                     onChange={action(
                                                         event =>
                                                             (wizardModel.bb3ProjectOption =
                                                                 event.target
                                                                     .checked
-                                                                    ? "download"
+                                                                    ? "bundled"
                                                                     : "local")
                                                     )}
                                                 />
 
                                                 <label
                                                     className="form-check-label"
-                                                    htmlFor="new-project-wizard-bb3-project-download"
+                                                    htmlFor="new-project-wizard-bb3-project-bundled"
                                                 >
-                                                    Download from GitHub
+                                                    Use included BB3 firmware project
                                                 </label>
 
                                                 {wizardModel.bb3ProjectOption ==
-                                                    "download" &&
+                                                    "bundled" &&
                                                     wizardModel.bb3ProjectFileDownloadError && (
                                                         <div className="form-text text-danger">
                                                             {
@@ -2519,7 +2532,7 @@ const ProjectProperties = observer(
                                                                 event.target
                                                                     .checked
                                                                     ? "local"
-                                                                    : "download")
+                                                                    : "bundled")
                                                     )}
                                                 />
 

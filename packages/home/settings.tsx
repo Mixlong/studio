@@ -36,6 +36,7 @@ import {
     setTimeFormat
 } from "eez-studio-shared/i10n";
 import { formatBytes } from "eez-studio-shared/formatBytes";
+import { productConfig } from "eez-studio-shared/product-config";
 
 import { showDialog, Dialog } from "eez-studio-ui/dialog";
 import { Loader } from "eez-studio-ui/loader";
@@ -936,9 +937,6 @@ class AbsoluteDirectoryInputProperty extends React.Component<
     }
 }
 
-const EEZ_PROJECT_TEMPLATES_REPO_URL =
-    "https://github.com/eez-open/eez-project-templates";
-
 const TemplateSettings = observer(
     class TemplateSettings extends React.Component {
         render() {
@@ -948,7 +946,7 @@ const TemplateSettings = observer(
                     <td>
                         <PropertyList>
                             <BooleanProperty
-                                name={`Use local templates folder`}
+                                name={`Use custom templates folder`}
                                 value={settingsController.useLocalTemplates}
                                 onChange={action(
                                     value =>
@@ -960,7 +958,7 @@ const TemplateSettings = observer(
                             {settingsController.useLocalTemplates && (
                                 <>
                                     <AbsoluteDirectoryInputProperty
-                                        name="Local templates path"
+                                        name="Custom templates path"
                                         value={
                                             settingsController.localTemplatesPath
                                         }
@@ -969,22 +967,31 @@ const TemplateSettings = observer(
                                                 value;
                                         })}
                                     />
-                                    <tr>
-                                        <td>Repository</td>
-                                        <td>
-                                            <a
-                                                href="#"
-                                                onClick={e => {
-                                                    e.preventDefault();
-                                                    shell.openExternal(
-                                                        EEZ_PROJECT_TEMPLATES_REPO_URL
-                                                    );
-                                                }}
-                                            >
-                                                {EEZ_PROJECT_TEMPLATES_REPO_URL}
-                                            </a>
-                                        </td>
-                                    </tr>
+                                    {productConfig.projectTemplates
+                                        .repositoryUrl && (
+                                        <tr>
+                                            <td>Repository</td>
+                                            <td>
+                                                <a
+                                                    href="#"
+                                                    onClick={e => {
+                                                        e.preventDefault();
+                                                        shell.openExternal(
+                                                            productConfig
+                                                                .projectTemplates
+                                                                .repositoryUrl!
+                                                        );
+                                                    }}
+                                                >
+                                                    {
+                                                        productConfig
+                                                            .projectTemplates
+                                                            .repositoryUrl
+                                                    }
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    )}
                                 </>
                             )}
                         </PropertyList>

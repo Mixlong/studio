@@ -1,0 +1,169 @@
+name: DigiStudio Dev Release
+
+on:
+    push:
+        branches:
+            - codex/integrate-upstream
+            - dev
+    workflow_dispatch:
+        inputs:
+            release_version:
+                description: "可选版本号，例如 0.0.14-dev.10；留空则使用流水线编号"
+                required: false
+                type: string
+
+permissions:
+    contents: read
+
+concurrency:
+    group: digistudio-dev-release
+    cancel-in-progress: false
+
+env:
+    EEZ_UPDATE_ROOT: https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStudio
+
+jobs:
+    prepare:
+        name: Prepare release version
+        runs-on: ubuntu-22.04
+        outputs:
+            version: ${{ steps.version.outputs.value }}
+        steps:
+            - name: Resolve release version
+              id: version
+              env:
+                  REQUESTED_VERSION: ${{ inputs.release_version }}
+              run: |
+                  if [ -n "$REQUESTED_VERSION" ]; then
+                    version="$REQUESTED_VERSION"
+                  else
+                    version="0.0.14-dev.${GITHUB_RUN_NUMBER}"
+                  fi
+
+                  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-dev\.[0-9]+$ ]]; then
+                    echo "Invalid development release version: $version" >&2
+                    exit 1
+                  fi
+
+                  echo "value=$version" >> "$GITHUB_OUTPUT"
+                  echo "Building $version"
+
+    build:
+        name: Build ${{ matrix.platform }}
+        needs: prepare
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - platform: macOS
+                      runner: macos-15
+                      script: release:dev:mac
+                      artifact: release-macos
+                    - platform: Windows x64
+                      runner: windows-2022
+                      script: release:dev:win
+                      artifact: release-windows-x64
+        runs-on: ${{ matrix.runner }}
+        env:
+            RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        steps:
+            - name: Check out Git repository
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build release package
+              run: npm run ${{ matrix.script }}
+
+            - name: Verify staged release files
+              shell: bash
+              run: |
+                  test -d release-oss/DigiwiseStudio
+                  find release-oss/DigiwiseStudio -type f -maxdepth 3 -print
+
+            - name: Upload staged release
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.artifact }}
+                  path: release-oss/DigiwiseStudio
+                  if-no-files-found: error
+                  retention-days: 7
+
+    upload:
+        name: Upload release to OSS
+        needs:
+            - prepare
+            - build
+        runs-on: ubuntu-22.04
+        env:
+            OSS_ENDPOINT: oss-cn-shenzhen.aliyuncs.com
+            OSS_BUCKET: bikewise
+            OSS_PREFIX: d-space/DigiwiseStudio/dev
+            OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+            OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+        steps:
+            - name: Download staged releases
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: release-*
+                  path: release-oss/DigiwiseStudio
+                  merge-multiple: true
+
+            - name: Verify OSS credentials and release files
+              shell: bash
+              run: |
+                  test -n "$OSS_ACCESS_KEY_ID" || { echo "Missing OSS_ACCESS_KEY_ID secret" >&2; exit 1; }
+                  test -n "$OSS_ACCESS_KEY_SECRET" || { echo "Missing OSS_ACCESS_KEY_SECRET secret" >&2; exit 1; }
+                  test -f release-oss/DigiwiseStudio/dist-mac/latest-mac.yml
+                  test -f release-oss/DigiwiseStudio/dist-win-x64/latest.yml
+                  find release-oss/DigiwiseStudio -type f -maxdepth 3 -print
+
+            - name: Install ossutil
+              shell: bash
+              run: |
+                  version=2.4.0
+                  archive="ossutil-${version}-linux-amd64.zip"
+                  curl --fail --location --silent --show-error \
+                    "https://gosspublic.alicdn.com/ossutil/v2/${version}/${archive}" \
+                    --output "$RUNNER_TEMP/$archive"
+                  unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/ossutil"
+                  chmod 755 "$RUNNER_TEMP/ossutil/ossutil-${version}-linux-amd64/ossutil"
+                  echo "$RUNNER_TEMP/ossutil/ossutil-${version}-linux-amd64" >> "$GITHUB_PATH"
+
+            - name: Configure ossutil
+              shell: bash
+              run: |
+                  cat > "$RUNNER_TEMP/ossutilconfig" <<EOF
+                  [Credentials]
+                  endpoint = $OSS_ENDPOINT
+                  region = cn-shenzhen
+                  accessKeyID = $OSS_ACCESS_KEY_ID
+                  accessKeySecret = $OSS_ACCESS_KEY_SECRET
+                  mode = AK
+                  EOF
+
+            - name: Upload macOS artifacts
+              shell: bash
+              run: |
+                  ossutil -c "$RUNNER_TEMP/ossutilconfig" cp -rf \
+                    release-oss/DigiwiseStudio/dist-mac/ \
+                    "oss://$OSS_BUCKET/$OSS_PREFIX/dist-mac/"
+
+            - name: Upload Windows artifacts
+              shell: bash
+              run: |
+                  ossutil -c "$RUNNER_TEMP/ossutilconfig" cp -rf \
+                    release-oss/DigiwiseStudio/dist-win-x64/ \
+                    "oss://$OSS_BUCKET/$OSS_PREFIX/dist-win-x64/"
+
+            - name: Remove temporary OSS credentials
+              if: always()
+              shell: bash
+              run: rm -f "$RUNNER_TEMP/ossutilconfig"

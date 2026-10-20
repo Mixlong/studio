@@ -181,6 +181,23 @@ export function getObjectIdFromPoint(
                             continue;
                         }
 
+                        // LVGL containers nest their widgets in the DOM. The
+                        // first hit is the frontmost/innermost widget, so a
+                        // selected parent must not override that child hit.
+                        // This also lets the user select a child immediately
+                        // after selecting its parent container.
+                        if (
+                            viewState.projectStore.projectTypeTraits.isLVGL &&
+                            object.object instanceof
+                                ProjectEditor.LVGLWidgetClass &&
+                            flowDocument.findObjectById(result.id)?.object instanceof
+                                ProjectEditor.LVGLWidgetClass &&
+                            !result.connectionInput &&
+                            !result.connectionOutput
+                        ) {
+                            continue;
+                        }
+
                         if (
                             !object.selected ||
                             (result.connectionOutput && !connectionOutput) ||
@@ -200,7 +217,104 @@ export function getObjectIdFromPoint(
         }
     }
 
+    // LVGL draws its widgets on a single Canvas. Transparent DOM enclosures
+    // can be hidden behind the Canvas or a selected parent, so elementsFromPoint
+    // sometimes returns only a Container/Screen even when a child is visible.
+    // In Edit mode only, refine that parent hit using the actual widget rects.
+    // Do not override connector hits or change Run/device pointer handling.
+    if (
+        viewState.projectStore.projectTypeTraits.isLVGL &&
+        !viewState.projectStore.runtime &&
+        !result?.connectionInput &&
+        !result?.connectionOutput
+    ) {
+        const hitAdapter = result
+            ? flowDocument.findObjectById(result.id)
+            : undefined;
+        const rootWidget =
+            hitAdapter?.object instanceof ProjectEditor.LVGLWidgetClass
+                ? (hitAdapter.object as LVGLWidget)
+                : !result && flowDocument.flow?.object
+                  ? ProjectEditor.getPage(flowDocument.flow.object)
+                        ?.lvglScreenWidget
+                  : undefined;
+
+        if (rootWidget?.children?.length) {
+            const child = getDeepestLVGLWidgetAtPoint(
+                flowDocument,
+                viewState,
+                rootWidget,
+                point
+            );
+            if (child) {
+                return {
+                    id: child.id,
+                    connectionInput: undefined,
+                    connectionOutput: undefined
+                };
+            }
+        }
+    }
+
     return result;
+}
+
+// Walk paint order from front to back and return the deepest visible child.
+// Geometry is already expressed in page coordinates by the widget adapter,
+// including nested Containers, LVGL layouts and scrolling.
+function getDeepestLVGLWidgetAtPoint(
+    flowDocument: IDocument,
+    viewState: IViewState,
+    parent: LVGLWidget,
+    point: Point
+): TreeObjectAdapter | undefined {
+    for (let index = parent.children.length - 1; index >= 0; index--) {
+        const child = parent.children[index];
+        if (
+            !(child instanceof ProjectEditor.LVGLWidgetClass) ||
+            child.hiddenInEditor
+        ) {
+            continue;
+        }
+
+        const nested = getDeepestLVGLWidgetAtPoint(
+            flowDocument,
+            viewState,
+            child,
+            point
+        );
+        if (nested) {
+            return nested;
+        }
+
+        const adapter = flowDocument.findObjectById(getId(child));
+        if (!adapter || adapter.isSelectable === false) {
+            continue;
+        }
+
+        if (
+            isLVGLWidgetOutsideOfItsPageBounds(
+                adapter,
+                flowDocument,
+                viewState
+            )
+        ) {
+            continue;
+        }
+
+        const rect = getObjectBoundingRect(viewState, adapter);
+        if (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            point.x >= rect.left &&
+            point.y >= rect.top &&
+            point.x < rect.left + rect.width &&
+            point.y < rect.top + rect.height
+        ) {
+            return adapter;
+        }
+    }
+    return undefined;
 }
 
 export function getObjectIdsInsideRect(viewState: IViewState, rect: Rect) {
@@ -233,6 +347,18 @@ export function isLVGLWidgetOutsideOfItsPageBounds(object: TreeObjectAdapter, fl
     const lvglWidget = object.object as LVGLWidget;
     const page = ProjectEditor.getPage(lvglWidget);
     if (page) {
+        // The original display bounds do not clip selection when the edit
+        // preview itself has been expanded. Run/device views remain unchanged.
+        const editor = viewState.projectStore.editorsStore.getEditorByObject(
+            page
+        );
+        if (
+            !viewState.projectStore.runtime &&
+            (editor?.state as { lvglEditorViewMode?: string } | undefined)
+                ?.lvglEditorViewMode === "expanded"
+        ) {
+            return false;
+        }
         const pageObject = flowDocument.findObjectById(getId(page));
         if (pageObject) {
             const rectPage = getObjectBoundingRect(viewState, pageObject);

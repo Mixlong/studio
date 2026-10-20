@@ -17,12 +17,18 @@ const {
 const messages = [
     { command: "test", msg: "just for testing" },
     { command: "log", data: "OpenOCD is starting" },
+    {
+        command: "cmake",
+        output_dir: "./",
+        config_file: "./config_MH2457.py"
+    },
     { command: "build", src: "./", dst: "./build" },
     {
         command: "download",
-        interface: "cmsis-dap.cfg",
-        target: "stm32f4x.cfg",
-        speed: "5000",
+        target: "stm32f407ve",
+        pack: "null",
+        script: "null",
+        frequency: "500000",
         firmware: "Project.bin",
         addr: "0x08000000"
     },
@@ -38,8 +44,31 @@ for (const message of messages) {
 }
 
 assert(
-    validateEmbeddedMessage({ command: "download", speed: "5000" }).length > 0,
+    validateEmbeddedMessage({ command: "download", target: "stm32f407ve" }).length > 0,
     "incomplete download messages must be rejected"
+);
+assert(
+    validateEmbeddedMessage({ command: "cmake", output_dir: "./" }).length > 0,
+    "incomplete cmake messages must be rejected"
+);
+assert(
+    validateEmbeddedMessage({
+        command: "download",
+        interface: "cmsis-dap.cfg",
+        target: "stm32f4x.cfg",
+        speed: "5000",
+        firmware: "Project.bin",
+        addr: "0x08000000"
+    }).length > 0,
+    "legacy download messages must be rejected"
+);
+assert(
+    validateEmbeddedMessage({
+        command: "transform",
+        type: "picture",
+        model: "non-xip"
+    }).length > 0,
+    "legacy transform models must be rejected"
 );
 assert.throws(
     () => serializeEmbeddedMessage({ command: "build", src: "", dst: "./build" }),

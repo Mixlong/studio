@@ -21,6 +21,7 @@ import { loadTabs, ProjectEditorTab, tabs } from "home/tabs-store";
 import { settingsController } from "home/settings";
 import { App } from "home/app";
 import { openProject } from "home/tabs-store";
+import { productConfig } from "eez-studio-shared/product-config";
 
 import { LineMarkers } from "project-editor/flow/connection-line/ConnectionLineComponent";
 
@@ -42,7 +43,9 @@ function blurAll() {
 async function beforeAppClose() {
     blurAll();
 
-    for (const tab of tabs.tabs) {
+    // Reload/close may arrive before loadTabs() finishes initialization.
+    // In that case there are no project tabs to ask for close approval.
+    for (const tab of tabs?.tabs ?? []) {
         if (tab.beforeAppClose) {
             if (!(await tab.beforeAppClose())) {
                 return false;
@@ -173,7 +176,9 @@ async function main() {
 
     await loadExtensions(nodeModuleFolders);
 
-    extensionsCatalog.load();
+    if (productConfig.extensionsCatalog.enabled) {
+        extensionsCatalog.load();
+    }
 
     if (!buildProject) {
         loadTabs();

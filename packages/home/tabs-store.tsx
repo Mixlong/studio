@@ -523,7 +523,9 @@ export class ProjectEditorTab implements IHomeTab {
         }
 
         const projectStore = this.projectStore;
-        if (!projectStore) {
+        // Loading is asynchronous: the user may have switched tabs before it
+        // completes. Never attach shortcuts or publish menu state for that tab.
+        if (!projectStore || !this._active) {
             return;
         }
 

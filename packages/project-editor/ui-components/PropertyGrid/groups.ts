@@ -73,6 +73,76 @@ export interface IGroupProperties {
     properties: PropertyInfo[];
 }
 
+// Only LVGL widgets use this simplified layout. The full PropertyInfo list
+// stays intact and is rendered by the original editors in either group.
+export const lvglWidgetBasicGroup: IPropertyGridGroupDefinition = {
+    id: "lvgl-widget-basic",
+    title: "Common Properties",
+    position: 0
+};
+
+export const lvglWidgetAdvancedGroup: IPropertyGridGroupDefinition = {
+    id: "lvgl-widget-advanced",
+    title: "Advanced Settings",
+    position: 1
+};
+
+const LVGL_COMMON_PROPERTY_NAMES = new Set([
+    "identifier",
+    "geometryProperties",
+    "left",
+    "top",
+    "width",
+    "height",
+    "leftUnit",
+    "topUnit",
+    "widthUnit",
+    "heightUnit",
+    "text",
+    "textType",
+    "image",
+    "value",
+    "valueType",
+    "previewValue",
+    "useStyle",
+    "localStyles",
+    "hiddenFlag",
+    "hiddenFlagType",
+    "clickableFlag",
+    "clickableFlagType"
+]);
+
+export function groupLVGLWidgetProperties(
+    groups: IGroupProperties[]
+): IGroupProperties[] {
+    const common: PropertyInfo[] = [];
+    const advanced: PropertyInfo[] = [];
+
+    for (const group of groups) {
+        // The leading widget-specific fields are typically its main value,
+        // e.g. Label.text, Image.image, or Slider.mode. Keep them accessible.
+        const primarySpecific = group.group.id === "specific"
+            ? new Set(group.properties.slice(0, 2).map(prop => prop.name))
+            : undefined;
+
+        for (const property of group.properties) {
+            const destination =
+                LVGL_COMMON_PROPERTY_NAMES.has(property.name) ||
+                primarySpecific?.has(property.name)
+                    ? common
+                    : advanced;
+            destination.push(property);
+        }
+    }
+
+    return [
+        { group: lvglWidgetBasicGroup, properties: common },
+        ...(advanced.length
+            ? [{ group: lvglWidgetAdvancedGroup, properties: advanced }]
+            : [])
+    ];
+}
+
 export function getPropertyGroups(
     object: IEezObject,
     properties: PropertyInfo[]
@@ -154,6 +224,10 @@ export function getPropertyGroups(
 
         return aPosition - bPosition;
     });
+
+    if (object instanceof ProjectEditor.LVGLWidgetClass) {
+        return groupLVGLWidgetProperties(groupPropertiesArray);
+    }
 
     return groupPropertiesArray;
 }

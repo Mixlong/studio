@@ -38,12 +38,20 @@ export type AudioPlacement = "automatic" | "manual";
 export type AudioSourceFormat = "wav" | "mp3";
 export type AudioSampleFormat = "source" | "s8" | "u8" | "s16" | "u16";
 
-const AUDIO_FILE_FILTERS = [
-    { name: "Audio files", extensions: ["wav", "mp3"] },
+// Native file dialogs must not offer a catch-all filter. The import path
+// below validates extensions again because filters are only a UI hint.
+export const AUDIO_FILE_FILTERS = [
+    { name: "Audio files (WAV, MP3)", extensions: ["wav", "mp3"] },
     { name: "WAV audio files", extensions: ["wav"] },
-    { name: "MP3 audio files", extensions: ["mp3"] },
-    { name: "All Files", extensions: ["*"] }
+    { name: "MP3 audio files", extensions: ["mp3"] }
 ];
+
+export function getAudioSourceFormat(filePath: string): AudioSourceFormat | undefined {
+    const extension = path.extname(filePath).toLowerCase();
+    if (extension === ".wav") return "wav";
+    if (extension === ".mp3") return "mp3";
+    return undefined;
+}
 
 function isPowerOfTwo(value: number) {
     return value > 0 && (value & (value - 1)) === 0;
@@ -72,7 +80,8 @@ export class FlashLayout extends EezObject {
                     { id: "qspi-flash", label: "QSPI Flash" },
                     { id: "spi-flash", label: "SPI Flash" }
                 ],
-                defaultValue: "internal-flash"
+                defaultValue: "internal-flash",
+                hideInPropertyGrid: true // Rendered in Audio Settings (basic).
             },
             {
                 name: "baseAddress",
@@ -285,11 +294,7 @@ export class AudioResource extends EezObject {
                             getChildOfObject(audioResource, "filePath")
                         )
                     );
-                } else if (
-                    ![".wav", ".mp3"].includes(
-                        path.extname(absoluteFilePath).toLowerCase()
-                    )
-                ) {
+                } else if (!getAudioSourceFormat(absoluteFilePath)) {
                     messages.push(
                         new Message(
                             MessageType.ERROR,
@@ -393,7 +398,14 @@ export class AudioResource extends EezObject {
             });
 
             const selectedFilePath = result.values.filePath as string;
-            const sourceFormat = path.extname(selectedFilePath).toLowerCase();
+            const sourceFormat = getAudioSourceFormat(selectedFilePath);
+            if (!sourceFormat) {
+                await info(
+                    "Unsupported Audio File",
+                    "Only WAV (.wav) and MP3 (.mp3) audio files can be imported."
+                );
+                return undefined;
+            }
             const audioFolder = projectStore.getAbsoluteFilePath("audio");
             await fs.promises.mkdir(audioFolder, { recursive: true });
 
@@ -431,8 +443,8 @@ export class AudioResource extends EezObject {
                     name: result.values.name,
                     audioIndex,
                     filePath,
-                    format: sourceFormat === ".mp3" ? "mp3" : "wav",
-                    sampleFormat: sourceFormat === ".mp3" ? "s16" : "source",
+                    format: sourceFormat,
+                    sampleFormat: sourceFormat === "mp3" ? "s16" : "source",
                     placement: "automatic",
                     flashOffset: 0
                 },
@@ -499,7 +511,10 @@ export class Audio extends EezObject {
             {
                 name: "converterScript",
                 displayName: "MP3 converter script",
-                type: PropertyType.RelativeFile
+                type: PropertyType.RelativeFile,
+                fileFilters: [
+                    { name: "Python scripts", extensions: ["py"] }
+                ]
             },
             {
                 name: "converterArguments",
@@ -509,12 +524,14 @@ export class Audio extends EezObject {
             {
                 name: "targetSampleRate",
                 displayName: "MP3 sample rate (Hz)",
-                type: PropertyType.Number
+                type: PropertyType.Number,
+                hideInPropertyGrid: true // Rendered in Audio Settings (basic).
             },
             {
                 name: "targetChannels",
                 displayName: "MP3 channels",
-                type: PropertyType.Number
+                type: PropertyType.Number,
+                hideInPropertyGrid: true // Rendered in Audio Settings (basic).
             }
         ],
         defaultValue: {
@@ -609,6 +626,19 @@ export class Audio extends EezObject {
                 } else {
                     indexes.set(resource.audioIndex, resource);
                 }
+            }
+
+            if (
+                object.converterScript &&
+                path.extname(object.converterScript).toLowerCase() !== ".py"
+            ) {
+                messages.push(
+                    new Message(
+                        MessageType.ERROR,
+                        "MP3 converter script must be a Python (.py) file.",
+                        getChildOfObject(object, "converterScript")
+                    )
+                );
             }
 
             if (!Number.isInteger(object.targetSampleRate) || object.targetSampleRate <= 0) {

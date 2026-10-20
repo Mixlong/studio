@@ -61,6 +61,10 @@ import { Property } from "project-editor/ui-components/PropertyGrid/Property";
 import { LVGLStylesDefinition } from "project-editor/lvgl/style-definition";
 import { LVGLStylesDefinitionProperty } from "project-editor/lvgl/LVGLStylesDefinitionProperty";
 import { LVGLPageRuntime } from "project-editor/lvgl/page-runtime";
+import {
+    getLVGLEditorWidgetHeight,
+    resizeLVGLEditorObject
+} from "project-editor/lvgl/EditorPreview";
 import type { LVGLBuild } from "project-editor/lvgl/build";
 import {
     getCode,
@@ -86,7 +90,8 @@ import {
     LVGL_REACTIVE_FLAGS,
     LVGL_STATE_CODES,
     LVGL_STATE_CODES_V9_5_0,
-    LVGL_REACTIVE_STATES
+    LVGL_REACTIVE_STATES,
+    isLvglScreenLifecycleEvent
 } from "project-editor/lvgl/lvgl-constants";
 import { LVGLPropertyInfo } from "project-editor/lvgl/style-catalog";
 
@@ -1550,11 +1555,36 @@ export class LVGLWidget extends Widget {
         // children
         this.children.map((widget: LVGLWidget) => widget.lvglCreate(runtime, obj));
 
-        if (runtime.isEditor) {
-            runtime.wasm._lvglScrollTo(obj, this._xScroll, this._yScroll, false);
+        if (runtime.isExpandedEditorPreview) {
+            // Only alter the live WASM widget geometry in edit preview.
+            // The original widget model (and exported C code) is unchanged.
+            const neededHeight = getLVGLEditorWidgetHeight(this);
+            if (
+                this.children.length > 0 &&
+                neededHeight > runtime.wasm._lvglGetObjHeight(obj)
+            ) {
+                resizeLVGLEditorObject(
+                    runtime.wasm,
+                    obj,
+                    neededHeight
+                );
+            }
+        }
 
-            this._xScroll2 = runtime.wasm._lvglGetScrollX(obj);
-            this._yScroll2 = runtime.wasm._lvglGetScrollY(obj);
+        if (runtime.isEditor) {
+            // Full editing view starts at the top, not the saved run scroll
+            // offset, so every menu row is visible without scrolling.
+            runtime.wasm._lvglScrollTo(
+                obj,
+                runtime.isExpandedEditorPreview ? 0 : this._xScroll,
+                runtime.isExpandedEditorPreview ? 0 : this._yScroll,
+                false
+            );
+
+            if (!runtime.isExpandedEditorPreview) {
+                this._xScroll2 = runtime.wasm._lvglGetScrollX(obj);
+                this._yScroll2 = runtime.wasm._lvglGetScrollY(obj);
+            }
         }
 
         return obj;
@@ -1806,8 +1836,15 @@ export class LVGLWidget extends Widget {
 
             if (code.lvglBuild) {
                 if (!code.hasFlowSupport) {
+                    const screen = ProjectEditor.getPage(this).lvglScreenWidget;
+                    const listenerTarget =
+                        isLvglScreenLifecycleEvent(eventHandler.eventName) &&
+                        screen &&
+                        screen !== this
+                            ? code.lvglBuild.getLvglObjectAccessor(screen)
+                            : "obj";
                     code.lvglBuild.line(
-                        `lv_obj_add_event_cb(obj, ${
+                        `lv_obj_add_event_cb(${listenerTarget}, ${
                             eventHandler.eventName == "CHECKED"
                                 ? code.lvglBuild.getCheckedEventHandlerCallbackName(this)
                                 : eventHandler.eventName == "UNCHECKED"
@@ -1822,11 +1859,36 @@ export class LVGLWidget extends Widget {
         });
 
         if (code.lvglBuild && addEventAllCallback) {
-            code.lvglBuild.line(
-                `lv_obj_add_event_cb(obj, ${code.lvglBuild.getEventHandlerCallbackName(
-                    this
-                )}, LV_EVENT_ALL, ${code.hasFlowSupport ? "flowState" : "0"});`
+            const build = code.lvglBuild;
+            const callbackName = build.getEventHandlerCallbackName(this);
+            const userData = code.hasFlowSupport ? "flowState" : "0";
+            const screenEvents = this.eventHandlers.some(eventHandler =>
+                isLvglScreenLifecycleEvent(eventHandler.eventName)
             );
+            const widgetEvents =
+                this.checkedStateType == "expression" ||
+                this.eventHandlers.some(
+                    eventHandler =>
+                        !isLvglScreenLifecycleEvent(eventHandler.eventName)
+                ) ||
+                !!existingEventHandlers?.some(
+                    eventHandler =>
+                        !isLvglScreenLifecycleEvent(eventHandler.eventName)
+                );
+            const screen = ProjectEditor.getPage(this).lvglScreenWidget;
+
+            // Mixed callbacks need both receivers. Screen event handlers
+            // must not be bound only to their child Widget.
+            if (!screenEvents || widgetEvents || !screen || screen === this) {
+                build.line(
+                    `lv_obj_add_event_cb(obj, ${callbackName}, LV_EVENT_ALL, ${userData});`
+                );
+            }
+            if (screenEvents && screen && screen !== this) {
+                build.line(
+                    `lv_obj_add_event_cb(${build.getLvglObjectAccessor(screen)}, ${callbackName}, LV_EVENT_ALL, ${userData});`
+                );
+            }
         }
     }
 

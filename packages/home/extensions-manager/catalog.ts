@@ -10,12 +10,13 @@ import {
 import * as notification from "eez-studio-ui/notification";
 
 import { IExtension } from "eez-studio-shared/extensions/extension";
+import { productConfig } from "eez-studio-shared/product-config";
 
 export const DEFAULT_EXTENSIONS_CATALOG_VERSION_DOWNLOAD_URL =
-    "https://github.com/eez-open/studio-extensions/raw/master/build/catalog-version.json";
+    productConfig.extensionsCatalog.catalogVersionUrl;
 
 export const DEFAULT_EXTENSIONS_CATALOG_DOWNLOAD_URL =
-    "https://github.com/eez-open/studio-extensions/raw/master/build/catalog.zip";
+    productConfig.extensionsCatalog.catalogUrl;
 
 interface ICatalogVersion {
     lastModified: Date;
@@ -32,6 +33,10 @@ class ExtensionsCatalog {
     }
 
     load() {
+        if (!productConfig.extensionsCatalog.enabled) {
+            return;
+        }
+
         this._loadCatalog()
             .then(catalog => {
                 runInAction(() => (this.catalog = catalog));
@@ -88,6 +93,10 @@ class ExtensionsCatalog {
     }
 
     async checkNewVersionOfCatalog(forceDownload: boolean = false) {
+        if (!productConfig.extensionsCatalog.enabled) {
+            return false;
+        }
+
         try {
             const catalogVersion = await this.downloadCatalogVersion();
 

@@ -23,6 +23,7 @@ import {
 } from "project-editor/store";
 import type { WasmRuntime } from "project-editor/flow/runtime/wasm-runtime";
 import type {
+    LVGLLabelWidget,
     LVGLTabWidget,
     LVGLUserWidgetWidget,
     LVGLWidget
@@ -53,7 +54,8 @@ import {
     LVGLStylePropCode,
     LVGL_CONSTANTS_ALL,
     LVGL_CONSTANTS_ALL_95,
-    LVGL_STYLE_PROP_CODES
+    LVGL_STYLE_PROP_CODES,
+    isLvglScreenLifecycleEvent
 } from "project-editor/lvgl/lvgl-constants";
 import { getSelectorCode } from "project-editor/lvgl/style-helper";
 import {
@@ -71,7 +73,15 @@ import {
     getName
 } from "project-editor/build/helper";
 import { SimulatorLVGLCode } from "project-editor/lvgl/to-lvgl-code";
+import {
+    getLVGLEditorPreviewHeight,
+    resizeLVGLEditorObject
+} from "project-editor/lvgl/EditorPreview";
 import { ColorFormat } from "project-editor/features/style/color-format";
+import {
+    createNativeStyleSample,
+    type NativeStyleSampleWasm
+} from "project-editor/lvgl/style-sample-native";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -189,6 +199,15 @@ export abstract class LVGLPageRuntime {
     }
 
     abstract get isEditor(): boolean;
+
+    get isExpandedEditorPreview() {
+        if (!this.isEditor) {
+            return false;
+        }
+        const editor = this.projectStore.editorsStore.getEditorByObject(this.page);
+        return (editor?.state as PageTabState | undefined)
+            ?.lvglEditorViewMode === "expanded";
+    }
 
     abstract mount(): void;
     abstract unmount(): void;
@@ -736,6 +755,9 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
     requestAnimationFrameId: number | undefined;
     wasError: boolean = false;
     ctxPage: Page | undefined;
+    private initializedDisplayWidth: number | undefined;
+    private initializedDisplayHeight: number | undefined;
+    private retryTimer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(
         page: Page,
@@ -755,6 +777,11 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
     }
 
     get displayWidth() {
+        // The WASM framebuffer is allocated at _init. Do not read it with
+        // changed model dimensions during a drag.
+        if (this.initializedDisplayWidth !== undefined) {
+            return this.initializedDisplayWidth;
+        }
         let width = this.page.width;
         if (typeof width != "number" || isNaN(width) || width < 1) {
             width = 1;
@@ -763,7 +790,12 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
     }
 
     get displayHeight() {
-        let height = this.page.height;
+        if (this.initializedDisplayHeight !== undefined) {
+            return this.initializedDisplayHeight;
+        }
+        let height = this.isExpandedEditorPreview
+            ? getLVGLEditorPreviewHeight(this.page)
+            : this.page.height;
         if (typeof height != "number" || isNaN(height) || height < 1) {
             height = 1;
         }
@@ -775,11 +807,17 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
             return;
         }
 
+        this.initializedDisplayWidth = this.displayWidth;
+        this.initializedDisplayHeight = this.displayHeight;
+
         const wasm = getLvglWasmFlowRuntimeConstructor(this.lvglVersion)(
             async () => {
                 await this.preloadImages();
 
-                if (this.wasm != wasm) {
+                // The editor can be closed or switched to Run while bitmap
+                // decoding is pending. Never initialize a detached WASM page
+                // or restart its frame loop after unmount.
+                if (!this.isMounted || this.wasm !== wasm) {
                     return;
                 }
 
@@ -811,12 +849,34 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
 
                     this.project._store.lastRevision;
 
+                    // Bitmap loading is asynchronous. The initial preload has
+                    // a timeout so a slow image used to leave the editor with
+                    // a permanent transparent/checkerboard placeholder: once
+                    // the image finished loading nothing invalidated this
+                    // autorun. Observe bitmap image state here so each
+                    // undefined -> image/null transition refreshes the page.
+                    const bitmapObjects =
+                        this.project._assets.maps.name.getAllObjectsOfType(
+                            "bitmaps"
+                        );
+                    bitmapObjects.forEach(
+                        bitmapObject =>
+                            (bitmapObject.object as Bitmap).imageElement
+                    );
+
                     if (this.wasError) {
-                        setTimeout(() => {
-                            this.unmount();
-                            this.wasError = false;
-                            this.mount();
-                        });
+                        if (!this.retryTimer) {
+                            this.retryTimer = setTimeout(() => {
+                                this.retryTimer = undefined;
+                                // No retry after the current runtime unmounts.
+                                if (!this.isMounted) {
+                                    return;
+                                }
+                                this.unmount();
+                                this.wasError = false;
+                                this.mount();
+                            });
+                        }
                         return;
                     }
 
@@ -844,6 +904,15 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
                         this.createStyles();
 
                         const pageObj = this.page.lvglCreate(this, 0);
+                        if (this.isExpandedEditorPreview && pageObj) {
+                            // Enlarge only the WASM preview screen. The page
+                            // model, firmware generation and run mode are intact.
+                            resizeLVGLEditorObject(
+                                this.wasm,
+                                pageObj,
+                                this.displayHeight
+                            );
+                        }
                         if (!pageObj) {
                             console.error("pageObj is undefined");
                         }
@@ -994,6 +1063,10 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
     };
 
     unmount() {
+        if (this.retryTimer !== undefined) {
+            clearTimeout(this.retryTimer);
+            this.retryTimer = undefined;
+        }
         if (!this.isMounted) {
             return;
         }
@@ -1014,6 +1087,8 @@ export class LVGLPageEditorRuntime extends LVGLPageRuntime {
         }
 
         super.reset();
+        this.initializedDisplayWidth = undefined;
+        this.initializedDisplayHeight = undefined;
 
         LVGLPageRuntime.detachRuntimeFromPage(this.page);
     }
@@ -1040,8 +1115,16 @@ export class LVGLNonActivePageViewerRuntime extends LVGLPageRuntime {
     }
 
     mount() {
+        if (this.isMounted) {
+            return;
+        }
         this.wasm = getLvglWasmFlowRuntimeConstructor(this.lvglVersion)(
             async () => {
+                // Run navigation can unmount this viewer while the module
+                // is still loading. Discard the obsolete completion.
+                if (!this.isMounted) {
+                    return;
+                }
                 runInAction(() => {
                     this.page._lvglRuntime = this;
                     this.page._lvglObj = undefined;
@@ -1637,13 +1720,26 @@ export class LVGLPageViewerRuntime extends LVGLPageRuntime {
     ) {
         const eventCode = getLvglEvents(this.project)[eventName].code;
 
-        if (!this.eventHandlers.find(eventHandler => eventHandler.obj == obj)) {
-            this.wasm._lvglAddEventHandler(obj);
+        // LVGL emits SCREEN_* lifecycle events on the Screen only. A widget
+        // can declare a screen event in the project, but listening on that
+        // widget directly never fires. Attach to its enclosing Screen instead.
+        const screenObj = this.lvglCreateContext.page.lvglScreenWidget?._lvglObj;
+        const listenerObj =
+            isLvglScreenLifecycleEvent(eventName) && screenObj
+                ? screenObj
+                : obj;
+
+        if (
+            !this.eventHandlers.find(
+                eventHandler => eventHandler.obj == listenerObj
+            )
+        ) {
+            this.wasm._lvglAddEventHandler(listenerObj);
         }
 
         this.eventHandlers.push({
             page: this.page,
-            obj,
+            obj: listenerObj,
             eventCode,
             callback
         });
@@ -1664,12 +1760,20 @@ export class LVGLPageViewerRuntime extends LVGLPageRuntime {
 ////////////////////////////////////////////////////////////////////////////////
 
 export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
-    static PREVIEW_WIDTH = 400;
-    static PREVIEW_HEIGHT = 400;
+    // Size the style sample for the compact sidebar without shrinking text excessively.
+    static PREVIEW_WIDTH = 260;
+    static PREVIEW_HEIGHT = 160;
     lvglWidgetsMap = new Map<string, LVGLWidget>();
     selectedStyle: LVGLStyle | undefined;
+    previewError: string | undefined;
+    previewFrameReady = false;
+    previewObjectReady = false;
+    // Native style preview is deferred while stabilizing the Run simulator.
+    // Keep the CSS approximation without allocating another 80 MB WASM heap.
+    previewStage = "Native LVGL preview deferred";
     autorRunDispose: IReactionDisposer | undefined;
     requestAnimationFrameId: number | undefined;
+    private initializationTimeout: ReturnType<typeof setTimeout> | undefined;
     canvas: HTMLCanvasElement | null = null;
 
     constructor(project: Project) {
@@ -1688,6 +1792,10 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
         const page = createObject<Page>(
             project._store,
             {
+                left: 0,
+                top: 0,
+                width: LVGLStylesEditorRuntime.PREVIEW_WIDTH,
+                height: LVGLStylesEditorRuntime.PREVIEW_HEIGHT,
                 components: widgets.map(componentClass =>
                     Object.assign(
                         {},
@@ -1749,14 +1857,48 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
 
         for (const component of lvglScreenWidget.children) {
             this.lvglWidgetsMap.set(component.type, component);
+
+            // These widgets exist only in the synthetic style preview page.
+            // Place them at the center of its framebuffer for visibility.
+            runInAction(() => {
+                if (component.type === "LVGLButtonWidget") {
+                    component.width = 160;
+                    component.height = 56;
+                } else if (component.type === "LVGLLabelWidget") {
+                    // A visible text sample is essential to judging text
+                    // colors, fonts and sizes in a style-only preview.
+                    (component as LVGLLabelWidget).text = "Aa Sample";
+                    component.width = 150;
+                    component.height = 40;
+                    component.widthUnit = "px";
+                    component.heightUnit = "px";
+                }
+                const width = Number.isFinite(component.width)
+                    ? component.width : 100;
+                const height = Number.isFinite(component.height)
+                    ? component.height : 60;
+                component.left = Math.max(0, Math.round(
+                    (LVGLStylesEditorRuntime.PREVIEW_WIDTH - width) / 2
+                ));
+                component.top = Math.max(0, Math.round(
+                    (LVGLStylesEditorRuntime.PREVIEW_HEIGHT - height) / 2
+                ));
+            });
         }
 
         makeObservable(this, {
             selectedStyle: observable,
+            previewError: observable,
+            previewFrameReady: observable,
+            previewObjectReady: observable,
+            previewStage: observable,
+            canvas: observable.ref,
             setSelectedStyle: action
         });
 
-        this.mount();
+        // Do not eagerly mount a second WASM runtime just because the
+        // Styles dock has been constructed. Native preview is postponed;
+        // the lightweight CSS sample is displayed by LVGLSelectedStyleEditor.
     }
 
     get isEditor() {
@@ -1778,11 +1920,15 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
 
         const wasm = getLvglWasmFlowRuntimeConstructor(this.lvglVersion)(
             async () => {
-                if (this.wasm != wasm) {
+                if (!this.isMounted || this.wasm !== wasm) {
+                    // Ignore callbacks from a runtime that was closed or
+                    // replaced before the WASM module finished loading.
                     return;
                 }
 
+                try {
                 runInAction(() => {
+                    this.previewStage = "Initializing LVGL";
                     this.page._lvglRuntime = this;
                     this.page._lvglObj = undefined;
                 });
@@ -1818,68 +1964,145 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
                     this.freeAllButtonMatrixBuffers();
                     this.freeAllMsgboxBuffers();
 
-                    this.selectedStyle;
-                    this.project._store.uiStateStore.lvglState;
-
-                    // set all flags to HIDDEN, except selected widget
-                    // also, set _useStyleForStylePreview
                     runInAction(() => {
-                        for (const lvglWidget of this.lvglWidgetsMap.values()) {
-                            const flags =
-                                lvglWidget.widgetFlags.trim() != ""
-                                    ? lvglWidget.widgetFlags.split("|")
-                                    : [];
+                        this.previewError = undefined;
+                        this.previewFrameReady = false;
+                        this.previewObjectReady = false;
+                    });
 
-                            const i = flags.indexOf("HIDDEN");
-                            if (i != -1) {
-                                flags.splice(i, 1);
-                            }
+                    try {
+                        runInAction(() => {
+                            this.previewStage = "Creating style sample";
+                        });
+                        // A preview only needs its selected style. Do not
+                        // compile unrelated project fonts/images/styles into
+                        // this small standalone canvas.
+                        const selectedStyle = this.selectedStyle;
+                        this.createPreviewStyles(selectedStyle);
+                        this.project._store.uiStateStore.lvglState;
 
+                        // Only mount the currently selected example widget. Building
+                        // every palette widget, even if marked HIDDEN, can create
+                        // unrelated windows and overlays that break this preview.
+                        const screen = this.page.lvglScreenWidget!;
+                        const selectedWidget = this.selectedStyle
+                            ? this.lvglWidgetsMap.get(this.selectedStyle.forWidgetType)
+                            : undefined;
+                        const sample = selectedWidget !== screen
+                            ? selectedWidget
+                            : undefined;
+
+                        runInAction(() => {
+                            // Avoid retriggering the reaction for an unchanged type.
                             if (
-                                this.selectedStyle &&
-                                this.canvas &&
-                                lvglWidget.type ==
-                                    this.selectedStyle.forWidgetType
+                                screen.children.length !== (sample ? 1 : 0) ||
+                                screen.children[0] !== sample
                             ) {
-                                lvglWidget._useStyleForStylePreview =
-                                    this.selectedStyle.name;
-
-                                // "DEFAULT",
-                                // "CHECKED",
-                                // "PRESSED",
-                                // "CHECKED|PRESSED",
-                                // "DISABLED",
-                                // "FOCUSED"
-                                lvglWidget.states =
-                                    this.project._store.uiStateStore.lvglState;
-                            } else {
-                                lvglWidget._useStyleForStylePreview = "";
-                                lvglWidget.states = "";
-
-                                if (lvglWidget != this.page.lvglScreenWidget) {
-                                    flags.push("HIDDEN");
-                                }
+                                screen.children = sample ? [sample] : [];
                             }
 
-                            lvglWidget.widgetFlags = flags.join("|");
-                        }
-                    });
+                            for (const widget of this.lvglWidgetsMap.values()) {
+                                widget._useStyleForStylePreview =
+                                    widget === selectedWidget
+                                        ? this.selectedStyle?.name || ""
+                                        : "";
+                            }
 
-                    const pageObj = this.page.lvglCreate(this, 0);
-                    if (!pageObj) {
-                        console.error("pageObj is undefined");
-                        return;
+                            if (sample) {
+                                sample.states = this.project._store.uiStateStore.lvglState;
+                            }
+                        });
+
+                        // Simple samples use the actual LVGL widget APIs.
+                        // Unlike the synthetic Page factory, these only need
+                        // a screen + one Button or Label and cannot be blocked
+                        // by unrelated widget tree state.
+                        const nativeSample = selectedWidget
+                            ? createNativeStyleSample(
+                                  this.wasm as unknown as NativeStyleSampleWasm,
+                                  selectedWidget.type,
+                                  this.lvglVersion,
+                                  this.displayWidth,
+                                  this.displayHeight
+                              )
+                            : undefined;
+                        const pageObj = nativeSample
+                            ? nativeSample.screenObj
+                            : this.page.lvglCreate(this, 0);
+                        if (!pageObj) {
+                            throw new Error(
+                                "LVGL did not create the sample screen."
+                            );
+                        }
+
+                        const selectedObject = nativeSample
+                            ? nativeSample.widgetObj
+                            : selectedWidget?._lvglObj;
+                        if (this.selectedStyle && selectedWidget) {
+                            if (!selectedObject) {
+                                throw new Error(
+                                    "LVGL did not create the " +
+                                        selectedWidget.type
+                                            .replace(/^LVGL/, "")
+                                            .replace(/Widget$/, "") +
+                                        " sample object."
+                                );
+                            }
+
+                            if (nativeSample) {
+                                runInAction(() => {
+                                    selectedWidget._lvglObj = selectedObject;
+                                });
+                            }
+
+                            this.selectedStyle.lvglAddStyleToObject(
+                                this,
+                                selectedObject
+                            );
+                            this.wasm._lvglObjInvalidate(selectedObject);
+                            runInAction(() => {
+                                this.previewObjectReady = true;
+                            });
+                        }
+
+                        this.wasm._lvglScreenLoad(-1, pageObj);
+                        this.wasm._lvglObjInvalidate(pageObj);
+                        runInAction(() => {
+                            this.previewStage = "Waiting for LVGL frame";
+                        });
+
+                        runInAction(() => {
+                            if (this.page._lvglObj != undefined) {
+                                this.wasm._lvglDeleteObject(this.page._lvglObj);
+                            }
+                            this.page._lvglObj = pageObj;
+                        });
+
+                        // Old style handles remain referenced by the previous
+                        // page until it is deleted above; now they can be freed.
+                        this.deleteStyles();
+                        runInAction(() => {
+                            this.previewError = undefined;
+                        });
+                        if (!this.requestAnimationFrameId) {
+                            // Reconnect rendering when a newly selected
+                            // style recovers from an earlier frame failure.
+                            this.requestAnimationFrameId =
+                                window.requestAnimationFrame(this.tick);
+                        }
+                    } catch (error) {
+                        const message = error instanceof Error
+                            ? error.message
+                            : String(error);
+                        runInAction(() => {
+                            this.previewError = message;
+                        });
+                        console.error("LVGL style sample rendering failed:", error);
                     }
-
-                    this.wasm._lvglScreenLoad(-1, pageObj);
-
-                    runInAction(() => {
-                        if (this.page._lvglObj != undefined) {
-                            this.wasm._lvglDeleteObject(this.page._lvglObj);
-                        }
-                        this.page._lvglObj = pageObj;
-                    });
                 });
+                } catch (error) {
+                    this.reportPreviewError(error);
+                }
             }
         );
 
@@ -1887,45 +2110,122 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
         this.isMounted = true;
     }
 
+    private createPreviewStyles(style: LVGLStyle | undefined) {
+        for (const [oldStyle, objects] of this.styleObjMap.entries()) {
+            this.oldStyleObjMap.set(oldStyle, objects);
+        }
+        this.styleObjMap.clear();
+
+        if (style) {
+            this.styleObjMap.set(style, style.lvglCreateStyles(this));
+        }
+    }
+
+    private reportPreviewError(error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        runInAction(() => {
+            this.previewError = message;
+            this.previewStage = "Failed";
+        });
+        console.error("LVGL style sample failed:", error);
+    }
+
     tick = () => {
-        if (this.canvas) {
-            this.wasm._mainLoop();
+        // Mark the current rAF callback as consumed. A later style change
+        // can schedule a new frame after a transient rendering error.
+        this.requestAnimationFrameId = undefined;
+        if (!this.isMounted || this.previewError) {
+            return;
+        }
 
-            var buf_addr = this.wasm._getSyncedBuffer();
-            if (buf_addr != 0) {
-                const screen = new Uint8ClampedArray(
-                    this.wasm.HEAPU8.subarray(
-                        buf_addr,
-                        buf_addr + this.displayWidth * this.displayHeight * 4
-                    )
-                );
+        try {
+            if (this.canvas) {
+                this.wasm._mainLoop();
 
-                var imgData = new ImageData(
-                    screen,
-                    this.displayWidth,
-                    this.displayHeight
-                );
+                var buf_addr = this.wasm._getSyncedBuffer();
+                if (buf_addr != 0) {
+                    const screen = new Uint8ClampedArray(
+                        this.wasm.HEAPU8.subarray(
+                            buf_addr,
+                            buf_addr + this.displayWidth * this.displayHeight * 4
+                        )
+                    );
 
-                const ctx = this.canvas.getContext("2d");
-
-                if (ctx) {
-                    ctx.putImageData(
-                        imgData,
-                        0,
-                        0,
-                        0,
-                        0,
+                    var imgData = new ImageData(
+                        screen,
                         this.displayWidth,
                         this.displayHeight
                     );
+
+                    const ctx = this.canvas.getContext("2d");
+
+                    if (ctx) {
+                        ctx.putImageData(
+                            imgData,
+                            0,
+                            0,
+                            0,
+                            0,
+                            this.displayWidth,
+                            this.displayHeight
+                        );
+                        if (!this.previewFrameReady && this.previewObjectReady) {
+                            // A synced LVGL framebuffer can still contain only a
+                            // blank background. Keep the labeled approximation
+                            // visible until the sample actually adds pixels.
+                            const pixels = imgData.data;
+                            let hasVisibleSample = false;
+                            for (
+                                let offset = 128;
+                                offset + 3 < pixels.length;
+                                offset += 4 * 17
+                            ) {
+                                if (
+                                    pixels[offset] !== pixels[0] ||
+                                    pixels[offset + 1] !== pixels[1] ||
+                                    pixels[offset + 2] !== pixels[2] ||
+                                    pixels[offset + 3] !== pixels[3]
+                                ) {
+                                    hasVisibleSample = true;
+                                    break;
+                                }
+                            }
+                            if (hasVisibleSample) {
+                                if (this.initializationTimeout) {
+                                    clearTimeout(this.initializationTimeout);
+                                    this.initializationTimeout = undefined;
+                                }
+                                runInAction(() => {
+                                    this.previewFrameReady = true;
+                                    this.previewStage = "Ready";
+                                });
+                            }
+                        }
+                    }
                 }
             }
+        } catch (error) {
+            // An exception from LVGL/WASM or Canvas used to silently stop the
+            // frame loop and later masquerade as an initialization timeout.
+            this.reportPreviewError(
+                new Error(
+                    "LVGL frame rendering failed during " +
+                        this.previewStage.toLowerCase() +
+                        ": " +
+                        (error instanceof Error ? error.message : String(error))
+                )
+            );
+            return;
         }
 
         this.requestAnimationFrameId = window.requestAnimationFrame(this.tick);
     };
 
     unmount() {
+        if (this.initializationTimeout) {
+            clearTimeout(this.initializationTimeout);
+            this.initializationTimeout = undefined;
+        }
         if (!this.isMounted) {
             return;
         }
@@ -1954,8 +2254,41 @@ export class LVGLStylesEditorRuntime extends LVGLPageRuntime {
         selectedStyle: LVGLStyle | undefined,
         canvas: HTMLCanvasElement | null
     ) {
+        const selectionChanged =
+            this.selectedStyle !== selectedStyle || this.canvas !== canvas;
         this.selectedStyle = selectedStyle;
         this.canvas = canvas;
+
+        if (selectionChanged) {
+            if (this.initializationTimeout) {
+                clearTimeout(this.initializationTimeout);
+                this.initializationTimeout = undefined;
+            }
+            if (this.isMounted && selectedStyle && canvas) {
+                // Only a genuinely mounted native runtime needs a watchdog.
+                // A deferred CSS sample must not show a spurious timeout.
+                // Start a new watchdog for every selected style. The prior
+                // style may already be Ready, so checking previewFrameReady
+                // here would skip the timeout when switching styles.
+                this.initializationTimeout = setTimeout(() => {
+                    this.initializationTimeout = undefined;
+                    if (
+                        this.selectedStyle === selectedStyle &&
+                        this.canvas === canvas &&
+                        !this.previewFrameReady &&
+                        !this.previewError
+                    ) {
+                        this.reportPreviewError(
+                            new Error(
+                                "LVGL preview timed out during " +
+                                    this.previewStage.toLowerCase() +
+                                    " (10 seconds)."
+                            )
+                        );
+                    }
+                }, 10000);
+            }
+        }
     }
 }
 

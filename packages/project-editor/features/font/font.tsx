@@ -79,6 +79,7 @@ import type { ProjectEditorFeature } from "project-editor/store/features";
 import { getLvglDefaultFontBpp } from "project-editor/lvgl/lvgl-versions";
 import { settingsController } from "home/settings";
 import { ProjectContext } from "project-editor/project/context";
+import { embedFontSource } from "project-editor/features/font/font-source-portability";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1025,6 +1026,7 @@ const EditGlyphsPropertyGridUI = observer(
 
 export class AdditionalFontSource extends EezObject {
     filePath: string;
+    embeddedFontFile?: string;
     lvglRanges: string;
     lvglSymbols: string;
 
@@ -1043,6 +1045,11 @@ export class AdditionalFontSource extends EezObject {
                     { name: "All Files", extensions: ["*"] }
                 ],
                 readOnlyInPropertyGrid: true
+            },
+            {
+                name: "embeddedFontFile",
+                type: PropertyType.String,
+                hideInPropertyGrid: true
             },
             {
                 name: "lvglRanges",
@@ -1141,11 +1148,14 @@ export class AdditionalFontSource extends EezObject {
             additionalFontSource: AdditionalFontSource,
             messages: IMessage[]
         ) => {
-            if (!additionalFontSource.filePath) {
+            if (
+                !additionalFontSource.filePath &&
+                !additionalFontSource.embeddedFontFile
+            ) {
                 messages.push(
                     new Message(
                         MessageType.ERROR,
-                        "Font file path is required",
+                        "A font source path or embedded font data is required",
                         additionalFontSource
                     )
                 );
@@ -1157,6 +1167,7 @@ export class AdditionalFontSource extends EezObject {
         super.makeEditable();
         makeObservable(this, {
             filePath: observable,
+            embeddedFontFile: observable,
             lvglRanges: observable,
             lvglSymbols: observable
         });
@@ -1481,6 +1492,12 @@ export class Font extends EezObject {
     _lvglFontDefinitionExtractFontParams: ExtractFontParams | undefined;
 
     _lvglGlyphsDirty: boolean;
+    private _lvglGlyphsLoading = false;
+    private _lvglGlyphsLoadedParams: ExtractFontParams | undefined;
+    private _lvglFontDefinitionBuildPromise: Promise<void> | undefined;
+    private _lvglFontDefinitionBuildParams: ExtractFontParams | undefined;
+    private _lvglFontDefinitionBuildSerial = 0;
+    private _lvglFontDefinitionError: Error | undefined;
 
     constructor() {
         super();
@@ -2329,7 +2346,10 @@ export class Font extends EezObject {
         }
 
         return this.lvglAdditionalSources
-            .filter(additionalSource => additionalSource.filePath)
+            .filter(
+                additionalSource =>
+                    additionalSource.filePath || additionalSource.embeddedFontFile
+            )
             .map(additionalSource => {
                 const { encodings, symbols } = getLvglEncodingsAndSymbols(
                     additionalSource.lvglRanges || "",
@@ -2341,6 +2361,7 @@ export class Font extends EezObject {
                         additionalSource.filePath
                     ),
                     relativeFilePath: additionalSource.filePath,
+                    embeddedFontFile: additionalSource.embeddedFontFile,
                     size: this.source!.size!,
                     encodings,
                     symbols
@@ -2349,7 +2370,12 @@ export class Font extends EezObject {
     }
 
     get _lvglExtractFontParams(): ExtractFontParams | undefined {
-        if ((!this.lvglRanges && !this.lvglSymbols) || this.lvglUseFreeType) {
+        if (
+            (!this.lvglRanges && !this.lvglSymbols) ||
+            this.lvglUseFreeType ||
+            !this.source?.size ||
+            (!this.source.filePath && !this.embeddedFontFile)
+        ) {
             return undefined;
         }
 
@@ -2436,126 +2462,188 @@ export class Font extends EezObject {
     }
 
     reloadLvglGlyphs() {
-        if (isLVGLProject(this) && this._lvglGlyphsDirty) {
-            setTimeout(async () => {
-                let extractFontParams = this._lvglExtractFontParams;
-                if (extractFontParams) {
-                    extractFontParams = { ... extractFontParams, createGlyphs: true };
-                    const result = await extractFont(extractFontParams);
+        if (!isLVGLProject(this) || this._lvglGlyphsLoading) {
+            return;
+        }
+
+        const extractFontParams = this._lvglExtractFontParams;
+        if (!extractFontParams) {
+            return;
+        }
+        if (
+            !this._lvglGlyphsDirty &&
+            this._lvglGlyphsLoadedParams === extractFontParams
+        ) {
+            return;
+        }
+
+        this._lvglGlyphsLoading = true;
+        void (async () => {
+            try {
+                const result = await extractFont({
+                    ...extractFontParams,
+                    createGlyphs: true
+                });
+                // Settings can change while the font worker is extracting.
+                if (this._lvglExtractFontParams !== extractFontParams) {
+                    return;
+                }
+                runInAction(() => {
                     if (result.glyphs) {
                         const projectStore = ProjectEditor.getProjectStore(this);
-                        const glyphs = result.glyphs;
-                        runInAction(() => {
-                            this.glyphs.splice(0, this.glyphs.length);
-                            for (const glyphProperties of glyphs) {
-                                const glyph = createObject<Glyph>(
-                                    projectStore,
-                                    glyphProperties as any,
-                                    Glyph
-                                );
-                                setParent(glyph, this.glyphs);
-                                this.glyphs.push(glyph);
-                            }
-                        });
+                        this.glyphs.splice(0, this.glyphs.length);
+                        for (const glyphProperties of result.glyphs) {
+                            const glyph = createObject<Glyph>(
+                                projectStore,
+                                glyphProperties as any,
+                                Glyph
+                            );
+                            setParent(glyph, this.glyphs);
+                            this.glyphs.push(glyph);
+                        }
                     }
+                    this._lvglGlyphsLoadedParams = extractFontParams;
+                    this._lvglGlyphsDirty = false;
+                });
+            } catch (error) {
+                console.error(`Failed to load glyphs for font "${this.name}":`, error);
+                notification.error(
+                    `Failed to load glyphs for font "${this.name}": ${error}`
+                );
+                if (this._lvglExtractFontParams === extractFontParams) {
+                    runInAction(() => {
+                        this._lvglGlyphsLoadedParams = extractFontParams;
+                        this._lvglGlyphsDirty = false;
+                    });
                 }
-            });
-        }        
+            } finally {
+                this._lvglGlyphsLoading = false;
+                if (this._lvglExtractFontParams !== extractFontParams) {
+                    this.reloadLvglGlyphs();
+                }
+            }
+        })();
     }
 
     async buildLvglFontDefinition(
         extractFontParams: ExtractFontParams | undefined
     ) {
+        if (
+            this._lvglFontDefinitionBuildPromise &&
+            this._lvglFontDefinitionBuildParams === extractFontParams
+        ) {
+            return this._lvglFontDefinitionBuildPromise;
+        }
+
+        const buildSerial = ++this._lvglFontDefinitionBuildSerial;
+        this._lvglFontDefinitionExtractFontParams = extractFontParams;
         runInAction(() => {
             this._lvglGlyphsDirty = true;
+            // Never expose binary data generated for the previous font settings.
+            this._lvglFontDefinition = undefined;
         });
+        this._lvglFontDefinitionError = undefined;
 
-        this._lvglFontDefinitionExtractFontParams = extractFontParams;
+        const buildPromise = (async () => {
+            if (!extractFontParams) {
+                return;
+            }
 
-        if (!extractFontParams) {
-            if (this._lvglFontDefinition) {
+            try {
+                const projectStore = ProjectEditor.getProjectStore(this);
+                const result =
+                    projectStore.fontsCacheStore.getCachedFontDefinition(
+                        extractFontParams
+                    ) || (await extractFont(extractFontParams));
+
+                if (buildSerial !== this._lvglFontDefinitionBuildSerial) {
+                    return;
+                }
+
+                if (!result?.lvglBinFile || !result?.lvglSourceFile) {
+                    throw new Error("Font extraction did not return LVGL font data.");
+                }
+
+                runInAction(() => {
+                    this._lvglFontDefinition = {
+                        binFile: result.lvglBinFile!,
+                        sourceFile: result.lvglSourceFile!
+                    };
+                });
+            } catch (error) {
+                if (buildSerial !== this._lvglFontDefinitionBuildSerial) {
+                    return;
+                }
+                this._lvglFontDefinitionError =
+                    error instanceof Error ? error : new Error(String(error));
+                console.error(`Failed to load LVGL font "${this.name}":`, error);
+                notification.error(
+                    `Failed to load LVGL font "${this.name}": ${error}`
+                );
                 runInAction(() => {
                     this._lvglFontDefinition = undefined;
                 });
             }
-            return;
-        }
+        })();
 
+        this._lvglFontDefinitionBuildParams = extractFontParams;
+        this._lvglFontDefinitionBuildPromise = buildPromise;
         try {
-            let result;
-
-            const projectStore = ProjectEditor.getProjectStore(this);
-
-            result =
-                projectStore.fontsCacheStore.getCachedFontDefinition(
-                    extractFontParams
-                );
-
-            if (!result) {
-                try {
-                    result = await extractFont(extractFontParams);
-                } catch (err) {
-                }
+            await buildPromise;
+        } finally {
+            if (this._lvglFontDefinitionBuildPromise === buildPromise) {
+                this._lvglFontDefinitionBuildPromise = undefined;
+                this._lvglFontDefinitionBuildParams = undefined;
             }
+        }
+    }
 
-            if (result && result.lvglBinFile && result.lvglSourceFile) {
-                const binFile = result.lvglBinFile;
-                const sourceFile = result.lvglSourceFile;
-
-                runInAction(() => {
-                    if (this._lvglFontDefinition) {
-                        this._lvglFontDefinition.binFile = binFile;
-                        this._lvglFontDefinition.sourceFile = sourceFile;
-                    } else {
-                        this._lvglFontDefinition = {
-                            binFile,
-                            sourceFile
-                        };
-                    }
-                });               
-            } else {
-                runInAction(() => {
-                    this._lvglFontDefinition = undefined;
-                });                
-            }
-        } catch (err) {
-            console.error(err);
-
-            runInAction(() => {
-                this._lvglFontDefinition = undefined;
-            });
+    private async ensureLvglFontDefinition() {
+        const currentExtractFontParams = this._lvglExtractFontParams;
+        if (
+            this._lvglFontDefinitionBuildPromise &&
+            this._lvglFontDefinitionBuildParams === currentExtractFontParams
+        ) {
+            await this._lvglFontDefinitionBuildPromise;
+        } else if (
+            this._lvglFontDefinitionExtractFontParams !== currentExtractFontParams ||
+            (currentExtractFontParams && !this._lvglFontDefinition)
+        ) {
+            await this.buildLvglFontDefinition(currentExtractFontParams);
         }
     }
 
     getLvglBinFile() {
         const currentExtractFontParams = this._lvglExtractFontParams;
-
-        if (
-            !this._lvglFontDefinitionExtractFontParams ||
-            this._lvglFontDefinitionExtractFontParams !=
-                currentExtractFontParams
-        ) {
-            this._lvglFontDefinitionExtractFontParams =
-                currentExtractFontParams;
-
-            setTimeout(async () => {
-                await this.buildLvglFontDefinition(currentExtractFontParams);
+        if (this._lvglFontDefinitionExtractFontParams !== currentExtractFontParams) {
+            // The renderer needs a synchronous getter; rebuild outside render.
+            // Invalidate any in-flight result immediately when settings change.
+            this._lvglFontDefinitionBuildSerial++;
+            this._lvglFontDefinitionExtractFontParams = currentExtractFontParams;
+            runInAction(() => {
+                this._lvglFontDefinition = undefined;
             });
+            setTimeout(() => {
+                if (this._lvglExtractFontParams === currentExtractFontParams) {
+                    void this.ensureLvglFontDefinition();
+                }
+            }, 0);
         }
-
         return this._lvglFontDefinition?.binFile;
     }
 
     async getLvglBinFileAsync() {
-        if (!this._lvglFontDefinition) {
-            await this.buildLvglFontDefinition(this._lvglExtractFontParams);
+        await this.ensureLvglFontDefinition();
+        if (this._lvglFontDefinitionError) {
+            throw this._lvglFontDefinitionError;
         }
         return this._lvglFontDefinition?.binFile;
     }
 
     async getLvglSourceFile() {
-        if (!this._lvglFontDefinition) {
-            await this.buildLvglFontDefinition(this._lvglExtractFontParams);
+        await this.ensureLvglFontDefinition();
+        if (this._lvglFontDefinitionError) {
+            throw this._lvglFontDefinitionError;
         }
         return this._lvglFontDefinition?.sourceFile;
     }
@@ -2775,12 +2863,47 @@ const feature: ProjectEditorFeature = {
     },
     toJsHook: (jsObject: Project, project: Project) => {
         if (jsObject.fonts) {
+            const embedFontSources =
+                project.settings.general.projectType == ProjectType.LVGL &&
+                project.settings.general.embedFonts;
+
+            // Save binary font data with the project for portable import.
+            const embedSource = (
+                source: { embeddedFontFile?: string },
+                filePath: string | undefined,
+                fontName: string
+            ) =>
+                embedFontSource(
+                    source,
+                    filePath,
+                    fontName,
+                    relativePath =>
+                        project._store.getAbsoluteFilePath(relativePath)
+                );
+
             for (
                 let fontIndex = 0;
                 fontIndex < jsObject.fonts.length;
                 fontIndex++
             ) {
                 const font = jsObject.fonts[fontIndex];
+
+                if (embedFontSources) {
+                    embedSource(font, font.source?.filePath, font.name);
+                    for (const additional of font.lvglAdditionalSources || []) {
+                        embedSource(
+                            additional,
+                            additional.filePath,
+                            font.name + " (additional source)"
+                        );
+                    }
+                } else if (
+                    project.settings.general.projectType == ProjectType.LVGL
+                ) {
+                    for (const additional of font.lvglAdditionalSources || []) {
+                        additional.embeddedFontFile = undefined;
+                    }
+                }
 
                 if (font.lvglRanges || font.lvglSymbols) {
                     font.glyphs = [];

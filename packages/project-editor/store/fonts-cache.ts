@@ -39,9 +39,22 @@ export class FontsCacheStore {
                 try {
                     const data = await fs.promises.readFile(filePath, "utf8");
                     try {
-                        fontsCache = JSON.parse(data);
+                        const parsed: unknown = JSON.parse(data);
+                        if (Array.isArray(parsed)) {
+                            fontsCache = parsed.filter(
+                                (entry): entry is FontsCacheEntry =>
+                                    entry !== null &&
+                                    typeof entry === "object" &&
+                                    typeof entry.extractFontParams === "object" &&
+                                    entry.extractFontParams !== null &&
+                                    typeof entry.binFile === "string" &&
+                                    typeof entry.sourceFile === "string" &&
+                                    entry.binFile.length > 0 &&
+                                    entry.sourceFile.length > 0
+                            );
+                        }
                     } catch (err) {
-                        console.error(err);
+                        console.error("Invalid font cache file:", err);
                     }
                 } catch (err) {}
             }
@@ -61,16 +74,13 @@ export class FontsCacheStore {
         }
 
         if (this.projectStore.project.settings.general.cacheFonts) {
-            let fontsCache: any;
+            const fontsCache: FontsCacheEntry[] = [];
 
             for (const font of this.projectStore.project.fonts) {
                 if (
                     font._lvglFontDefinitionExtractFontParams &&
                     font._lvglFontDefinition
                 ) {
-                    if (!fontsCache) {
-                        fontsCache = [];
-                    }
                     fontsCache.push({
                         extractFontParams:
                             font._lvglFontDefinitionExtractFontParams,
@@ -86,6 +96,7 @@ export class FontsCacheStore {
                     JSON.stringify(fontsCache, undefined, 2),
                     "utf8"
                 );
+                this.fontsCache = fontsCache;
             } catch (err) {
                 notification.error("Failed to create fonts cache file: " + err);
             }

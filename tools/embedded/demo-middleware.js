@@ -94,13 +94,30 @@ async function handleMessage(socket, message, root) {
 
     switch (message.command) {
         case "test":
-            // §5.7 says test payload data is returned directly.
             sendMessage(socket, message);
             sendLog(socket, "middleware test ok");
             return;
         case "log":
             sendLog(socket, `studio log: ${String(message.data || "")}`);
             return;
+        case "cmake": {
+            try {
+                resolveInsideRoot(root, message.output_dir || "./");
+                const configFile = resolveInsideRoot(root, message.config_file || "");
+                if (!fs.existsSync(configFile)) {
+                    throw new Error(`config file does not exist: ${message.config_file}`);
+                }
+                sendLog(
+                    socket,
+                    `cmake output=${message.output_dir} config=${message.config_file}`
+                );
+                await sendProgress(socket, "cmake");
+                sendLog(socket, "cmake completed");
+            } catch (error) {
+                sendLog(socket, `cmake failed: ${error.message || error}`);
+            }
+            return;
+        }
         case "transform":
             sendLog(socket, `transform ${message.type} ${message.model} started`);
             await sendProgress(socket, "transform");
@@ -130,7 +147,7 @@ async function handleMessage(socket, message, root) {
                 }
                 sendLog(
                     socket,
-                    `download ${message.interface} ${message.target} ${message.speed}kHz ${message.addr}`
+                    `download target=${message.target} pack=${message.pack} script=${message.script} ${message.frequency}Hz ${message.addr}`
                 );
                 await sendProgress(socket, "download");
                 sendLog(socket, "download completed (demo; no hardware was flashed)");

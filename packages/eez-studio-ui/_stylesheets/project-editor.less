@@ -234,9 +234,70 @@
         .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
             justify-content: flex-end;
             gap: 8px;
+
+            .DigiStudio_ChangesAction {
+                display: inline-flex;
+                align-items: center;
+                flex: 0 0 auto;
+                color: @textColor;
+                background: transparent;
+                border-color: transparent;
+                box-shadow: none;
+                white-space: nowrap;
+                transition: color 120ms ease, background-color 120ms ease;
+
+                &:hover,
+                &:focus-visible,
+                &[aria-expanded="true"] {
+                    color: @textColor;
+                    background-color: fade(@borderColor, 35%);
+                    border-color: transparent;
+                    box-shadow: none;
+                }
+
+                &:focus-visible {
+                    box-shadow: 0 0 0 1px @selectionBackgroundColor;
+                }
+
+                .DigiStudio_ChangesCount {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 16px;
+                    height: 16px;
+                    margin-left: 5px;
+                    padding: 0 4px;
+                    border-radius: 8px;
+                    color: @textColor;
+                    background-color: fade(@borderColor, 45%);
+                    font-size: 11px;
+                    line-height: 16px;
+                }
+            }
+        }
+
+        // Reserve a fixed slot for Save / Undo / Redo. Unlike the optional
+        // editor actions, history must never be clipped by the three-column
+        // toolbar layout when the project title or Build controls grow.
+        .EezStudio_ProjectEditor_ToolbarNav_PrimaryEditActions {
+            display: inline-flex;
+            align-items: center;
+            flex: 0 0 auto;
+            gap: 2px;
+            padding-right: 7px;
+            border-right: 1px solid @borderColor;
+            white-space: nowrap;
+
+            .EezStudio_IconAction {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 30px;
+            }
         }
 
         .EezStudio_ProjectEditor_ToolbarNav_EditorButtons {
+            flex: 1 1 auto;
             justify-content: flex-start;
             overflow: hidden;
 
@@ -329,6 +390,15 @@
         .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
             gap: 2px;
 
+            .EezStudio_ProjectEditor_ToolbarNav_FirmwareControls {
+                display: flex;
+                align-items: center;
+                gap: 2px;
+                margin-right: 4px;
+                padding-right: 6px;
+                border-right: 1px solid @borderColor;
+            }
+
             .EezStudio_ButtonAction {
                 color: @textColor;
                 background: transparent;
@@ -341,6 +411,16 @@
                     background-color: fade(@borderColor, 35%);
                     border-color: transparent;
                     box-shadow: none;
+                }
+            }
+
+            .DigiStudio_FirmwareAction {
+                color: @textColor;
+
+                &:hover,
+                &:focus-visible {
+                    color: @textColor;
+                    background-color: fade(@borderColor, 35%);
                 }
             }
 
@@ -369,7 +449,9 @@
             gap: 4px;
         }
 
-        @media (max-width: 960px) {
+        // Prioritize working editor controls over the decorative project
+        // heading as soon as horizontal room becomes limited.
+        @media (max-width: 1300px) {
             grid-template-columns: minmax(0, 1fr) auto;
 
             .EezStudio_ProjectEditor_ToolbarNav_ProjectContext {
@@ -1100,6 +1182,71 @@
 
     .EezStudio_PropertyGrid {
         min-width: 340px;
+    }
+}
+
+.EezStudio_AudioSettings {
+    .EezStudio_AudioSettings_Basic {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 16px;
+    }
+
+    .EezStudio_AudioSettings_Description {
+        color: var(--bs-secondary-color);
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .EezStudio_AudioSettings_Field {
+        display: grid;
+        grid-template-columns: minmax(130px, 1fr) minmax(140px, 2fr);
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 12px;
+
+        .form-control,
+        .form-select {
+            min-width: 0;
+        }
+    }
+
+    .EezStudio_AudioSettings_SectionTitle {
+        margin-top: 8px;
+        color: var(--bs-secondary-color);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .EezStudio_AudioSettings_AdvancedToggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 11px 16px;
+        border: 0;
+        border-top: 1px solid @borderColor;
+        background: @panelHeaderColor;
+        color: @textColor;
+        font-size: 12px;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--bs-tertiary-bg);
+        }
+    }
+
+    .EezStudio_AudioSettings_Advanced {
+        padding: 8px 4px 16px;
+
+        .EezStudio_AudioSettings_SectionTitle {
+            padding: 8px 12px 4px;
+        }
     }
 }
 
@@ -5048,6 +5195,24 @@
         }
     }
 
+    .EezStudio_EmbeddedPlatform_AdvancedToggle {
+        margin-top: 8px;
+        border-top: 1px solid @borderColor;
+        border-radius: 3px;
+        padding-top: 10px;
+        color: @textColor;
+        font-weight: 600;
+
+        &[aria-expanded="true"] {
+            color: @textColor;
+        }
+    }
+
+    button.is-advanced {
+        padding-left: 24px;
+        font-size: 12px;
+    }
+
     .EezStudio_EmbeddedPlatform_WorkspaceNavToggle {
         flex: 0 0 auto;
         min-height: 30px;
@@ -5119,6 +5284,83 @@
             font-size: 13px;
         }
     }
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfiguration {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid @borderColor;
+    border-radius: 6px;
+    background: @backgroundColor;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    min-height: 46px;
+    padding: 8px 12px;
+    border: 0;
+    background: @panelHeaderColor;
+    color: @textColor;
+    text-align: left;
+    cursor: pointer;
+    transition-property: background-color, color;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--bs-tertiary-bg);
+        color: @textColor;
+        outline: none;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationSummary {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--bs-secondary-color);
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationBody {
+    border-top: 1px solid @borderColor;
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationSection {
+    & + & {
+        border-top: 1px solid @borderColor;
+    }
+}
+
+.EezStudio_EmbeddedPlatform_RemoteConfigurationSectionTitle {
+    padding: 8px 14px 0;
+    color: var(--bs-secondary-color);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
 }
 
 .EezStudio_EmbeddedPlatform_StatusBar {
@@ -5236,6 +5478,27 @@
     small {
         color: var(--bs-secondary-color);
     }
+}
+
+.EezStudio_EmbeddedPlatform_RemoteLogs {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 0;
+    margin: 0;
+    padding: 12px 14px;
+    overflow: auto;
+    background-color: #111827;
+    color: #f8fafc !important;
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: 11px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+    align-self: stretch;
 }
 
 .EezStudio_EmbeddedPlatform_Visibility,
@@ -5478,16 +5741,29 @@
 }
 
 .EezStudio_EmbeddedPlatform_Window {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: 100%;
     justify-content: space-between;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .EezStudio_EmbeddedPlatform_WindowGrid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(300px, 1fr));
-    align-content: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    flex: 1 1 auto;
+    min-height: 0;
     padding: 10px;
-    overflow: auto;
+    overflow: hidden;
+    align-content: stretch;
+}
+
+.EezStudio_EmbeddedPlatform_WindowGrid > .EezStudio_PanelContainer {
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .EezStudio_EmbeddedPlatform_WindowGridSingle {
@@ -5504,6 +5780,25 @@
     background: @panelHeaderColor;
 }
 
+.EezStudio_EmbeddedPlatform_WindowFooter
+    .EezStudio_EmbeddedPlatform_Status {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform_WindowFooter
+    .EezStudio_EmbeddedPlatform_Actions {
+    flex-wrap: nowrap;
+}
+
+.EezStudio_EmbeddedPlatform_WindowFooter
+    .EezStudio_EmbeddedPlatform_Actions
+    > .EezStudio_ButtonAction:first-child {
+    min-width: 150px;
+}
+
 .EezStudio_EmbeddedPlatform_Progress {
     height: 22px;
     margin: 0;
@@ -5511,6 +5806,197 @@
 
 .EezStudio_EmbeddedPlatform_FirmwarePicker {
     padding: 8px;
+}
+
+.EezStudio_EmbeddedPlatform_RemoteFlow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 14px;
+}
+
+.EezStudio_EmbeddedPlatform_RemoteFlowRow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+
+    strong {
+        color: var(--bs-body-color);
+        font-size: 12px;
+    }
+
+    code {
+        display: block;
+        min-width: 0;
+        padding: 6px 8px;
+        border: 1px solid @borderColor;
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
+        font-size: 11px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+    }
+}
+
+#eez-embedded-build-v2 {
+    --firmware-space-1: 4px;
+    --firmware-space-2: 8px;
+    --firmware-space-3: 12px;
+    --firmware-space-4: 16px;
+    --firmware-header-height: 44px;
+    --firmware-control-height: 32px;
+    --firmware-icon-size: 16px;
+    --firmware-title-size: 14px;
+    --firmware-section-size: 12px;
+
+    border: 1px solid @borderColor;
+    border-radius: @borderRadiusSmall;
+    box-shadow: @shadowElevation5;
+    container-type: inline-size;
+
+    // jsPanel sets its theme colors inline; keep this window on Studio tokens.
+    .jsPanel-hdr {
+        background: @panelHeaderColor !important;
+        color: @textColor !important;
+        font-family: inherit;
+        border-bottom: 1px solid @borderColor;
+        border-radius: @borderRadiusSmall @borderRadiusSmall 0 0;
+    }
+
+    .jsPanel-headerbar {
+        min-height: var(--firmware-header-height);
+        padding: 0 var(--firmware-space-2) 0 var(--firmware-space-4);
+    }
+
+    .jsPanel-title {
+        margin: 0;
+        color: @textColor !important;
+        font-variant: normal;
+        font-size: var(--firmware-title-size);
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .jsPanel-controlbar {
+        align-self: center;
+        margin: 0;
+    }
+
+    .jsPanel-btn-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: var(--firmware-control-height);
+        height: var(--firmware-control-height);
+        border-radius: @borderRadiusSmall;
+        color: var(--bs-secondary-color) !important;
+
+        svg.jsPanel-icon {
+            width: var(--firmware-icon-size);
+            height: var(--firmware-icon-size);
+        }
+
+        &:hover,
+        &:active {
+            background-color: var(--bs-secondary-bg);
+            color: @textColor !important;
+        }
+
+        &:focus-visible {
+            outline: 2px solid @selectionBackgroundColor;
+            outline-offset: 2px;
+        }
+    }
+
+    .jsPanel-content {
+        font-family: inherit;
+        border-radius: 0 0 @borderRadiusSmall @borderRadiusSmall;
+    }
+
+    .EezStudio_EmbeddedPlatform_WindowGrid {
+        grid-template-rows: auto minmax(0, 1fr);
+        padding: var(--firmware-space-4);
+        gap: var(--firmware-space-3);
+    }
+
+    .EezStudio_PanelHeader {
+        min-height: var(--firmware-control-height);
+        padding: 0 var(--firmware-space-3);
+        align-items: center;
+        font-size: var(--firmware-section-size);
+    }
+
+    .EezStudio_ProjectEditorPanelTitle {
+        padding: 0;
+    }
+
+    .EezStudio_EmbeddedPlatform_WindowFooter {
+        flex-shrink: 0;
+        grid-template-columns: minmax(0, 1fr) auto;
+        padding: var(--firmware-space-3) var(--firmware-space-4);
+        gap: var(--firmware-space-2) var(--firmware-space-4);
+    }
+
+    .EezStudio_EmbeddedPlatform_Status {
+        grid-column: ~"1 / -1";
+        white-space: normal;
+        overflow-wrap: anywhere;
+        color: var(--bs-secondary-color);
+        line-height: 1.5;
+    }
+
+    .EezStudio_EmbeddedPlatform_Progress {
+        max-width: 280px;
+    }
+
+    .EezStudio_EmbeddedPlatform_Actions > .EezStudio_ButtonAction {
+        min-height: var(--firmware-control-height);
+        border-radius: @borderRadiusSmall;
+        padding: var(--firmware-space-1) var(--firmware-space-3);
+
+        &:first-child {
+            background: @selectionBackgroundColor;
+            color: @selectionColor;
+
+            &:hover:not(:disabled) {
+                background: darken(@selectionBackgroundColor, 5%);
+            }
+        }
+    }
+
+}
+
+@container (max-width: 700px) {
+    #eez-embedded-build-v2 {
+        .EezStudio_EmbeddedPlatform_WindowGrid {
+            display: flex;
+            flex-direction: column;
+            overflow: auto;
+        }
+
+        .EezStudio_EmbeddedPlatform_WindowGrid > .EezStudio_PanelContainer {
+            flex: 0 0 auto;
+            height: auto;
+            overflow: visible;
+        }
+
+        .EezStudio_EmbeddedPlatform_WindowGrid > .EezStudio_PanelContainer:nth-child(2) {
+            order: 1;
+            height: 240px;
+            overflow: hidden;
+        }
+
+        .EezStudio_EmbeddedPlatform_WindowFooter {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .EezStudio_EmbeddedPlatform_Actions {
+            flex-wrap: wrap;
+        }
+    }
 }
 
 @media (max-width: 760px) {

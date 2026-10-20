@@ -18,6 +18,7 @@ import {
 import type { ITreeNode } from "eez-studio-ui/tree";
 
 import { settingsController } from "home/settings";
+import { productConfig } from "eez-studio-shared/product-config";
 
 import { ProjectType } from "project-editor/project/project";
 import { ProjectStore, loadProject } from "project-editor/store";
@@ -195,10 +196,7 @@ class Model {
                 relativePath
             );
         }
-        return (
-            "https://raw.githubusercontent.com/eez-open/eez-project-templates/master/" +
-            relativePath
-        );
+        return productConfig.projectTemplates.baseUrl + relativePath;
     }
 
     async loadModel() {

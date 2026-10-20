@@ -1,5 +1,22 @@
 import type { WidgetEvents } from "project-editor/core/object";
 
+// Screen lifecycle notifications are sent to the LVGL Screen object, not to
+// its child Containers, Labels or Buttons. Projects may attach these handlers
+// to a descendant; route them to the owning screen while preserving the
+// configured widget's flow/action callback.
+export const LVGL_SCREEN_LIFECYCLE_EVENTS = [
+    "SCREEN_UNLOAD_START",
+    "SCREEN_LOAD_START",
+    "SCREEN_LOADED",
+    "SCREEN_UNLOADED"
+] as const;
+
+export function isLvglScreenLifecycleEvent(eventName: string): boolean {
+    return (LVGL_SCREEN_LIFECYCLE_EVENTS as readonly string[]).includes(
+        eventName
+    );
+}
+
 export type LVGLStylePropCode = {
     "8.4.0": number | undefined;
     "9.2.2": number | undefined;

@@ -97,6 +97,9 @@ export class PageTabState extends FlowTabState {
     // background (e.g. to check visibility on dark screens).
     previewBackgroundColor: string | undefined = undefined;
 
+    // Editor-only presentation. Never written to the actual LVGL project.
+    lvglEditorViewMode: "expanded" | "device" = "expanded";
+
     constructor(object: IEezObject, transform?: Transform) {
         super(object as Flow);
 
@@ -104,7 +107,8 @@ export class PageTabState extends FlowTabState {
             _transform: observable,
             transform: computed,
             frontFace: computed,
-            previewBackgroundColor: observable
+            previewBackgroundColor: observable,
+            lvglEditorViewMode: observable
         });
 
         this.widgetContainerFrontFace = new PageTreeObjectAdapter(
@@ -232,6 +236,11 @@ export class PageTabState extends FlowTabState {
         if (state.timeline) {
             this.timeline.loadState(state.timeline);
         }
+
+        if (state.lvglEditorViewMode === "device" ||
+            state.lvglEditorViewMode === "expanded") {
+            this.lvglEditorViewMode = state.lvglEditorViewMode;
+        }
     }
 
     saveState() {
@@ -249,7 +258,8 @@ export class PageTabState extends FlowTabState {
                 },
                 scale: this.transform.scale
             },
-            timeline: this.timeline.saveState()
+            timeline: this.timeline.saveState(),
+            lvglEditorViewMode: this.lvglEditorViewMode
         };
 
         this.projectStore.uiStateStore.updateObjectUIState(

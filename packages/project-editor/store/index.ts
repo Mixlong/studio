@@ -151,6 +151,9 @@ export class ProjectStore {
     project: Project;
 
     undoManager: UndoManager;
+    // Only the active project tab may publish native Edit menu state.
+    // Otherwise a background project can overwrite Undo/Redo availability.
+    isActiveProjectTab = false;
     navigationStore: NavigationStore;
     layoutModels: LayoutModels;
     editorModeEditorsStore: EditorsStore;
@@ -244,6 +247,7 @@ export class ProjectStore {
 
         makeObservable<ProjectStore>(this, {
             runtime: observable,
+            isActiveProjectTab: observable,
             project: observable,
             filePath: observable,
             backgroundCheckEnabled: observable,
@@ -295,6 +299,9 @@ export class ProjectStore {
     }
 
     onActivate() {
+        if (this.context.type === "project-editor") {
+            runInAction(() => (this.isActiveProjectTab = true));
+        }
         const Mousetrap = require("mousetrap") as typeof MousetrapModule;
 
         Mousetrap.reset();
@@ -408,6 +415,9 @@ export class ProjectStore {
     }
 
     onDeactivate() {
+        if (this.context.type === "project-editor") {
+            runInAction(() => (this.isActiveProjectTab = false));
+        }
         const Mousetrap = require("mousetrap") as typeof MousetrapModule;
 
         Mousetrap.reset();
@@ -570,23 +580,24 @@ export class ProjectStore {
     }
 
     updateProjectWindowState() {
-        if (this.context.type != "project-editor") {
+        if (
+            this.context.type != "project-editor" ||
+            !this.isActiveProjectTab
+        ) {
             return;
         }
 
         ipcRenderer.send("windowSetState", {
             modified: this.isModified,
             projectFilePath: this.filePath,
-            undo:
-                (this.undoManager &&
-                    this.undoManager.canUndo &&
-                    this.undoManager.undoDescription) ||
-                null,
-            redo:
-                (this.undoManager &&
-                    this.undoManager.canRedo &&
-                    this.undoManager.redoDescription) ||
-                null,
+            // Menu availability must depend on the command history, not
+            // whether an individual command happened to have a description.
+            undo: this.undoManager?.canUndo
+                ? this.undoManager.undoDescription || "Undo"
+                : null,
+            redo: this.undoManager?.canRedo
+                ? this.undoManager.redoDescription || "Redo"
+                : null,
             isDebuggerActive: this.runtime && this.runtime.isDebuggerActive,
             hasExtensionDefinitions:
                 this.project?.extensionDefinitions?.length > 0

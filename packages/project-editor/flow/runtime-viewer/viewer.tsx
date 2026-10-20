@@ -26,6 +26,7 @@ import type { Flow } from "project-editor/flow/flow";
 import type { FlowTabState } from "project-editor/flow/flow-tab-state";
 import type { IFlowContext } from "project-editor/flow/flow-interfaces";
 import { RuntimeFlowContext } from "project-editor/flow/runtime-viewer/context";
+import { fitRunCanvas } from "project-editor/flow/runtime-viewer/run-layout";
 
 import { Svg } from "project-editor/flow/editor/render";
 import {
@@ -472,6 +473,7 @@ export const Canvas = observer(
             let xt: number;
             let yt: number;
             let scale: number;
+            let fittedRunDisplay = false;
             if (
                 runMode &&
                 this.props.flowContext.projectStore.projectTypeTraits
@@ -487,6 +489,10 @@ export const Canvas = observer(
                 runMode &&
                 this.props.flowContext.projectStore.projectTypeTraits
                     .isFirmware &&
+                !this.props.flowContext.projectStore.projectTypeTraits
+                    .isLVGL &&
+                !this.props.flowContext.projectStore.projectTypeTraits
+                    .isEezGuiLite &&
                 this.props.flowContext.projectStore.projectTypeTraits
                     .hasFlowSupport &&
                 this.props.flowContext.projectStore.runtime instanceof
@@ -521,24 +527,17 @@ export const Canvas = observer(
                     this.props.flowContext.projectStore.runtime instanceof
                         ProjectEditor.EezGuiLiteWasmRuntimeClass)
             ) {
-                xt = Math.round(
-                    (transform.clientRect.width -
-                        this.props.flowContext.projectStore.runtime
-                            .displayWidth) /
-                        2
+                const layout = fitRunCanvas(
+                    transform.clientRect.width,
+                    transform.clientRect.height,
+                    this.props.flowContext.projectStore.runtime.displayWidth,
+                    this.props.flowContext.projectStore.runtime.displayHeight,
+                    transform.scale
                 );
-
-                yt = Math.round(
-                    (transform.clientRect.height -
-                        this.props.flowContext.projectStore.runtime
-                            .displayHeight) /
-                        2
-                );
-                if (yt < 0) {
-                    yt = 0;
-                }
-
-                scale = transform.scale;
+                xt = layout.x;
+                yt = layout.y;
+                scale = layout.scale;
+                fittedRunDisplay = true;
             } else {
                 xt = Math.round(
                     transform.translate.x + transform.clientRect.width / 2
@@ -578,6 +577,12 @@ export const Canvas = observer(
                         className="eez-canvas"
                         style={{
                             position: "absolute",
+                            // Centering was computed from device's top left.
+                            // The default CSS center origin shifts scaled
+                            // framebuffer content into the wrong position.
+                            transformOrigin: fittedRunDisplay
+                                ? "top left"
+                                : undefined,
                             transform: `translate(${xt}px, ${yt}px) scale(${scale})`
                         }}
                     >

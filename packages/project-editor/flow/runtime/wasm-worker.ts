@@ -1007,6 +1007,10 @@ export function createWasmWorker(
                     pointerEvent.y,
                     pointerEvent.pressed
                 );
+                // Process each pointer state immediately. A quick press/release
+                // can otherwise be batched into one renderer message and LVGL
+                // only observes the final released state.
+                WasmFlowRuntime._mainLoop();
             }
         }
 

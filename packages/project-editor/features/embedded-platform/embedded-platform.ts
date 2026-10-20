@@ -30,6 +30,13 @@ export const DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY = "build";
 export const DEFAULT_LOCAL_WEBSOCKET_ENDPOINT =
     "ws://192.168.124.144:8765";
 
+const DEFAULT_REMOTE_PROJECT_DIRECTORY = "D:/__PRJ__/S350_EEZ";
+const DEFAULT_REMOTE_CONFIG_FILE =
+    "D:/__PRJ__/S350_EEZ/cmake_config_MH2457.py";
+const DEFAULT_REMOTE_BUILD_DIRECTORY = "D:/__PRJ__/S350_EEZ/build";
+const DEFAULT_REMOTE_FIRMWARE_PATH =
+    "D:/__PRJ__/S350_EEZ/build/HMI_MH2457.bin";
+
 const LEGACY_EMBEDDED_BUILD_OUTPUT_DIRECTORY = "build/firmware";
 const LEGACY_LOCAL_WEBSOCKET_ENDPOINTS = new Set([
     "ws://127.0.0.1:8765",
@@ -444,6 +451,7 @@ registerClass("ProtocolResource", ProtocolResource);
 export class EmbeddedBuildSettings extends EezObject {
     pythonExecutable: string;
     scriptPath: string;
+    cmakeConfigFile: string;
     outputDirectory: string;
     cmakeGenerator: string;
     extraArguments: string;
@@ -454,6 +462,7 @@ export class EmbeddedBuildSettings extends EezObject {
         properties: [
             { name: "pythonExecutable", displayName: "Python", type: PropertyType.String },
             { name: "scriptPath", displayName: "Resource/build script", type: PropertyType.RelativeFile },
+            { name: "cmakeConfigFile", displayName: "CMake config file", type: PropertyType.RelativeFile },
             { name: "outputDirectory", displayName: "Output directory", type: PropertyType.RelativeFolder },
             { name: "cmakeGenerator", displayName: "CMake generator", type: PropertyType.String },
             { name: "extraArguments", displayName: "Extra arguments", type: PropertyType.MultilineText },
@@ -462,6 +471,7 @@ export class EmbeddedBuildSettings extends EezObject {
         defaultValue: {
             pythonExecutable: "python3",
             scriptPath: "",
+            cmakeConfigFile: "",
             outputDirectory: DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY,
             cmakeGenerator: "",
             extraArguments: "",
@@ -471,6 +481,9 @@ export class EmbeddedBuildSettings extends EezObject {
             _object: EmbeddedBuildSettings,
             jsObject: Partial<EmbeddedBuildSettings>
         ) => {
+            if (jsObject.cmakeConfigFile === undefined) {
+                jsObject.cmakeConfigFile = "";
+            }
             if (jsObject.outputDirectory === undefined) {
                 jsObject.outputDirectory = DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY;
             } else if (
@@ -483,6 +496,13 @@ export class EmbeddedBuildSettings extends EezObject {
         },
         check: (object: EmbeddedBuildSettings, messages: IMessage[]) => {
             checkPath(object, "scriptPath", object.scriptPath, messages, "Build script");
+            checkPath(
+                object,
+                "cmakeConfigFile",
+                object.cmakeConfigFile,
+                messages,
+                "CMake config file"
+            );
         }
     };
 
@@ -491,6 +511,7 @@ export class EmbeddedBuildSettings extends EezObject {
         makeObservable(this, {
             pythonExecutable: observable,
             scriptPath: observable,
+            cmakeConfigFile: observable,
             outputDirectory: observable,
             cmakeGenerator: observable,
             extraArguments: observable,
@@ -551,7 +572,7 @@ export class EmbeddedWebSocketSettings extends EezObject {
             }
         ],
         defaultValue: {
-            enabled: false,
+            enabled: true,
             environment: "local",
             localEndpoint: DEFAULT_LOCAL_WEBSOCKET_ENDPOINT,
             productionEndpoint: "",
@@ -562,7 +583,7 @@ export class EmbeddedWebSocketSettings extends EezObject {
             jsObject: Partial<EmbeddedWebSocketSettings> & { endpoint?: string }
         ) => {
             if (jsObject.enabled === undefined) {
-                jsObject.enabled = false;
+                jsObject.enabled = true;
             }
             if (jsObject.environment === undefined) {
                 jsObject.environment = "local";
@@ -641,12 +662,176 @@ export function getEmbeddedWebSocketEndpoint(settings: EmbeddedWebSocketSettings
 
 ////////////////////////////////////////////////////////////////////////////////
 
+export class EmbeddedRemoteBuildSettings extends EezObject {
+    projectDirectory: string;
+    configFile: string;
+    outputDirectory: string;
+
+    static classInfo: ClassInfo = {
+        label: () => "Remote build",
+        properties: [
+            {
+                name: "projectDirectory",
+                displayName: "Project directory (remote)",
+                type: PropertyType.String
+            },
+            {
+                name: "configFile",
+                displayName: "CMake config file (remote)",
+                type: PropertyType.String
+            },
+            {
+                name: "outputDirectory",
+                displayName: "Build directory (remote)",
+                type: PropertyType.String
+            }
+        ],
+        defaultValue: {
+            projectDirectory: DEFAULT_REMOTE_PROJECT_DIRECTORY,
+            configFile: DEFAULT_REMOTE_CONFIG_FILE,
+            outputDirectory: DEFAULT_REMOTE_BUILD_DIRECTORY
+        }
+    };
+
+    override makeEditable() {
+        super.makeEditable();
+        makeObservable(this, {
+            projectDirectory: observable,
+            configFile: observable,
+            outputDirectory: observable
+        });
+    }
+}
+
+registerClass("EmbeddedRemoteBuildSettings", EmbeddedRemoteBuildSettings);
+
+export class EmbeddedRemoteDownloadSettings extends EezObject {
+    target: string;
+    pack: string;
+    script: string;
+    frequency: string;
+    firmwarePath: string;
+    addressOffset: string;
+
+    static classInfo: ClassInfo = {
+        label: () => "Remote download",
+        properties: [
+            { name: "target", displayName: "Target identifier", type: PropertyType.String },
+            { name: "pack", displayName: "Middleware pack", type: PropertyType.String },
+            { name: "script", displayName: "Middleware script", type: PropertyType.String },
+            {
+                name: "frequency",
+                displayName: "Middleware frequency (Hz)",
+                type: PropertyType.String
+            },
+            {
+                name: "firmwarePath",
+                displayName: "Firmware path (remote)",
+                type: PropertyType.String
+            },
+            {
+                name: "addressOffset",
+                displayName: "Address offset",
+                type: PropertyType.String
+            }
+        ],
+        defaultValue: {
+            target: "mh2457",
+            pack: "null",
+            script: "null",
+            frequency: "500000",
+            firmwarePath: DEFAULT_REMOTE_FIRMWARE_PATH,
+            addressOffset: "0x08001000"
+        },
+        check: (object: EmbeddedRemoteDownloadSettings, messages: IMessage[]) => {
+            if (
+                object.frequency &&
+                (!/^\d+$/.test(object.frequency.trim()) || Number(object.frequency) <= 0)
+            ) {
+                messages.push(
+                    new Message(
+                        MessageType.ERROR,
+                        "Remote middleware frequency must be a positive integer in Hz.",
+                        getChildOfObject(object, "frequency")
+                    )
+                );
+            }
+            if (
+                object.addressOffset &&
+                !/^(0x[0-9a-f]+|\d+)$/i.test(object.addressOffset.trim())
+            ) {
+                messages.push(
+                    new Message(
+                        MessageType.ERROR,
+                        "Remote firmware address offset must be decimal or hexadecimal.",
+                        getChildOfObject(object, "addressOffset")
+                    )
+                );
+            }
+        }
+    };
+
+    override makeEditable() {
+        super.makeEditable();
+        makeObservable(this, {
+            target: observable,
+            pack: observable,
+            script: observable,
+            frequency: observable,
+            firmwarePath: observable,
+            addressOffset: observable
+        });
+    }
+}
+
+registerClass("EmbeddedRemoteDownloadSettings", EmbeddedRemoteDownloadSettings);
+
+export class EmbeddedRemoteSettings extends EezObject {
+    build: EmbeddedRemoteBuildSettings;
+    download: EmbeddedRemoteDownloadSettings;
+
+    static classInfo: ClassInfo = {
+        label: () => "Remote middleware workspace",
+        properties: [
+            {
+                name: "build",
+                type: PropertyType.Object,
+                typeClass: EmbeddedRemoteBuildSettings
+            },
+            {
+                name: "download",
+                type: PropertyType.Object,
+                typeClass: EmbeddedRemoteDownloadSettings
+            }
+        ],
+        defaultValue: {
+            build: EmbeddedRemoteBuildSettings.classInfo.defaultValue,
+            download: EmbeddedRemoteDownloadSettings.classInfo.defaultValue
+        }
+    };
+
+    override makeEditable() {
+        super.makeEditable();
+        makeObservable(this, {
+            build: observable,
+            download: observable
+        });
+    }
+}
+
+registerClass("EmbeddedRemoteSettings", EmbeddedRemoteSettings);
+
+////////////////////////////////////////////////////////////////////////////////
+
 export class EmbeddedDownloadSettings extends EezObject {
     tool: EmbeddedDownloadTool;
     executablePath: string;
     interfaceName: string;
     addressOffset: string;
     targetId: string;
+    pack: string;
+    script: string;
+    frequency: string;
     speed: string;
     commandArguments: string;
 
@@ -664,10 +849,17 @@ export class EmbeddedDownloadSettings extends EezObject {
                 enumDisallowUndefined: true
             },
             { name: "executablePath", displayName: "Executable", type: PropertyType.String },
-            { name: "interfaceName", displayName: "Interface", type: PropertyType.String },
+            { name: "interfaceName", displayName: "Interface (local CLI)", type: PropertyType.String },
             { name: "addressOffset", displayName: "Address offset", type: PropertyType.String },
             { name: "targetId", displayName: "Target identifier", type: PropertyType.String },
-            { name: "speed", displayName: "Speed (kHz)", type: PropertyType.String },
+            { name: "pack", displayName: "Middleware pack", type: PropertyType.String },
+            { name: "script", displayName: "Middleware script", type: PropertyType.String },
+            { name: "frequency", displayName: "Middleware frequency (Hz)", type: PropertyType.String },
+            {
+                name: "speed",
+                displayName: "Speed (kHz, local CLI)",
+                type: PropertyType.String
+            },
             { name: "commandArguments", displayName: "Command arguments", type: PropertyType.MultilineText }
         ],
         defaultValue: {
@@ -676,6 +868,9 @@ export class EmbeddedDownloadSettings extends EezObject {
             interfaceName: "",
             addressOffset: "0x0",
             targetId: "",
+            pack: "null",
+            script: "null",
+            frequency: "500000",
             speed: "5000",
             commandArguments: ""
         },
@@ -683,6 +878,19 @@ export class EmbeddedDownloadSettings extends EezObject {
             _object: EmbeddedDownloadSettings,
             jsObject: Partial<EmbeddedDownloadSettings>
         ) => {
+            if (jsObject.pack === undefined) {
+                jsObject.pack = "null";
+            }
+            if (jsObject.script === undefined) {
+                jsObject.script = "null";
+            }
+            if (jsObject.frequency === undefined) {
+                const legacySpeed = jsObject.speed?.trim();
+                jsObject.frequency =
+                    legacySpeed && /^\d+$/.test(legacySpeed)
+                        ? String(Number(legacySpeed) * 1000)
+                        : "500000";
+            }
             if (jsObject.speed === undefined) {
                 jsObject.speed = "5000";
             }
@@ -712,6 +920,18 @@ export class EmbeddedDownloadSettings extends EezObject {
                     )
                 );
             }
+            if (
+                object.frequency &&
+                (!/^\d+$/.test(object.frequency.trim()) || Number(object.frequency) <= 0)
+            ) {
+                messages.push(
+                    new Message(
+                        MessageType.ERROR,
+                        "Middleware download frequency must be a positive integer in Hz.",
+                        getChildOfObject(object, "frequency")
+                    )
+                );
+            }
         }
     };
 
@@ -723,6 +943,9 @@ export class EmbeddedDownloadSettings extends EezObject {
             interfaceName: observable,
             addressOffset: observable,
             targetId: observable,
+            pack: observable,
+            script: observable,
+            frequency: observable,
             speed: observable,
             commandArguments: observable
         });
@@ -769,6 +992,7 @@ export class EmbeddedPlatform extends EezObject {
     protocols: ProtocolResource[];
     build: EmbeddedBuildSettings;
     websocket: EmbeddedWebSocketSettings;
+    remote: EmbeddedRemoteSettings;
     download: EmbeddedDownloadSettings;
     hiddenComponents: HiddenComponent[];
     cloudEndpoint: string;
@@ -781,6 +1005,7 @@ export class EmbeddedPlatform extends EezObject {
             { name: "protocols", type: PropertyType.Array, typeClass: ProtocolResource, defaultValue: [] },
             { name: "build", type: PropertyType.Object, typeClass: EmbeddedBuildSettings },
             { name: "websocket", type: PropertyType.Object, typeClass: EmbeddedWebSocketSettings },
+            { name: "remote", type: PropertyType.Object, typeClass: EmbeddedRemoteSettings },
             { name: "download", type: PropertyType.Object, typeClass: EmbeddedDownloadSettings },
             { name: "hiddenComponents", type: PropertyType.Array, typeClass: HiddenComponent, defaultValue: [] },
             { name: "cloudEndpoint", displayName: "Protocol cloud endpoint", type: PropertyType.String }
@@ -791,6 +1016,7 @@ export class EmbeddedPlatform extends EezObject {
             protocols: [],
             build: EmbeddedBuildSettings.classInfo.defaultValue,
             websocket: EmbeddedWebSocketSettings.classInfo.defaultValue,
+            remote: EmbeddedRemoteSettings.classInfo.defaultValue,
             download: EmbeddedDownloadSettings.classInfo.defaultValue,
             hiddenComponents: [],
             cloudEndpoint: ""
@@ -801,6 +1027,9 @@ export class EmbeddedPlatform extends EezObject {
         ) => {
             if (jsObject.websocket === undefined) {
                 jsObject.websocket = EmbeddedWebSocketSettings.classInfo.defaultValue;
+            }
+            if (jsObject.remote === undefined) {
+                jsObject.remote = EmbeddedRemoteSettings.classInfo.defaultValue;
             }
         }
     };
@@ -813,6 +1042,7 @@ export class EmbeddedPlatform extends EezObject {
             protocols: observable,
             build: observable,
             websocket: observable,
+            remote: observable,
             download: observable,
             hiddenComponents: observable,
             cloudEndpoint: observable

@@ -24,7 +24,9 @@ class GroupCollapsedStore {
         if (collapsed !== undefined) {
             return collapsed;
         }
-        return false;
+        // Widget-specific advanced options start closed, but the choice can
+        // still be toggled and is persisted with the existing store.
+        return group.id == "lvgl-widget-advanced";
     }
 
     toggleColapsed(group: IPropertyGridGroupDefinition) {

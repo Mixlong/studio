@@ -336,16 +336,11 @@ export class LayoutModels extends AbstractLayoutModels {
         borders.push({
             type: "border",
             location: "right",
-            size: 360,
-            selected: 0,
-            className: "DigiStudio_AuxiliaryBar",
+            size: 240,
             children: [
-                LayoutModels.PROPERTIES_TAB,
-                LayoutModels.COMPONENTS_PALETTE_TAB,
                 LayoutModels.STYLES_TAB,
                 LayoutModels.FONTS_TAB,
                 LayoutModels.BITMAPS_TAB,
-                LayoutModels.AUDIO_TAB,
                 LayoutModels.THEMES_TAB,
                 LayoutModels.LVGL_GROUPS_TAB,
                 LayoutModels.BREAKPOINTS_TAB
@@ -390,21 +385,12 @@ export class LayoutModels extends AbstractLayoutModels {
         borders.push({
             type: "border",
             location: "left",
-            size: 340,
-            selected: 0,
-            className: "DigiStudio_ActivityBar",
+            size: 240,
             children: [
-                LayoutModels.PAGES_TAB,
-                LayoutModels.WIDGETS_TAB,
-                LayoutModels.ACTIONS_TAB,
-                LayoutModels.FLOW_STRUCTURE_TAB,
-                LayoutModels.VARIABLES_TAB,
                 LayoutModels.TEXTS_TAB,
-                LayoutModels.EMBEDDED_PLATFORM_TAB,
                 LayoutModels.SCPI_TAB,
                 LayoutModels.INSTRUMENT_COMMANDS_TAB,
-                LayoutModels.EXTENSION_DEFINITIONS_TAB,
-                LayoutModels.CHANGES_TAB
+                LayoutModels.EXTENSION_DEFINITIONS_TAB
             ]
         });
 
@@ -423,10 +409,8 @@ export class LayoutModels extends AbstractLayoutModels {
         borders.push({
             type: "border",
             location: "right",
-            size: 420,
-            selected: 0,
-            className: "DigiStudio_AuxiliaryBar",
-            children: [LayoutModels.PROPERTIES_TAB]
+            size: 240,
+            children: []
         });
 
         borders.push({
@@ -464,84 +448,14 @@ export class LayoutModels extends AbstractLayoutModels {
             ]
         });
 
-        borders.push({
-            type: "border",
-            location: "left",
-            size: 350,
-            selected: 0,
-            className: "DigiStudio_ActivityBar",
-            children: [
-                LayoutModels.EXTENSION_DEFINITIONS_TAB,
-                LayoutModels.SCPI_TAB,
-                LayoutModels.INSTRUMENT_COMMANDS_TAB,
-                LayoutModels.CHANGES_TAB
-            ]
-        });
-
         return borders;
-    }
-
-    get bordersRuntime() {
-        return [
-            {
-                type: "border",
-                location: "left",
-                size: 320,
-                selected: 0,
-                className: "DigiStudio_ActivityBar",
-                children: [
-                    LayoutModels.PAGES_TAB,
-                    LayoutModels.WIDGETS_TAB,
-                    LayoutModels.ACTIONS_TAB,
-                    {
-                        type: "tab",
-                        enableClose: false,
-                        name: "Active Flows",
-                        icon: "svg:active_flows_panel",
-                        component: "active-flows"
-                    },
-                    {
-                        type: "tab",
-                        enableClose: false,
-                        name: "Watch",
-                        icon: "svg:watch_panel",
-                        component: "watch"
-                    }
-                ]
-            },
-            {
-                type: "border",
-                location: "right",
-                size: 320,
-                selected: 0,
-                className: "DigiStudio_AuxiliaryBar",
-                children: [
-                    {
-                        type: "tab",
-                        enableClose: false,
-                        name: "Queue",
-                        icon: "svg:queue_panel",
-                        component: "queue"
-                    },
-                    LayoutModels.BREAKPOINTS_TAB,
-                    {
-                        type: "tab",
-                        enableClose: false,
-                        name: "Logs",
-                        id: LayoutModels.DEBUGGER_LOGS_TAB_ID,
-                        icon: "svg:log",
-                        component: "logs"
-                    }
-                ]
-            }
-        ] as FlexLayout.IJsonBorderNode[];
     }
 
     get models(): ILayoutModel[] {
         return [
             {
                 name: "rootEditor",
-                version: 119,
+                version: 120,
                 json: {
                     global: LayoutModels.GLOBAL_OPTIONS,
                     borders: this.borders,
@@ -549,12 +463,57 @@ export class LayoutModels extends AbstractLayoutModels {
                         type: "row",
                         children: [
                             {
+                                type: "row",
+                                weight: 15,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            LayoutModels.PAGES_TAB,
+                                            LayoutModels.WIDGETS_TAB,
+                                            LayoutModels.ACTIONS_TAB
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            LayoutModels.FLOW_STRUCTURE_TAB
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [LayoutModels.VARIABLES_TAB]
+                                    }
+                                ]
+                            },
+                            {
                                 type: "tabset",
-                                weight: 1,
+                                weight: 65,
                                 enableDeleteWhenEmpty: false,
                                 enableClose: false,
                                 id: LayoutModels.EDITOR_MODE_EDITORS_TABSET_ID,
                                 children: []
+                            },
+                            {
+                                type: "row",
+                                weight: 20,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 2,
+                                        children: [LayoutModels.PROPERTIES_TAB]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            LayoutModels.COMPONENTS_PALETTE_TAB
+                                        ]
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -564,7 +523,7 @@ export class LayoutModels extends AbstractLayoutModels {
             },
             {
                 name: "rootEditorForIEXT",
-                version: 6,
+                version: 7,
                 json: {
                     global: LayoutModels.GLOBAL_OPTIONS,
                     borders: this.bordersIEXT,
@@ -572,12 +531,48 @@ export class LayoutModels extends AbstractLayoutModels {
                         type: "row",
                         children: [
                             {
+                                type: "row",
+                                weight: 25,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            LayoutModels.EXTENSION_DEFINITIONS_TAB
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 5,
+                                        children: [LayoutModels.SCPI_TAB]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 5,
+                                        children: [
+                                            LayoutModels.INSTRUMENT_COMMANDS_TAB
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
                                 type: "tabset",
                                 weight: 50,
                                 enableClose: false,
                                 enableDeleteWhenEmpty: false,
                                 id: LayoutModels.EDITOR_MODE_EDITORS_TABSET_ID,
                                 children: []
+                            },
+                            {
+                                type: "row",
+                                weight: 25,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 2,
+                                        children: [LayoutModels.PROPERTIES_TAB]
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -587,13 +582,53 @@ export class LayoutModels extends AbstractLayoutModels {
             },
             {
                 name: "rootRuntime",
-                version: 55,
+                version: 56,
                 json: {
                     global: LayoutModels.GLOBAL_OPTIONS,
-                    borders: this.bordersRuntime,
                     layout: {
                         type: "row",
                         children: [
+                            {
+                                type: "row",
+                                weight: 1,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            LayoutModels.PAGES_TAB,
+                                            LayoutModels.WIDGETS_TAB,
+                                            LayoutModels.ACTIONS_TAB
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            {
+                                                type: "tab",
+                                                enableClose: false,
+                                                name: "Active Flows",
+                                                icon: "svg:active_flows_panel",
+                                                component: "active-flows"
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 2,
+                                        children: [
+                                            {
+                                                type: "tab",
+                                                enableClose: false,
+                                                name: "Watch",
+                                                icon: "svg:watch_panel",
+                                                component: "watch"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
                             {
                                 type: "tabset",
                                 weight: 3,
@@ -601,6 +636,40 @@ export class LayoutModels extends AbstractLayoutModels {
                                 enableDeleteWhenEmpty: false,
                                 id: LayoutModels.RUNTIME_MODE_EDITORS_TABSET_ID,
                                 children: []
+                            },
+                            {
+                                type: "row",
+                                weight: 1,
+                                children: [
+                                    {
+                                        type: "tabset",
+                                        weight: 1,
+                                        children: [
+                                            {
+                                                type: "tab",
+                                                enableClose: false,
+                                                name: "Queue",
+                                                icon: "svg:queue_panel",
+                                                component: "queue"
+                                            },
+                                            LayoutModels.BREAKPOINTS_TAB
+                                        ]
+                                    },
+                                    {
+                                        type: "tabset",
+                                        weight: 2,
+                                        children: [
+                                            {
+                                                type: "tab",
+                                                enableClose: false,
+                                                name: "Logs",
+                                                id: LayoutModels.DEBUGGER_LOGS_TAB_ID,
+                                                icon: "svg:log",
+                                                component: "logs"
+                                            }
+                                        ]
+                                    }
+                                ]
                             }
                         ]
                     }
@@ -1162,9 +1231,44 @@ export class LayoutModels extends AbstractLayoutModels {
 
     load(layoutModels: any) {
         super.load(layoutModels);
+
+        // Existing workspaces persist their FlexLayout tabs independently.
+        // Remove the obsolete docked Changes tab without resetting any other
+        // saved layout, sizes or open editors. Full diff remains available.
+        for (const model of [this.rootEditor, this.rootEditorForIEXT]) {
+            if (model?.getNodeById(LayoutModels.CHANGES_TAB_ID)) {
+                model.doAction(
+                    FlexLayout.Actions.deleteTab(
+                        LayoutModels.CHANGES_TAB_ID
+                    )
+                );
+            }
+        }
+
         this.projectStore.project.enableTabs();
+        this.collapseEmbeddedPlatformOnLoad();
         this.ensureAudioBorderWidth();
-        this.ensureLeftBorder();
+    }
+
+    // A saved workspace can reopen the Embedded Platform border at startup.
+    // Close only this panel during layout initialization; retain the icon,
+    // tab, previous width and all settings for manual access later.
+    private collapseEmbeddedPlatformOnLoad() {
+        const model = this.rootEditor;
+        const node = model.getNodeById(LayoutModels.EMBEDDED_PLATFORM_TAB_ID);
+        const parent = node?.getParent();
+        if (
+            parent instanceof FlexLayout.BorderNode &&
+            parent.getLocation() === FlexLayout.DockLocation.LEFT &&
+            parent.getSelectedNode() === node
+        ) {
+            // Selecting an already selected border tab collapses the border.
+            model.doAction(
+                FlexLayout.Actions.selectTab(
+                    LayoutModels.EMBEDDED_PLATFORM_TAB_ID
+                )
+            );
+        }
     }
 
     ensureAudioBorderWidth() {
@@ -1182,90 +1286,6 @@ export class LayoutModels extends AbstractLayoutModels {
                     { borderWidth: 420 }
                 )
             );
-        }
-    }
-
-    ensureLeftBorder() {
-        const models = [
-            this.rootEditor,
-            this.rootEditorForIEXT,
-            this.rootRuntime,
-            this.rootDockerSimulator
-        ];
-
-        for (const model of models) {
-            if (!model) continue;
-            try {
-                model.visitNodes(node => {
-                    if (!(node instanceof FlexLayout.BorderNode)) {
-                        return;
-                    }
-                    const border = node;
-                    const location = border.getLocation().getName();
-                    const isLeft = location === "left";
-                    const isEditorRightSidebar =
-                        location === "right" &&
-                        (model === this.rootEditor ||
-                            model === this.rootEditorForIEXT);
-
-                    if (!isLeft && !isEditorRightSidebar) {
-                        return;
-                    }
-
-                    const expectedBorderClassName = isLeft
-                        ? "DigiStudio_ActivityBar"
-                        : "DigiStudio_AuxiliaryBar";
-                    const borderUpdates: any = {};
-
-                    if (border.getClassName() !== expectedBorderClassName) {
-                        borderUpdates.className = expectedBorderClassName;
-                    }
-                    if (Object.keys(borderUpdates).length > 0) {
-                        model.doAction(
-                            FlexLayout.Actions.updateNodeAttributes(
-                                border.getId(),
-                                borderUpdates
-                            )
-                        );
-                    }
-
-                    for (const child of border.getChildren()) {
-                        if (child instanceof FlexLayout.TabNode) {
-                            const tabId = child.getId();
-                            const expectedHelpText = isLeft
-                                ? getActivityBarTabTitle(
-                                      tabId,
-                                      child.getName()
-                                  )
-                                : child.getName();
-                            const updates: any = {};
-
-                            if (child.getHelpText() !== expectedHelpText) {
-                                updates.helpText = expectedHelpText;
-                            }
-                            if (
-                                isLeft &&
-                                child.getClassName() !==
-                                    "DigiStudio_ActivityBarTab"
-                            ) {
-                                updates.className =
-                                    "DigiStudio_ActivityBarTab";
-                            }
-
-                            if (Object.keys(updates).length > 0) {
-                                model.doAction(
-                                    FlexLayout.Actions.updateNodeAttributes(
-                                        tabId,
-                                        updates
-                                    )
-                                );
-                            }
-                        }
-                    }
-                });
-            } catch (err) {
-                console.error("Error ensuring left border:", err);
-            }
         }
     }
 
@@ -1288,14 +1308,12 @@ export class LayoutModels extends AbstractLayoutModels {
 
         this.projectStore.project.enableTabs();
         this.ensureAudioBorderWidth();
-        this.ensureLeftBorder();
     }
 
     toggleComponentsPalette() {
         settingsController.showComponentsPaletteInProjectEditor =
             !settingsController.showComponentsPaletteInProjectEditor;
         this.projectStore.project.enableTabs();
-        this.ensureLeftBorder();
     }
 
     reset() {
@@ -1304,28 +1322,9 @@ export class LayoutModels extends AbstractLayoutModels {
         }
 
         this.projectStore.project.enableTabs();
+        this.collapseEmbeddedPlatformOnLoad();
         this.ensureAudioBorderWidth();
-        this.ensureLeftBorder();
     }
 
     unmount() {}
-}
-
-export function getActivityBarTabTitle(nodeId: string, name?: string): string {
-    switch (nodeId) {
-        case LayoutModels.EMBEDDED_PLATFORM_TAB_ID:
-            return "Embedded Platform";
-        case LayoutModels.TEXTS_TAB_ID:
-            return "Texts";
-        case LayoutModels.SCPI_TAB_ID:
-            return "SCPI";
-        case LayoutModels.INSTRUMENT_COMMANDS_TAB_ID:
-            return "Instrument Commands";
-        case LayoutModels.EXTENSION_DEFINITIONS_TAB_ID:
-            return "Extensions";
-        case LayoutModels.CHANGES_TAB_ID:
-            return "Changes";
-        default:
-            return name || nodeId;
-    }
 }

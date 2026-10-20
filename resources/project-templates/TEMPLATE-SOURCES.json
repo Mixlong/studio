@@ -1,0 +1,105 @@
+{
+  "source_repository": "https://github.com/eez-open/eez-project-templates",
+  "source_branch": "master",
+  "upstream_license": "MIT",
+  "license_file": "LICENSE.txt",
+  "resources": [
+    {
+      "path": "templates/dashboard.eez-project",
+      "bytes": 2467,
+      "sha256": "35822d6681ab5f66aca60e028fbcd61f5a43f6c19464e3ded22142a629816751"
+    },
+    {
+      "path": "templates/firmware.eez-project",
+      "bytes": 98972,
+      "sha256": "701440fb5bce618c80c42f9583fb1ecec06cf56ce5f521d7a3625077e675e0d4"
+    },
+    {
+      "path": "templates/v0.23.0/LVGL-8.3.eez-project",
+      "bytes": 10766,
+      "sha256": "29ec02d5fb34d7e39b4d823d3998093a450361f2e1d007c25f1d3ccd39578ce2"
+    },
+    {
+      "path": "templates/v0.23.0/LVGL-9.0.eez-project",
+      "bytes": 10766,
+      "sha256": "25872ce930a417e9138de6548abdd5de323c8abebbe58f1f2f07dfebe4dcf25b"
+    },
+    {
+      "path": "templates/v0.23.0/LVGL with EEZ Flow-8.3.eez-project",
+      "bytes": 10745,
+      "sha256": "2afd40b3909aa5c4d27a984b5047ebd39bddb2316465d0c03038beb6868ca139"
+    },
+    {
+      "path": "templates/v0.23.0/LVGL with EEZ Flow-9.0.eez-project",
+      "bytes": 10741,
+      "sha256": "108b1c9966aeb62a4d25b4bdf7f15ec5927c6b108823b7b7141812ad0155cae4"
+    },
+    {
+      "path": "templates/IEXT.eez-project",
+      "bytes": 1928,
+      "sha256": "4b65faeae9e099c2326bfd4850f7e281d0cfa9abf75cb2c8359ea6413f0934fe"
+    },
+    {
+      "path": "templates/IEXT - PROPRIETARY.eez-project",
+      "bytes": 2073,
+      "sha256": "7eb165acdc6765ea488f5b4f8d2f6bbb4567d899f6ca562e3d7144c439ff464a"
+    },
+    {
+      "path": "templates/eez-gui-lite.eez-project",
+      "bytes": 75173,
+      "sha256": "f9406d2641943c89b38f68888f4056c8462ba0ffda49de8c4ab36150ade33833"
+    },
+    {
+      "path": "templates/applet.eez-project",
+      "bytes": 2931,
+      "sha256": "c12456e6bf15e562bd512405f3e735b4419bfec2eaea5427df0d714e145a2044"
+    },
+    {
+      "path": "templates/resource.eez-project",
+      "bytes": 3355,
+      "sha256": "44b8c0d97bd09f1f2a0a151c7ff83fb1f8ba022aac0dee88256c2449fe2be165"
+    },
+    {
+      "path": "templates/Oswald-Medium.ttf",
+      "bytes": 75668,
+      "sha256": "cd0547f01359b99440e1be6900d168b3076591cf56303c01131080e33c504752"
+    },
+    {
+      "path": "LICENSE.txt",
+      "bytes": 1072,
+      "sha256": "5248aa6905d21200f1c9d4c6aacf46516cd23c0bbc75b38ddaea989e5f3f1b7a"
+    }
+  ],
+  "additional_license": {
+    "asset": "templates/Oswald-Medium.ttf",
+    "license": "SIL Open Font License 1.1",
+    "file": "OFL-Oswald.txt",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt",
+    "sha256": "0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652"
+  },
+  "firmware_dependencies": {
+    "repository": "https://github.com/eez-open/modular-psu-firmware",
+    "license": "GPL-3.0",
+    "license_file": "LICENSE-modular-psu-firmware.txt",
+    "resources": [
+      {
+        "path": "templates/firmware-dependencies/v3/modular-psu-firmware.eez-project",
+        "source_url": "https://raw.githubusercontent.com/eez-open/modular-psu-firmware/master/modular-psu-firmware.eez-project",
+        "sha256": "4da0e6f3a4b22a81b052fefa96d9267fca96c6f2f3a9802b15d558f8fdaee85e",
+        "bytes": 5411379
+      },
+      {
+        "path": "templates/firmware-dependencies/v2/modular-psu-firmware.eez-project",
+        "source_url": "https://raw.githubusercontent.com/eez-open/modular-psu-firmware/1.7.3/modular-psu-firmware.eez-project",
+        "sha256": "2212252384f7c9c9fe43bf0013bcf9e810c490272d99a46d6a2beec0c1cc9008",
+        "bytes": 3855692
+      },
+      {
+        "path": "LICENSE-modular-psu-firmware.txt",
+        "source_url": "https://raw.githubusercontent.com/eez-open/modular-psu-firmware/master/LICENSE.TXT",
+        "sha256": "0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b",
+        "bytes": 35821
+      }
+    ]
+  }
+}

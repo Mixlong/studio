@@ -8,17 +8,17 @@ import {
 } from "eez-studio-shared/util-electron";
 
 import * as notification from "eez-studio-ui/notification";
+import { productConfig } from "eez-studio-shared/product-config";
 
 import type { ExampleProject } from "project-editor/project/ui/Wizard";
 
 export const EEZ_PROJECT_EXAMPLES_REPOSITORY =
-    "https://github.com/eez-open/eez-project-examples";
+    productConfig.examplesCatalog.repositoryUrl;
 
 const CATALOG_VERSION_DOWNLOAD_URL =
-    "https://github.com/eez-open/eez-project-examples/raw/master/build/catalog-version.json";
+    productConfig.examplesCatalog.catalogVersionUrl;
 
-const CATALOG_DOWNLOAD_URL =
-    "https://github.com/eez-open/eez-project-examples/raw/master/build/catalog.zip";
+const CATALOG_DOWNLOAD_URL = productConfig.examplesCatalog.catalogUrl;
 
 interface ICatalogVersion {
     lastModified: Date;
@@ -40,6 +40,10 @@ class ExamplesCatalog {
     }
 
     async load() {
+        if (!productConfig.examplesCatalog.enabled) {
+            return;
+        }
+
         try {
             const catalog = await this._loadCatalog();
             runInAction(() => {

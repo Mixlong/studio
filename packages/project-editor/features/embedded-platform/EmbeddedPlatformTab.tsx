@@ -20,7 +20,11 @@ import { ProjectContext } from "project-editor/project/context";
 import { Panel } from "project-editor/ui-components/Panel";
 import { PropertyGrid } from "project-editor/ui-components/PropertyGrid";
 import { AbsoluteFileInput } from "project-editor/ui-components/FileInput";
-import { HiddenComponent, ProtocolResource } from "project-editor/features/embedded-platform/embedded-platform";
+import {
+    EmbeddedPlatform,
+    HiddenComponent,
+    ProtocolResource
+} from "project-editor/features/embedded-platform/embedded-platform";
 import {
     downloadMockProtocol,
     isMockProtocolEndpoint,
@@ -29,12 +33,23 @@ import {
 } from "project-editor/features/embedded-platform/protocol-cloud";
 import {
     detectEmbeddedTarget,
+    connectEmbeddedWebSocket,
     runEmbeddedBuild,
     runEmbeddedDownload,
     runEmbeddedTransform,
     stopEmbeddedOperation,
     synchronizeEmbeddedResources
 } from "project-editor/features/embedded-platform/build-tools";
+import type {
+    EmbeddedTransformModel,
+    EmbeddedTransformType
+} from "project-editor/features/embedded-platform/embedded-protocol";
+import type { EmbeddedWebSocketState } from "project-editor/features/embedded-platform/embedded-websocket";
+import {
+    getActiveEmbeddedWorkspace,
+    getEmbeddedWorkspaceItems,
+    type EmbeddedWorkspaceItem
+} from "project-editor/features/embedded-platform/workspace-navigation";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -55,34 +70,50 @@ function renderProgress(value: number) {
     );
 }
 
-function showEmbeddedBuildWindow(projectStore: ProjectStore) {
+const REMOTE_FIRMWARE_BUILD_PANEL_ID = "eez-embedded-build-v2";
+
+export function showEmbeddedBuildWindow(projectStore: ProjectStore) {
+    const remoteMode = projectStore.project.embeddedPlatform.websocket?.enabled === true;
     showDialog(
         <ProjectContext.Provider value={projectStore}>
             <EmbeddedBuildWindow />
         </ProjectContext.Provider>,
         {
             jsPanel: {
-                id: "eez-embedded-build",
-                title: "Embedded Firmware Build",
-                width: 1060,
+                id: remoteMode ? REMOTE_FIRMWARE_BUILD_PANEL_ID : "eez-embedded-build",
+                title: remoteMode ? "Remote Firmware Build" : "Embedded Firmware Build",
+                width: remoteMode ? 1180 : 1060,
                 height: 760,
+                headerControls: {
+                    minimize: "remove",
+                    maximize: "remove",
+                    smallify: "remove"
+                },
                 modeless: true
             }
         }
     );
 }
 
-function showEmbeddedDownloadWindow(projectStore: ProjectStore) {
+export function showEmbeddedDownloadWindow(projectStore: ProjectStore) {
+    const remoteMode = projectStore.project.embeddedPlatform.websocket?.enabled === true;
     showDialog(
         <ProjectContext.Provider value={projectStore}>
-            <EmbeddedDownloadWindow />
+            {remoteMode ? <EmbeddedBuildWindow /> : <EmbeddedDownloadWindow />}
         </ProjectContext.Provider>,
         {
             jsPanel: {
-                id: "eez-embedded-download",
-                title: "Firmware Download",
-                width: 980,
-                height: 700,
+                id: remoteMode
+                    ? REMOTE_FIRMWARE_BUILD_PANEL_ID
+                    : "eez-embedded-download",
+                title: remoteMode ? "Remote Firmware Build" : "Firmware Download",
+                width: remoteMode ? 1180 : 980,
+                height: remoteMode ? 760 : 700,
+                headerControls: {
+                    minimize: "remove",
+                    maximize: "remove",
+                    smallify: "remove"
+                },
                 modeless: true
             }
         }
@@ -254,6 +285,122 @@ const ResourceStorageSummary = observer(
     }
 );
 
+const RemoteCommandFlow = observer(
+    ({ platform }: { platform: EmbeddedPlatform }) => {
+        const build = platform.remote.build;
+        const download = platform.remote.download;
+        const value = (text: string) => text.trim() || "<not set>";
+
+        return (
+            <div className="EezStudio_EmbeddedPlatform_RemoteFlow">
+                <div className="EezStudio_EmbeddedPlatform_RemoteFlowRow">
+                    <strong>1. cmake</strong>
+                    <code>{`output_dir: ${value(build.projectDirectory)}\nconfig_file: ${value(build.configFile)}`}</code>
+                </div>
+                <div className="EezStudio_EmbeddedPlatform_RemoteFlowRow">
+                    <strong>2. build</strong>
+                    <code>{`src: ${value(build.projectDirectory)}\ndst: ${value(build.outputDirectory)}`}</code>
+                </div>
+                <div className="EezStudio_EmbeddedPlatform_RemoteFlowRow">
+                    <strong>3. download</strong>
+                    <code>{`target: ${value(download.target)}\nfirmware: ${value(download.firmwarePath)}\naddr: ${value(download.addressOffset)}`}</code>
+                </div>
+                <div className="EezStudio_EmbeddedPlatform_Muted">
+                    These paths belong to the middleware server. Studio does not
+                    read a local .py or .bin file in WebSocket mode.
+                </div>
+            </div>
+        );
+    }
+);
+
+const RemoteConfigurationPanel = observer(
+    class RemoteConfigurationPanel extends React.Component<{
+        platform: EmbeddedPlatform;
+    }> {
+        expanded = false;
+
+        constructor(props: { platform: EmbeddedPlatform }) {
+            super(props);
+            makeObservable(this, {
+                expanded: observable,
+                toggleExpanded: action.bound
+            });
+        }
+
+        toggleExpanded() {
+            this.expanded = !this.expanded;
+        }
+
+        render() {
+            const { platform } = this.props;
+            const download = platform.remote.download;
+            const summaryValue = (value: string, fallback: string) =>
+                value.trim() || fallback;
+            const summary = [
+                summaryValue(download.target, "Target not set"),
+                `${summaryValue(download.frequency, "Frequency not set")} Hz`,
+                summaryValue(download.addressOffset, "Address not set")
+            ].join(" · ");
+
+            return (
+                <section className="EezStudio_EmbeddedPlatform_RemoteConfiguration">
+                    <button
+                        type="button"
+                        className="EezStudio_EmbeddedPlatform_RemoteConfigurationHeader"
+                        aria-expanded={this.expanded}
+                        aria-controls="embedded-remote-configuration-body"
+                        title={
+                            this.expanded
+                                ? "Collapse remote configuration"
+                                : "Expand remote configuration"
+                        }
+                        onClick={this.toggleExpanded}
+                    >
+                        <span className="EezStudio_EmbeddedPlatform_RemoteConfigurationTitle">
+                            <Icon
+                                icon={
+                                    this.expanded
+                                        ? "material:keyboard_arrow_down"
+                                        : "material:keyboard_arrow_right"
+                                }
+                                size={18}
+                            />
+                            <span>Remote Configuration</span>
+                        </span>
+                        <span className="EezStudio_EmbeddedPlatform_RemoteConfigurationSummary">
+                            {summary}
+                        </span>
+                    </button>
+                    {this.expanded && (
+                        <div
+                            id="embedded-remote-configuration-body"
+                            className="EezStudio_EmbeddedPlatform_RemoteConfigurationBody"
+                        >
+                            <div className="EezStudio_EmbeddedPlatform_RemoteConfigurationSection">
+                                <div className="EezStudio_EmbeddedPlatform_RemoteConfigurationSectionTitle">
+                                    Remote Project
+                                </div>
+                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                    <PropertyGrid objects={[platform.remote.build]} />
+                                </div>
+                            </div>
+                            <div className="EezStudio_EmbeddedPlatform_RemoteConfigurationSection">
+                                <div className="EezStudio_EmbeddedPlatform_RemoteConfigurationSectionTitle">
+                                    Remote Download
+                                </div>
+                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                    <PropertyGrid objects={[platform.remote.download]} />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </section>
+            );
+        }
+    }
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 export const EmbeddedPlatformTab = observer(
@@ -261,16 +408,19 @@ export const EmbeddedPlatformTab = observer(
         static contextType = ProjectContext;
         declare context: React.ContextType<typeof ProjectContext>;
 
-        activeWorkspace = "target";
+        activeWorkspace = "";
         workspaceNavCollapsed = false;
+        advancedWorkspacesExpanded = false;
 
         constructor(props: {}) {
             super(props);
             makeObservable(this, {
                 activeWorkspace: observable,
                 workspaceNavCollapsed: observable,
+                advancedWorkspacesExpanded: observable,
                 selectWorkspace: action.bound,
-                toggleWorkspaceNav: action.bound
+                toggleWorkspaceNav: action.bound,
+                toggleAdvancedWorkspaces: action.bound
             });
         }
 
@@ -282,8 +432,39 @@ export const EmbeddedPlatformTab = observer(
             this.workspaceNavCollapsed = !this.workspaceNavCollapsed;
         }
 
-        renderConfiguration(platform: any) {
-            switch (this.activeWorkspace) {
+        toggleAdvancedWorkspaces() {
+            this.advancedWorkspacesExpanded = !this.advancedWorkspacesExpanded;
+        }
+
+        renderWorkspaceButton(
+            item: EmbeddedWorkspaceItem,
+            selectedWorkspace: string
+        ) {
+            return (
+                <button
+                    key={item.id}
+                    type="button"
+                    className={[
+                        selectedWorkspace === item.id ? "is-active" : "",
+                        item.advanced ? "is-advanced" : ""
+                    ].filter(Boolean).join(" ")}
+                    aria-current={
+                        selectedWorkspace === item.id ? "page" : undefined
+                    }
+                    aria-label={item.label}
+                    title={item.label}
+                    onClick={() => this.selectWorkspace(item.id)}
+                >
+                    <Icon icon={item.icon} size={18} />
+                    <span className="EezStudio_EmbeddedPlatform_WorkspaceNavLabel">
+                        {item.label}
+                    </span>
+                </button>
+            );
+        }
+
+        renderConfiguration(platform: any, selectedWorkspace: string) {
+            switch (selectedWorkspace) {
                 case "protocols":
                     return <ProtocolCenter />;
                 case "resources":
@@ -301,15 +482,20 @@ export const EmbeddedPlatformTab = observer(
                     );
                 case "connection":
                     return (
-                        <Panel
-                            id="embedded-websocket"
-                            title="Middleware WebSocket"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
-                                    <PropertyGrid objects={[platform.websocket]} />
-                                </div>
-                            }
-                        />
+                        <>
+                            <Panel
+                                id="embedded-websocket"
+                                title="Middleware WebSocket"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                        <PropertyGrid objects={[platform.websocket]} />
+                                    </div>
+                                }
+                            />
+                            {platform.websocket?.enabled && (
+                                <RemoteConfigurationPanel platform={platform} />
+                            )}
+                        </>
                     );
                 case "components":
                     return <ComponentVisibilityPanel />;
@@ -334,26 +520,23 @@ export const EmbeddedPlatformTab = observer(
                 return null;
             }
 
+            const remoteMode = platform.websocket?.enabled === true;
+            const selectedWorkspace = getActiveEmbeddedWorkspace(
+                this.activeWorkspace,
+                remoteMode,
+                this.advancedWorkspacesExpanded
+            );
+            const visibleWorkspaces = getEmbeddedWorkspaceItems(
+                remoteMode,
+                this.advancedWorkspacesExpanded
+            );
+
             return (
                 <div className="EezStudio_EmbeddedPlatform">
                     <div className="EezStudio_EmbeddedPlatform_Header">
                         <div className="EezStudio_EmbeddedPlatform_Title">
                             <Icon icon="material:developer_board" size={22} />
                             <span>Embedded Platform</span>
-                        </div>
-                        <div className="EezStudio_EmbeddedPlatform_Actions">
-                            <ButtonAction
-                                text="Build Firmware"
-                                icon="material:build"
-                                title="Open firmware build window"
-                                onClick={() => showEmbeddedBuildWindow(this.context)}
-                            />
-                            <ButtonAction
-                                text="Download Firmware"
-                                icon="material:system_update_alt"
-                                title="Open firmware download window"
-                                onClick={() => showEmbeddedDownloadWindow(this.context)}
-                            />
                         </div>
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_Content">
@@ -391,53 +574,63 @@ export const EmbeddedPlatformTab = observer(
                                     Workspaces
                                 </span>
                             </button>
-                            {[
-                                ["target", "material:memory", "Target"],
-                                ["protocols", "material:cable", "Protocols"],
-                                ["resources", "material:storage", "Resources"],
-                                ["connection", "material:settings_ethernet", "Connection"],
-                                ["components", "material:visibility", "Components"]
-                            ].map(([id, icon, label]) => (
-                                <button
-                                    key={id}
-                                    type="button"
-                                    className={
-                                        this.activeWorkspace === id
-                                            ? "is-active"
-                                            : ""
-                                    }
-                                    aria-current={
-                                        this.activeWorkspace === id
-                                            ? "page"
-                                            : undefined
-                                    }
-                                    aria-label={label}
-                                    title={label}
-                                    onClick={() => this.selectWorkspace(id)}
-                                >
-                                    <Icon icon={icon} size={18} />
-                                    <span className="EezStudio_EmbeddedPlatform_WorkspaceNavLabel">
-                                        {label}
-                                    </span>
-                                </button>
-                            ))}
+                            {visibleWorkspaces
+                                .filter(item => !remoteMode || !item.advanced)
+                                .map(item =>
+                                    this.renderWorkspaceButton(
+                                        item,
+                                        selectedWorkspace
+                                    )
+                                )}
+                            {remoteMode && (
+                                <>
+                                    <button
+                                        type="button"
+                                        className="EezStudio_EmbeddedPlatform_AdvancedToggle"
+                                        aria-label="Advanced Settings"
+                                        aria-expanded={this.advancedWorkspacesExpanded}
+                                        title="Advanced Settings"
+                                        onClick={this.toggleAdvancedWorkspaces}
+                                    >
+                                        <Icon
+                                            icon={
+                                                this.advancedWorkspacesExpanded
+                                                    ? "material:keyboard_arrow_down"
+                                                    : "material:keyboard_arrow_right"
+                                            }
+                                            size={18}
+                                        />
+                                        <span className="EezStudio_EmbeddedPlatform_WorkspaceNavLabel">
+                                            Advanced Settings
+                                        </span>
+                                    </button>
+                                    {visibleWorkspaces
+                                        .filter(item => item.advanced)
+                                        .map(item =>
+                                            this.renderWorkspaceButton(
+                                                item,
+                                                selectedWorkspace
+                                            )
+                                        )}
+                                </>
+                            )}
                         </nav>
                         <div className="EezStudio_EmbeddedPlatform_Configuration">
-                            {this.renderConfiguration(platform)}
+                            {this.renderConfiguration(platform, selectedWorkspace)}
                         </div>
                     </div>
                     <footer className="EezStudio_EmbeddedPlatform_StatusBar">
                         <span className="EezStudio_EmbeddedPlatform_StatusDot" />
                         <span>Ready</span>
-                        <span>{platform.bsp.name || "No target configured"}</span>
                         <span>
                             {platform.websocket.enabled
-                                ? "Middleware connected"
-                                : "Local tooling"}
+                                ? "Remote project"
+                                : platform.bsp.name || "No target configured"}
                         </span>
                         <span>
-                            {platform.protocols.length} protocol
-                            {platform.protocols.length === 1 ? "" : "s"}
+                            {platform.websocket.enabled
+                                ? "Remote middleware"
+                                : "Local tooling"}
                         </span>
                     </footer>
                 </div>
@@ -1049,8 +1242,15 @@ const EmbeddedBuildWindow = observer(
         running = false;
         progress = 0;
         status = "Ready";
-        transformType = "picture";
-        transformModel = "rom";
+        logs: string[] = [];
+        lastRunFailed = false;
+        lastDownloadFailed = false;
+        buildCompleted = false;
+        operation: "build" | "download" | undefined;
+        terminalRef = React.createRef<HTMLPreElement>();
+        followLogs = true;
+        transformType: EmbeddedTransformType = "picture";
+        transformModel: EmbeddedTransformModel = "rom";
 
         constructor(props: {}) {
             super(props);
@@ -1058,28 +1258,171 @@ const EmbeddedBuildWindow = observer(
                 running: observable,
                 progress: observable,
                 status: observable,
+                logs: observable,
+                lastRunFailed: observable,
+                lastDownloadFailed: observable,
+                buildCompleted: observable,
+                operation: observable,
+                appendLog: action.bound,
+                handleWebSocketState: action.bound,
                 transformType: observable,
                 transformModel: observable,
                 start: action.bound,
+                download: action.bound,
                 stop: action.bound,
                 transform: action.bound
             });
         }
 
-        async start() {
-            this.running = true;
-            this.progress = 0;
-            this.status = "Generating resources and building firmware...";
-            const result = await runEmbeddedBuild(this.context, {
-                onProgress: value =>
-                    runInAction(() => {
-                        this.progress = value;
-                    })
-            });
+        componentDidMount() {
+            if (this.context.project.embeddedPlatform.websocket?.enabled) {
+                void this.connectWebSocket();
+            }
+        }
+
+        componentDidUpdate() {
+            const terminal = this.terminalRef.current;
+            if (terminal && this.followLogs) {
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }
+
+        async connectWebSocket() {
             runInAction(() => {
-                this.running = false;
+                this.status = "Connecting to middleware WebSocket...";
+            });
+            const result = await connectEmbeddedWebSocket(this.context);
+            runInAction(() => {
                 this.status = result.message;
             });
+        }
+
+        appendLog(message: string) {
+            // Keep the full response while the build window is open. The previous
+            // 500-message cap silently discarded earlier middleware output.
+            this.logs.push(message);
+        }
+
+        handleLogsScroll = () => {
+            const terminal = this.terminalRef.current;
+            if (!terminal) {
+                return;
+            }
+            this.followLogs =
+                terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 24;
+        };
+
+        handleWebSocketState(state: EmbeddedWebSocketState) {
+            if (state === "connecting") {
+                this.status = "Connecting to middleware WebSocket...";
+            } else if (state === "open" && this.running) {
+                this.status =
+                    this.operation === "download"
+                        ? "WebSocket connected. Sending remote download command..."
+                        : "WebSocket connected. Sending remote build commands...";
+            } else if (state === "disconnected") {
+                if (this.buildCompleted) {
+                    this.lastDownloadFailed = true;
+                    this.appendLog(
+                        "[WebSocket] disconnected. Click Retry Remote Download to restart."
+                    );
+                    this.status =
+                        "WebSocket disconnected. Click Retry Remote Download to restart the download.";
+                } else {
+                    this.lastRunFailed = true;
+                    this.appendLog(
+                        "[WebSocket] disconnected. Click Retry Remote Build to restart."
+                    );
+                    this.status =
+                        "WebSocket disconnected. Click Retry Remote Build to restart cmake and build.";
+                }
+            }
+        }
+
+        async start() {
+            if (this.running) {
+                return;
+            }
+
+            const remoteMode = this.context.project.embeddedPlatform.websocket?.enabled === true;
+            this.running = true;
+            this.operation = "build";
+            this.progress = 0;
+            this.lastRunFailed = false;
+            this.lastDownloadFailed = false;
+            this.buildCompleted = false;
+            this.logs = [];
+            this.followLogs = true;
+            this.status = remoteMode
+                ? "Sending remote cmake and build commands..."
+                : "Generating resources and building firmware...";
+            try {
+                const result = await runEmbeddedBuild(this.context, {
+                    onProgress: value =>
+                        runInAction(() => {
+                            this.progress = value;
+                        }),
+                    onLog: message => this.appendLog(message),
+                    onStateChange: state => this.handleWebSocketState(state)
+                });
+                runInAction(() => {
+                    this.running = false;
+                    this.operation = undefined;
+                    this.lastRunFailed = !result.success;
+                    this.buildCompleted = remoteMode && result.success;
+                    this.status = result.success
+                        ? result.message
+                        : `${result.message} Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
+                });
+            } catch (error) {
+                runInAction(() => {
+                    this.running = false;
+                    this.operation = undefined;
+                    this.lastRunFailed = true;
+                    this.buildCompleted = false;
+                    this.status = `Build failed: ${error}. Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
+                });
+            }
+        }
+
+        async download() {
+            if (this.running || !this.buildCompleted) {
+                return;
+            }
+
+            this.running = true;
+            this.operation = "download";
+            this.progress = 0;
+            this.lastDownloadFailed = false;
+            this.status = "Sending remote download command...";
+            this.appendLog("[Remote Download] Starting firmware download...");
+            try {
+                const result = await runEmbeddedDownload(this.context, undefined, {
+                    onProgress: value =>
+                        runInAction(() => {
+                            this.progress = value;
+                        }),
+                    onLog: message => this.appendLog(message),
+                    onStateChange: state => this.handleWebSocketState(state)
+                });
+                runInAction(() => {
+                    this.running = false;
+                    this.operation = undefined;
+                    this.lastDownloadFailed = !result.success;
+                    this.status = result.success
+                        ? result.message
+                        : `${result.message} Click Retry Remote Download to try again.`;
+                });
+                this.appendLog(`[Remote Download] ${result.message}`);
+            } catch (error) {
+                runInAction(() => {
+                    this.running = false;
+                    this.operation = undefined;
+                    this.lastDownloadFailed = true;
+                    this.status = `Download failed: ${error}. Click Retry Remote Download to try again.`;
+                });
+                this.appendLog(`[Remote Download] Download failed: ${error}`);
+            }
         }
 
         async transform() {
@@ -1105,84 +1448,165 @@ const EmbeddedBuildWindow = observer(
 
         stop() {
             stopEmbeddedOperation(this.context);
+            const operation = this.operation;
             this.running = false;
-            this.status = "Build stopped.";
+            this.operation = undefined;
+            if (operation === "download") {
+                this.lastDownloadFailed = true;
+                this.status = "Download stopped. Click Retry Remote Download to try again.";
+            } else {
+                this.lastRunFailed = true;
+                this.buildCompleted = false;
+                this.status = "Build stopped. Click Retry Remote Build to try again.";
+            }
         }
 
         render() {
             const platform = this.context.project.embeddedPlatform;
+            const remoteMode = platform.websocket?.enabled === true;
             return (
                 <div className="EezStudio_EmbeddedPlatform_Window">
                     <div className="EezStudio_EmbeddedPlatform_WindowGrid">
-                        <Panel
-                            id="embedded-build-bsp"
-                            title="BSP Information"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
-                                    <PropertyGrid objects={[platform.bsp]} />
-                                </div>
-                            }
-                        />
-                        <Panel
-                            id="embedded-build-resources"
-                            title="Resource Storage"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
-                                    <PropertyGrid objects={[platform.storage]} />
-                                </div>
-                            }
-                        />
-                        <Panel
-                            id="embedded-build-settings"
-                            title="Build Settings"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
-                                    <PropertyGrid objects={[platform.build]} />
-                                </div>
-                            }
-                        />
-                        <Panel
-                            id="embedded-build-transform"
-                            title="Resource Transform (WebSocket)"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_InlineForm">
-                                    <select
-                                        value={this.transformType}
-                                        onChange={event =>
-                                            (this.transformType = event.target.value)
-                                        }
-                                        disabled={this.running}
+                        {remoteMode ? (
+                            <Panel
+                                id="embedded-build-remote"
+                                title="Remote Project"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                        <PropertyGrid objects={[platform.remote.build]} />
+                                    </div>
+                                }
+                            />
+                        ) : (
+                            <Panel
+                                id="embedded-build-bsp"
+                                title="BSP Information"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                        <PropertyGrid objects={[platform.bsp]} />
+                                    </div>
+                                }
+                            />
+                        )}
+                        {remoteMode ? (
+                            <Panel
+                                id="embedded-build-logs"
+                                title="Remote Logs"
+                                style={{
+                                    gridColumn: "2",
+                                    gridRow: "1 / span 2",
+                                    minHeight: 0,
+                                    display: "flex",
+                                    flexDirection: "column"
+                                }}
+                                body={
+                                    <pre
+                                        ref={this.terminalRef}
+                                        className="EezStudio_EmbeddedPlatform_RemoteLogs"
+                                        onScroll={this.handleLogsScroll}
                                     >
-                                        <option value="picture">picture</option>
-                                        <option value="font">font</option>
-                                        <option value="audio">audio</option>
-                                    </select>
-                                    <select
-                                        value={this.transformModel}
-                                        onChange={event =>
-                                            (this.transformModel = event.target.value)
-                                        }
-                                        disabled={this.running}
-                                    >
-                                        <option value="rom">rom</option>
-                                        <option value="xip">xip</option>
-                                        <option value="non-xip">non-xip</option>
-                                    </select>
-                                </div>
-                            }
-                        />
+                                        {this.logs.length
+                                            ? this.logs.join("\n")
+                                            : "Waiting for middleware logs..."}
+                                    </pre>
+                                }
+                            />
+                        ) : (
+                            <Panel
+                                id="embedded-build-resources"
+                                title="Resource Storage"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                        <PropertyGrid objects={[platform.storage]} />
+                                    </div>
+                                }
+                            />
+                        )}
+                        {remoteMode ? (
+                            <Panel
+                                id="embedded-build-flow"
+                                title="Remote Command Flow"
+                                body={<RemoteCommandFlow platform={platform} />}
+                            />
+                        ) : (
+                            <Panel
+                                id="embedded-build-settings"
+                                title="Build Settings"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
+                                        <PropertyGrid objects={[platform.build]} />
+                                    </div>
+                                }
+                            />
+                        )}
+                        {!remoteMode && (
+                            <Panel
+                                id="embedded-build-transform"
+                                title="Resource Transform (WebSocket)"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_InlineForm">
+                                        <select
+                                            value={this.transformType}
+                                            onChange={event =>
+                                                (this.transformType = event.target.value as EmbeddedTransformType)
+                                            }
+                                            disabled={this.running}
+                                        >
+                                            <option value="picture">picture</option>
+                                            <option value="font">font</option>
+                                            <option value="audio">audio</option>
+                                        </select>
+                                        <select
+                                            value={this.transformModel}
+                                            onChange={event =>
+                                                (this.transformModel = event.target.value as EmbeddedTransformModel)
+                                            }
+                                            disabled={this.running}
+                                        >
+                                            <option value="rom">rom</option>
+                                            <option value="romxip">romxip</option>
+                                            <option value="flashnormal">flashnormal</option>
+                                        </select>
+                                    </div>
+                                }
+                            />
+                        )}
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_WindowFooter">
                         <div className="EezStudio_EmbeddedPlatform_Status">{this.status}</div>
                         {renderProgress(this.progress)}
                         <div className="EezStudio_EmbeddedPlatform_Actions">
-                            <ButtonAction
-                                text="Start Build"
-                                icon="material:build"
-                                title="Generate resources and start firmware build"
-                                onClick={this.start}
-                                enabled={!this.running}
-                            />
+                            {remoteMode && this.buildCompleted ? (
+                                <ButtonAction
+                                    text={
+                                        this.lastDownloadFailed
+                                            ? "Retry Remote Download"
+                                            : "Download Remotely"
+                                    }
+                                    icon="material:system_update_alt"
+                                    title="Continue to remote firmware download and keep its logs in this window"
+                                    onClick={this.download}
+                                    enabled={!this.running}
+                                />
+                            ) : (
+                                <ButtonAction
+                                    text={
+                                        remoteMode && this.lastRunFailed
+                                            ? "Retry Remote Build"
+                                            : remoteMode
+                                              ? "Start Remote Build"
+                                              : "Start Build"
+                                    }
+                                    icon="material:build"
+                                    title={
+                                        remoteMode
+                                            ? "Send cmake and build commands to middleware"
+                                            : "Generate resources and start firmware build"
+                                    }
+                                    onClick={this.start}
+                                    enabled={!this.running}
+                                />
+                            )}
                             <ButtonAction
                                 text="Transform"
                                 icon="material:swap_horiz"
@@ -1257,9 +1681,12 @@ const EmbeddedDownloadWindow = observer(
         }
 
         async start() {
+            const remoteMode = this.context.project.embeddedPlatform.websocket?.enabled === true;
             this.running = true;
             this.progress = 0;
-            this.status = "Downloading firmware...";
+            this.status = remoteMode
+                ? "Sending remote download command..."
+                : "Downloading firmware...";
             const result = await runEmbeddedDownload(
                 this.context,
                 this.firmwarePath || undefined,
@@ -1287,34 +1714,49 @@ const EmbeddedDownloadWindow = observer(
 
         render() {
             const platform = this.context.project.embeddedPlatform;
+            const remoteMode = platform.websocket?.enabled === true;
             return (
                 <div className="EezStudio_EmbeddedPlatform_Window">
                     <div className="EezStudio_EmbeddedPlatform_WindowGrid EezStudio_EmbeddedPlatform_WindowGridSingle">
                         <Panel
                             id="embedded-download-settings"
-                            title="Download Settings"
+                            title={remoteMode ? "Remote Download" : "Download Settings"}
                             body={
                                 <div className="EezStudio_EmbeddedPlatform_PropertyGrid">
-                                    <PropertyGrid objects={[platform.download]} />
-                                </div>
-                            }
-                        />
-                        <Panel
-                            id="embedded-download-image"
-                            title="Firmware Image"
-                            body={
-                                <div className="EezStudio_EmbeddedPlatform_FirmwarePicker">
-                                    <input value={this.firmwarePath} readOnly />
-                                    <ButtonAction
-                                        text="Choose Image"
-                                        icon="material:folder_open"
-                                        title="Choose firmware image"
-                                        onClick={this.chooseFirmware}
-                                        enabled={!this.running}
+                                    <PropertyGrid
+                                        objects={[
+                                            remoteMode
+                                                ? platform.remote.download
+                                                : platform.download
+                                        ]}
                                     />
                                 </div>
                             }
                         />
+                        {remoteMode ? (
+                            <Panel
+                                id="embedded-download-flow"
+                                title="Remote Command Flow"
+                                body={<RemoteCommandFlow platform={platform} />}
+                            />
+                        ) : (
+                            <Panel
+                                id="embedded-download-image"
+                                title="Firmware Image"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_FirmwarePicker">
+                                        <input value={this.firmwarePath} readOnly />
+                                        <ButtonAction
+                                            text="Choose Image"
+                                            icon="material:folder_open"
+                                            title="Choose firmware image"
+                                            onClick={this.chooseFirmware}
+                                            enabled={!this.running}
+                                        />
+                                    </div>
+                                }
+                            />
+                        )}
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_WindowFooter">
                         <div className="EezStudio_EmbeddedPlatform_Status">{this.status}</div>
@@ -1332,9 +1774,13 @@ const EmbeddedDownloadWindow = observer(
                                 enabled={!this.running}
                             />
                             <ButtonAction
-                                text="Download"
+                                text={remoteMode ? "Download Remotely" : "Download"}
                                 icon="material:system_update_alt"
-                                title="Download firmware to target"
+                                title={
+                                    remoteMode
+                                        ? "Send the remote firmware path to middleware"
+                                        : "Download firmware to target"
+                                }
                                 onClick={this.start}
                                 enabled={!this.running}
                             />

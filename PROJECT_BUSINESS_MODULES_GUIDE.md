@@ -50,7 +50,7 @@ packages/eez-studio-ui
     通用 UI 组件、弹窗、布局、表格、树、图表
 
 packages/eez-studio-shared
-    SQLite、扩展加载、共享服务、工具、国际化和校验
+    SQLite、扩展加载、产品配置、共享服务、工具、国际化和校验
 
 packages/shortcuts
     全局及仪器快捷方式
@@ -174,6 +174,7 @@ VS Code 已提供以下调试配置：
 主要配置常量位于：
 
 - `packages/eez-studio-shared/conf.ts`
+- `packages/eez-studio-shared/product-config.ts`：Examples、在线模板和 Extensions 目录的产品开关及源地址
 - `packages/main/settings.ts`
 - `packages/eez-studio-shared/db.ts`
 
@@ -189,7 +190,7 @@ VS Code 已提供以下调试配置：
 - 保存、另存为、撤销和重做。
 - 构建项目。
 - 切换标签页和主题。
-- 打开仪器、Notebook、扩展和设置。
+- 打开仪器、Notebook、设置；扩展管理入口是否显示由产品配置决定。
 
 #### 开发说明
 
@@ -222,10 +223,14 @@ VS Code 已提供以下调试配置：
 
 - `Open`：打开最近项目或本地项目。
 - `Create`：创建新项目。
-- `Examples`：下载和打开示例。
 - `Instruments`：管理仪器。
-- `Extensions`：管理扩展。
 - `Settings`：管理主题、数据库、模板地址等设置。
+
+`Examples` 和 `Extensions` 不是所有产品构建都默认显示的入口：
+
+- `productConfig.examplesCatalog.enabled` 为 `true` 时显示 `Examples` 并加载示例目录；当前产品默认关闭。
+- `productConfig.extensionsCatalog.enabled` 为 `true` 时显示在线扩展目录管理；当前产品默认关闭。
+- 扩展运行时、本地扩展和内置扩展的加载仍然保留，不等同于关闭扩展能力。
 
 打开项目或仪器后，会在顶部标签工作区中形成独立标签页。
 
@@ -239,6 +244,7 @@ VS Code 已提供以下调试配置：
 - `packages/home/tabs-store.tsx`：标签页模型及生命周期。
 - `packages/home/open-projects.tsx`：最近项目和打开项目。
 - `packages/home/settings.tsx`：设置页面。
+- `packages/eez-studio-shared/product-config.ts`：产品级入口和目录开关。
 
 新增一个 Home 业务页面通常需要：
 
@@ -247,7 +253,8 @@ VS Code 已提供以下调试配置：
 3. 增加对应 React 页面组件。
 4. 在内容区域增加条件渲染。
 5. 如果需要持久化选中状态，调整 `SAVED_OPTIONS_VERSION`。
-6. 如果需要系统菜单入口，同时修改 `packages/main/menu.ts`。
+6. 如果页面受产品配置控制，同时更新 `packages/eez-studio-shared/product-config.ts`、入口可见性和旧 localStorage 状态迁移。
+7. 如果需要系统菜单入口，同时修改 `packages/main/menu.ts`。
 
 适合优先二开的功能：
 
@@ -273,7 +280,9 @@ VS Code 已提供以下调试配置：
 | Applet | 创建远程运行的应用模块 |
 | Resource | 创建资源项目 |
 
-项目向导可以从内置模板、远程模板或示例仓库创建项目。
+项目向导可以从内置模板和 `productConfig.projectTemplates.baseUrl` 指定的远程模板源创建项目。
+在线模板目录和示例仓库属于可选目录能力，分别由
+`projectTemplates.onlineCatalog.enabled` 和 `examplesCatalog.enabled` 控制；当前产品默认关闭，不能在用户指南中写成必然可用。
 
 #### 开发说明
 
@@ -505,7 +514,8 @@ packages/project-editor/lvgl/widgets
 
 #### 用户使用说明
 
-在 `Extensions` 页面可以查看、安装、升级、重载和卸载扩展。
+当 `productConfig.extensionsCatalog.enabled` 开启并配置了可用目录时，`Extensions` 页面可以查看、安装、升级、重载和卸载扩展。
+即使在线目录关闭，内置扩展和本地用户扩展仍会在 Home 启动阶段加载。
 
 扩展类型：
 
@@ -523,6 +533,7 @@ packages/project-editor/lvgl/widgets
 - `packages/eez-studio-shared/extensions/extension.ts`：扩展接口。
 - `packages/eez-studio-shared/extensions/extensions.ts`：加载、安装和卸载。
 - `packages/home/extensions-manager`：扩展管理 UI。
+- `packages/eez-studio-shared/product-config.ts`：在线扩展目录开关和目录地址。
 - `packages/eez-studio-types/index.d.ts`：扩展开发公开类型。
 
 扩展包通过 `package.json` 中的 `eez-studio` 字段声明入口，例如：
@@ -626,7 +637,7 @@ Notebook 通过扩展的 `homeSections` 动态加入 Home 标签系统，可以�
 - 浅色和深色主题。
 - 活动数据库及数据库导入导出。
 - 日期和时间格式。
-- 项目模板仓库。
+- 项目模板源；仓库链接仅在 `productConfig.projectTemplates.repositoryUrl` 配置时显示。
 - 编辑器显示选项。
 
 #### 开发说明
@@ -857,6 +868,7 @@ npm run dist-mac-x64
 
 - 应用能够启动。
 - Home 页面导航正常。
+- 产品默认关闭的 `Examples`、`Extensions` 入口不显示；旧的已保存入口状态能回退到 `Open`。
 - 标签页打开、切换和关闭正常。
 - 设置修改后能够保存。
 - 浅色和深色主题显示正常。
@@ -919,6 +931,7 @@ EEZ Studio 桌面应用采用 GPL v3。对修改版本进行对外分发前，�
 | Home 导航 | `packages/home/home-tab.tsx` |
 | 标签页系统 | `packages/home/tabs-store.tsx` |
 | 全局设置 | `packages/home/settings.tsx`、`packages/main/settings.ts` |
+| 产品入口配置 | `packages/eez-studio-shared/product-config.ts` |
 | 项目编辑器初始化 | `packages/project-editor/project-editor-create.tsx` |
 | 项目 Store | `packages/project-editor/store/index.ts` |
 | 序列化 | `packages/project-editor/store/serialization.ts` |
@@ -931,6 +944,8 @@ EEZ Studio 桌面应用采用 GPL v3。对修改版本进行对外分发前，�
 | 仪器连接 | `packages/instrument/connection` |
 | 仪器界面 | `packages/instrument/window` |
 | 扩展系统 | `packages/eez-studio-shared/extensions` |
+| 嵌入式平台 | `packages/project-editor/features/embedded-platform`、`docs/embedded-platform.md` |
+| 音频资源 | `packages/project-editor/features/audio`、`docs/embedded-flash-audio.md` |
 | SQLite | `packages/eez-studio-shared/db.ts` |
 | 通用 UI | `packages/eez-studio-ui` |
 | 快捷方式 | `packages/shortcuts` |

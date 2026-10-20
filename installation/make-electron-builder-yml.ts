@@ -37,6 +37,12 @@ async function getExtraResource() {
 
     return [
         ...extraResources,
+        // Built-in New Project templates and their MIT license are shipped
+        // as external resources, so they also work in packaged/offline builds.
+        {
+            from: "./resources/project-templates",
+            to: "project-templates"
+        },
         ...eezFrameworkAmalgamation,
         ...eezGuiLite,
         ...dockerBuild,
@@ -54,6 +60,13 @@ async function getExtraResource() {
 }
 
 const productName = "DigiStudio";
+const defaultUpdateUrl =
+    "https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStudio";
+const updateUrl = process.env.EEZ_UPDATE_URL?.trim() || defaultUpdateUrl;
+
+if (updateUrl && !updateUrl.startsWith("https://")) {
+    throw new Error("EEZ_UPDATE_URL must use HTTPS");
+}
 
 let files = [
     "build/**",
@@ -108,6 +121,15 @@ files.push(
         copyright: "Copyright © 2022 Envox d.o.o.",
         productName,
 
+        ...(updateUrl
+            ? {
+                  publish: {
+                      provider: "generic",
+                      url: updateUrl.endsWith("/") ? updateUrl : updateUrl + "/"
+                  }
+              }
+            : {}),
+
         nodeGypRebuild: false,
         npmRebuild: false,
         buildDependenciesFromSource: true,
@@ -136,6 +158,7 @@ files.push(
         ],
 
         mac: {
+            artifactName: "${productName}-${arch}.${ext}",
             target: [
                 {
                     target: "dmg",
@@ -193,6 +216,7 @@ files.push(
         },
 
         nsis: {
+            artifactName: "${productName}-${arch}-setup.${ext}",
             installerIcon: "./icon.ico",
             license: "LICENSE.TXT",
             warningsAsErrors: false,
@@ -200,6 +224,7 @@ files.push(
         },
 
         linux: {
+            artifactName: "${productName}-${arch}.${ext}",
             target:
                 process.arch == "arm"
                     ? [{ target: "deb", arch: ["armv7l"] }]
@@ -216,6 +241,10 @@ files.push(
 
     let configYAML = YAML.stringify(config);
     fs.writeFileSync("electron-builder.yml", configYAML);
+    fs.writeFileSync(
+        "build/main/update-url.json",
+        JSON.stringify({ url: updateUrl })
+    );
 
     config.npmRebuild = true;
     config.afterSign = "installation/notarize.js";

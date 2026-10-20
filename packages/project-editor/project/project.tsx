@@ -1209,6 +1209,45 @@ export class General extends EezObject {
                 }
             }
         },
+        updateObjectValueHook: (general: General, values: any) => {
+            if (
+                values.displayWidth === undefined &&
+                values.displayHeight === undefined
+            ) {
+                return;
+            }
+
+            const project = getProject(general);
+            const nextWidth = values.displayWidth;
+            const nextHeight = values.displayHeight;
+
+            project.userPages.forEach(page => {
+                const pageValues: Partial<Page> = {};
+
+                if (nextWidth !== undefined) {
+                    pageValues.width = nextWidth;
+                }
+
+                if (nextHeight !== undefined) {
+                    pageValues.height = nextHeight;
+                }
+
+                if (Object.keys(pageValues).length > 0) {
+                    updateObject(page, pageValues);
+
+                    if (project.projectTypeTraits.isLVGL) {
+                        const screen = page.components.find(component =>
+                            component instanceof
+                            ProjectEditor.LVGLScreenWidgetClass
+                        );
+
+                        if (screen) {
+                            updateObject(screen, pageValues);
+                        }
+                    }
+                }
+            });
+        },
         beforeLoadHook(object: IEezObject, jsObject: any) {
             if (!jsObject.projectType) {
                 if (jsObject.projectVersion === "v1") {
@@ -2213,20 +2252,21 @@ export class Project extends EezObject {
             this.extensionDefinitions != undefined
         );
 
-        enableTabOnBorder(
+        // Changes is accessed exclusively through the top-right floating
+        // panel. Clean up legacy docked tabs on every enableTabs() call,
+        // including when a saved layout or workspace is restored.
+        for (const model of [
             this._store.layoutModels.rootEditor,
-            LayoutModels.CHANGES_TAB_ID,
-            LayoutModels.CHANGES_TAB,
-            FlexLayout.DockLocation.LEFT,
-            this.changes != undefined
-        );
-        enableTabOnBorder(
-            this._store.layoutModels.rootEditorForIEXT,
-            LayoutModels.CHANGES_TAB_ID,
-            LayoutModels.CHANGES_TAB,
-            FlexLayout.DockLocation.LEFT,
-            this.changes != undefined
-        );
+            this._store.layoutModels.rootEditorForIEXT
+        ]) {
+            if (model.getNodeById(LayoutModels.CHANGES_TAB_ID)) {
+                model.doAction(
+                    FlexLayout.Actions.deleteTab(
+                        LayoutModels.CHANGES_TAB_ID
+                    )
+                );
+            }
+        }
 
         enableTab(
             this._store.layoutModels.rootEditor,

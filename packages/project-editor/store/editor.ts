@@ -222,7 +222,7 @@ export class EditorsStore {
                         this.projectStore.project.extensionDefinitions[0]
                     );
                 });
-            } else if (this.projectStore.project.readme) {
+            } else if (this.projectStore.project.readme?.readmeFile) {
                 this.openEditor(this.projectStore.project.readme);
             } else if (
                 this.projectStore.project.userPages &&

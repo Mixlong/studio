@@ -8,11 +8,11 @@
 - 支持 `Internal Flash`、`QSPI Flash`、`SPI Flash` 三种存储目标描述。
 - 支持自动布局和手工偏移两种资源放置方式。
 - 校验 WAV 文件存在、格式、Flash 地址、容量、对齐和手工偏移。
-- Build 时解析 PCM 数据，生成 `audio-manifest.json` 和统一的 `audio-data.c/.h` 资源索引；选择外部 Flash 时额外生成 `audio.bin`，选择 ROM 时音频数据直接写入 `audio-data.c`。
+- Build 时解析 PCM 数据，生成 `audio-manifest.json` 和统一的 `audio-data.c/.h` 资源索引；只有在 `Resource Storage` 启用且 `Audio` 存储模式选择 `XIP` 或 `non-XIP` 时才额外生成 `audio.bin`，ROM 模式把音频数据直接写入 `audio-data.c`。
 - 音频资源使用稳定的 `audio_index`：`0` 保留为停止/无音频，实际资源范围为 `1~100`；旧的连续 `id` 仍保留用于兼容已有消费者。
 - `audio-data.h` 会生成资源索引枚举和 `eez_audio_find_resource(audio_index)` 查询接口，便于 Flow/BSP 按索引取得采样率、声道、位深、偏移和长度。
 - 未启用统一资源存储时，音频默认按 ROM 方式生成 `audio-data.c/.h`，避免默认工程只得到未接入的裸二进制。
-- WAV 可转换为 8/16-bit 有符号或无符号 PCM；MP3 通过 Audio Settings 中配置的 Python 脚本转换为 RAW PCM。
+- WAV 源文件支持 8/16/24/32-bit PCM；需要转换时，目标格式支持 8/16-bit 有符号或无符号 PCM。MP3 通过 Audio Settings 中配置的 Python 脚本转换为 RAW PCM。
 - 自动布局会优先保留手工地址，并在剩余空间中按对齐值填充资源。
 - 自动检查资源重叠、分区容量和最终镜像对齐大小。
 
@@ -37,7 +37,7 @@ WAV 解析使用小端 RIFF/WAVE PCM，支持 8/16/24/32-bit 采样；不支持�
 1. 导入一个 WAV 和一个 MP3，确认它们都被复制到工程的 `audio/` 文件夹。
 2. 在预览页播放两个文件，并确认时长、格式和文件大小可见。
 3. 配置 Flash 基地址、分区大小和对齐，分别验证 Automatic 和 Manual 两种布局。
-4. 点击 Build，确认生成 `audio-data.c`、`audio-data.h`、`audio-manifest.json`；XIP/non-XIP 模式额外确认 `audio.bin`。
+4. 点击 Build，确认生成 `audio-data.c`、`audio-data.h`、`audio-manifest.json`；统一资源存储的 XIP/non-XIP 模式额外确认 `audio.bin`。
 5. 修改一个不存在的文件、一个重叠地址和一个错误的转换器路径，确认 Build 失败并在 Output 面板显示可定位的错误。
 6. 将两个资源设置为相同索引，或将索引设置为 `0/101`，确认 Checks 阻止构建并指出具体资源。
 7. 关闭并重新打开工程，确认资源、索引、布局和转换配置仍然保留。
@@ -63,8 +63,9 @@ WAV 解析使用小端 RIFF/WAVE PCM，支持 8/16/24/32-bit 采样；不支持�
             {
                 "name": "startup_tone",
                 "audioIndex": 1,
-                "filePath": "assets/audio/startup.wav",
+                "filePath": "audio/startup.wav",
                 "format": "wav",
+                "sampleFormat": "source",
                 "placement": "automatic",
                 "flashOffset": 0
             }
@@ -74,6 +75,7 @@ WAV 解析使用小端 RIFF/WAVE PCM，支持 8/16/24/32-bit 采样；不支持�
 ```
 
 清单中的 `flashOffset` 是相对于 `baseAddress` 的偏移，`flashAddress` 是可直接用于目标 Flash 映射的绝对地址。`imageSize` 是实际输出文件大小，已经按 `alignment` 向上取整。
+`flashLayout.storage` 描述音频分区目标；最终生成 ROM、XIP 还是 non-XIP 产物，取决于 `embeddedPlatform.storage.enabled` 以及其中的 `storage.audio` 设置。
 
 ## 当前边界
 

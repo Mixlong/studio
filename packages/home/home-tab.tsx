@@ -1,4 +1,6 @@
 import React from "react";
+import fs from "fs";
+import path from "path";
 import { action, observable, makeObservable, autorun } from "mobx";
 import { observer } from "mobx-react";
 import classNames from "classnames";
@@ -19,20 +21,54 @@ import {
 import { Projects } from "home/open-projects";
 import { Instruments, defaultInstrumentsStore } from "home/instruments";
 import { instrumentDatabases } from "eez-studio-shared/db";
+import { productConfig } from "eez-studio-shared/product-config";
+import * as notification from "eez-studio-ui/notification";
+import { getHomePath } from "eez-studio-shared/util-electron";
 
 ////////////////////////////////////////////////////////////////////////////////
 
 const SAVED_OPTIONS_VERSION = 1;
 
+type HomeTabId =
+    | "open"
+    | "create"
+    | "examples"
+    | "run"
+    | "instruments"
+    | "extensions"
+    | "settings";
+
+function normalizeHomeTabId(value: unknown): HomeTabId {
+    const homeTabIds: HomeTabId[] = [
+        "open",
+        "create",
+        "examples",
+        "run",
+        "instruments",
+        "extensions",
+        "settings"
+    ];
+
+    if (!homeTabIds.includes(value as HomeTabId)) {
+        return "open";
+    }
+
+    if (value == "examples" && !productConfig.examplesCatalog.enabled) {
+        return "open";
+    }
+
+    if (
+        value == "extensions" &&
+        !productConfig.extensionsCatalog.enabled
+    ) {
+        return "open";
+    }
+
+    return value as HomeTabId;
+}
+
 class HomeTabStore {
-    activeTab:
-        | "open"
-        | "create"
-        | "examples"
-        | "run"
-        | "instruments"
-        | "extensions"
-        | "settings" = "open";
+    activeTab: HomeTabId = "open";
 
     constructor() {
         this.loadOptions();
@@ -50,7 +86,9 @@ class HomeTabStore {
             try {
                 const options = JSON.parse(optionsJSON);
                 if (options.version == SAVED_OPTIONS_VERSION) {
-                    this.activeTab = options.activeTab;
+                    // Migrate sessions that were last opened on the removed
+                    // upstream Examples page.
+                    this.activeTab = normalizeHomeTabId(options.activeTab);
                 }
             } catch (err) {
                 console.error(err);
@@ -71,6 +109,40 @@ class HomeTabStore {
 }
 
 export const homeTabStore = new HomeTabStore();
+
+const DIGIRIDE_PROJECT_ASSET = path.join(
+    __dirname,
+    "product-projects",
+    "DigiRide.eez-project"
+);
+
+async function openDigiRideProject() {
+    const projectDirectory = getHomePath(
+        path.join("eez-projects", "DigiRide")
+    );
+    const projectFilePath = path.join(
+        projectDirectory,
+        "DigiRide.eez-project"
+    );
+
+    try {
+        await fs.promises.mkdir(projectDirectory, { recursive: true });
+
+        // Open a writable user copy. The bundled asset may be inside the
+        // application archive, so editing it in place would fail on save.
+        if (!fs.existsSync(projectFilePath)) {
+            await fs.promises.copyFile(
+                DIGIRIDE_PROJECT_ASSET,
+                projectFilePath
+            );
+        }
+
+        ipcRenderer.send("open-file", projectFilePath, false);
+    } catch (err) {
+        console.error(err);
+        notification.error(`Failed to open DigiRide project: ${err}`);
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -139,6 +211,19 @@ export const Home = observer(
                     >
                         <div className="EezStudio_HomeTab_NavigationGroup">
                             <div className="EezStudio_HomeTab_NavigationGroupTitle">
+                                Product
+                            </div>
+                            <HomeNavigationItem
+                                icon="material:directions_bike"
+                                label="DigiRide"
+                                title="Open the editable DigiRide project"
+                                onClick={() => {
+                                    void openDigiRideProject();
+                                }}
+                            />
+                        </div>
+                        <div className="EezStudio_HomeTab_NavigationGroup">
+                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
                                 Project
                             </div>
                             <HomeNavigationItem
@@ -172,17 +257,19 @@ export const Home = observer(
                             <div className="EezStudio_HomeTab_NavigationGroupTitle">
                                 Resources
                             </div>
-                            <HomeNavigationItem
-                                icon={HOME_TAB_EXAMPLES_ICON}
-                                label="Examples"
-                                title="Example projects ready to run or edit"
-                                selected={
-                                    homeTabStore.activeTab == "examples"
-                                }
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "examples";
-                                })}
-                            />
+                            {productConfig.examplesCatalog.enabled && (
+                                <HomeNavigationItem
+                                    icon={HOME_TAB_EXAMPLES_ICON}
+                                    label="Examples"
+                                    title="Example projects ready to run or edit"
+                                    selected={
+                                        homeTabStore.activeTab == "examples"
+                                    }
+                                    onClick={action(() => {
+                                        homeTabStore.activeTab = "examples";
+                                    })}
+                                />
+                            )}
                             <HomeNavigationItem
                                 icon={HOME_TAB_INSTRUMENTS_ICON}
                                 label="Instruments"
@@ -199,21 +286,23 @@ export const Home = observer(
                             <div className="EezStudio_HomeTab_NavigationGroupTitle">
                                 System
                             </div>
-                            <HomeNavigationItem
-                                icon="material:extension"
-                                label="Extensions"
-                                title="Extensions manager"
-                                selected={
-                                    homeTabStore.activeTab == "extensions"
-                                }
-                                attention={
-                                    extensionsManagerStore
-                                        .newVersionsInAllSections.length > 0
-                                }
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "extensions";
-                                })}
-                            />
+                            {productConfig.extensionsCatalog.enabled && (
+                                <HomeNavigationItem
+                                    icon="material:extension"
+                                    label="Extensions"
+                                    title="Extensions manager"
+                                    selected={
+                                        homeTabStore.activeTab == "extensions"
+                                    }
+                                    attention={
+                                        extensionsManagerStore
+                                            .newVersionsInAllSections.length > 0
+                                    }
+                                    onClick={action(() => {
+                                        homeTabStore.activeTab = "extensions";
+                                    })}
+                                />
+                            )}
                             <HomeNavigationItem
                                 icon="material:settings"
                                 label="Settings"
@@ -240,12 +329,13 @@ export const Home = observer(
                                 modalDialog={observable.box<any>()}
                             />
                         )}
-                        {homeTabStore.activeTab == "examples" && (
-                            <NewProjectWizard
-                                wizardModel={wizardModelExamples}
-                                modalDialog={observable.box<any>()}
-                            />
-                        )}
+                        {productConfig.examplesCatalog.enabled &&
+                            homeTabStore.activeTab == "examples" && (
+                                <NewProjectWizard
+                                    wizardModel={wizardModelExamples}
+                                    modalDialog={observable.box<any>()}
+                                />
+                            )}
                         {/*
                         homeTabStore.activeTab == "run" && (
                             <div style={{ margin: "auto" }}></div>
@@ -257,9 +347,10 @@ export const Home = observer(
                                 size="M"
                             />
                         )}
-                        {homeTabStore.activeTab == "extensions" && (
-                            <ExtensionsManager />
-                        )}
+                        {productConfig.extensionsCatalog.enabled &&
+                            homeTabStore.activeTab == "extensions" && (
+                                <ExtensionsManager />
+                            )}
                         {homeTabStore.activeTab == "settings" && <Settings />}
                     </div>
                 </div>

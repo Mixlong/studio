@@ -3,9 +3,13 @@
 export type EmbeddedProtocolCommand =
     | "test"
     | "log"
+    | "cmake"
     | "build"
     | "download"
     | "transform";
+
+export type EmbeddedTransformType = "picture" | "font" | "audio";
+export type EmbeddedTransformModel = "rom" | "romxip" | "flashnormal";
 
 export interface EmbeddedTestMessage {
     command: "test";
@@ -17,6 +21,12 @@ export interface EmbeddedLogMessage {
     data: string;
 }
 
+export interface EmbeddedCMakeMessage {
+    command: "cmake";
+    output_dir: string;
+    config_file: string;
+}
+
 export interface EmbeddedBuildMessage {
     command: "build";
     src: string;
@@ -25,22 +35,24 @@ export interface EmbeddedBuildMessage {
 
 export interface EmbeddedDownloadMessage {
     command: "download";
-    interface: string;
     target: string;
-    speed: string;
+    pack: string;
+    script: string;
+    frequency: string;
     firmware: string;
     addr: string;
 }
 
 export interface EmbeddedTransformMessage {
     command: "transform";
-    type: string;
-    model: string;
+    type: EmbeddedTransformType;
+    model: EmbeddedTransformModel;
 }
 
 export type EmbeddedOutgoingMessage =
     | EmbeddedTestMessage
     | EmbeddedBuildMessage
+    | EmbeddedCMakeMessage
     | EmbeddedDownloadMessage
     | EmbeddedTransformMessage
     | EmbeddedLogMessage;
@@ -66,6 +78,33 @@ function requiredString(
     }
 }
 
+function requiredPositiveIntegerString(
+    message: Record<string, unknown>,
+    key: string,
+    errors: string[]
+) {
+    const value = message[key];
+    if (typeof value !== "string" || !value.trim()) {
+        errors.push(`${key} must be a non-empty string`);
+        return;
+    }
+    if (!/^\d+$/.test(value.trim()) || Number(value) <= 0) {
+        errors.push(`${key} must be a positive integer string`);
+    }
+}
+
+function requiredEnum(
+    message: Record<string, unknown>,
+    key: string,
+    values: readonly string[],
+    errors: string[]
+) {
+    requiredString(message, key, errors);
+    if (typeof message[key] === "string" && !values.includes(message[key])) {
+        errors.push(`${key} must be one of: ${values.join(", ")}`);
+    }
+}
+
 export function validateEmbeddedMessage(message: unknown): string[] {
     if (!isRecord(message)) {
         return ["message must be a JSON object"];
@@ -85,20 +124,25 @@ export function validateEmbeddedMessage(message: unknown): string[] {
         case "log":
             requiredString(message, "data", errors);
             break;
+        case "cmake":
+            requiredString(message, "output_dir", errors);
+            requiredString(message, "config_file", errors);
+            break;
         case "build":
             requiredString(message, "src", errors);
             requiredString(message, "dst", errors);
             break;
         case "download":
-            requiredString(message, "interface", errors);
             requiredString(message, "target", errors);
-            requiredString(message, "speed", errors);
+            requiredString(message, "pack", errors);
+            requiredString(message, "script", errors);
+            requiredPositiveIntegerString(message, "frequency", errors);
             requiredString(message, "firmware", errors);
             requiredString(message, "addr", errors);
             break;
         case "transform":
-            requiredString(message, "type", errors);
-            requiredString(message, "model", errors);
+            requiredEnum(message, "type", ["picture", "font", "audio"], errors);
+            requiredEnum(message, "model", ["rom", "romxip", "flashnormal"], errors);
             break;
         default:
             errors.push(`unsupported command: ${message.command}`);
@@ -132,4 +176,3 @@ export function parseEmbeddedMessage(data: unknown): EmbeddedIncomingMessage {
 
     return value as EmbeddedIncomingMessage;
 }
-

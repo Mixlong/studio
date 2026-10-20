@@ -1,5 +1,7 @@
 import fs from "fs";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { dialog, getCurrentWindow } from "@electron/remote";
+import { exportFontWithRecovery } from "project-editor/features/font/font-export-recovery";
 import {
     NamingConvention,
     getName,
@@ -3194,86 +3196,155 @@ ${source}`.replace(
     }
 
     async copyFontFiles() {
-        const destinationFolder = this.project.settings.build.destinationFolder;
-        if (!destinationFolder) {
-            return;
+        // The build system uses "." when no destination folder is configured.
+        // A blank setting must not silently skip every font.
+        const destinationFolder =
+            this.project.settings.build.destinationFolder || ".";
+
+        const store = this.project._store;
+        if (
+            this.fonts.length > 0 &&
+            !this.project.settings.general.embedFonts
+        ) {
+            const { response } = await dialog.showMessageBox(
+                getCurrentWindow(),
+                {
+                    type: "warning",
+                    title: "Font source files are not embedded",
+                    message: "Imported projects may be missing font sources.",
+                    detail:
+                        "This project saves font paths instead of font file data. " +
+                        "If the project is moved or imported on another computer, " +
+                        "the original paths may not exist.\n\n" +
+                        "Enable Embed Fonts and save the project to make the " +
+                        "font sources portable.",
+                    buttons: [
+                        "Enable Embed Fonts and Save",
+                        "Continue (external font paths required)",
+                        "Cancel export"
+                    ],
+                    defaultId: 0,
+                    cancelId: 2,
+                    noLink: true
+                }
+            );
+            if (response === 0) {
+                store.updateObject(this.project.settings.general, {
+                    embedFonts: true
+                });
+                if (!(await store.save())) {
+                    throw new Error(
+                        "Font embedding could not be saved; export cancelled."
+                    );
+                }
+            } else if (response === 1) {
+                store.outputSectionsStore.write(
+                    Section.OUTPUT,
+                    MessageType.WARNING,
+                    "Continuing without embedded font sources by user choice. " +
+                        "Re-import requires the original font files and paths."
+                );
+            } else {
+                throw new Error(
+                    "Export cancelled: font sources are not embedded."
+                );
+            }
         }
 
-        await Promise.all(
-            this.fonts.map(font =>
-                (async () => {
-                    if (
-                        this.fontExportMode == "binary" &&
-                        !font.lvglUseFreeType
-                    ) {
-                        const lvglBinaryFileBase64 = await font.getLvglBinFileAsync();
-                        const lvglBinaryFile = lvglBinaryFileBase64
-                            ? Buffer.from(lvglBinaryFileBase64, "base64")
-                            : undefined;
-                        if (lvglBinaryFile) {
-                            const output = getName(
-                                "ui_font_",
-                                font.name || "",
-                                NamingConvention.UnderscoreLowerCase
-                            );
+        const baseFolder = store.getAbsoluteFilePath(destinationFolder);
+        const fontFolder = this.project.settings.build
+            .separateFolderForImagesAndFonts
+            ? join(baseFolder, "fonts")
+            : baseFolder;
 
-                            try {
-                                await writeBinaryData(
-                                    this.project._store.getAbsoluteFilePath(
-                                        destinationFolder
-                                    ) +
-                                        "/" +
-                                        (this.project.settings.build
-                                            .separateFolderForImagesAndFonts
-                                            ? "fonts/"
-                                            : "") +
-                                        output +
-                                        ".bin",
-                                    lvglBinaryFile
-                                );
-                            } catch (err) {
-                                this.project._store.outputSectionsStore.write(
-                                    Section.OUTPUT,
-                                    MessageType.ERROR,
-                                    `Error writing font file '${output}.bin': ${err}`
-                                );
-                            }
-                        }
-                    } else if (!font.lvglUseFreeType) {
-                        const lvglSourceFile = await font.getLvglSourceFile();
-                        if (lvglSourceFile) {
-                            const output = getName(
-                                "ui_font_",
-                                font.name || "",
-                                NamingConvention.UnderscoreLowerCase
-                            );
+        // Process sequentially so only one actionable failure dialog appears.
+        for (const font of this.fonts) {
+            if (font.lvglUseFreeType) {
+                continue;
+            }
 
-                            try {
-                                await writeTextFile(
-                                    this.project._store.getAbsoluteFilePath(
-                                        destinationFolder
-                                    ) +
-                                        "/" +
-                                        (this.project.settings.build
-                                            .separateFolderForImagesAndFonts
-                                            ? "fonts/"
-                                            : "") +
-                                        output +
-                                        ".c",
-                                    lvglSourceFile
-                                );
-                            } catch (err) {
-                                this.project._store.outputSectionsStore.write(
-                                    Section.OUTPUT,
-                                    MessageType.ERROR,
-                                    `Error writing font file '${output}.c': ${err}`
-                                );
-                            }
+            const output = getName(
+                "ui_font_",
+                font.name || "",
+                NamingConvention.UnderscoreLowerCase
+            );
+            const binary = this.fontExportMode === "binary";
+            const filePath = join(fontFolder, output + (binary ? ".bin" : ".c"));
+
+            const exported = await exportFontWithRecovery(
+                async () => {
+                    if (binary) {
+                        const base64 = await font.getLvglBinFileAsync();
+                        if (!base64) {
+                            throw new Error(
+                                "Font conversion returned no binary data. Check the source file, glyph ranges and converter dependencies."
+                            );
                         }
+                        const fontData = Buffer.from(base64, "base64");
+                        if (!fontData.length) {
+                            throw new Error("Font conversion returned an empty binary file.");
+                        }
+                        await writeBinaryData(filePath, fontData);
+                    } else {
+                        const source = await font.getLvglSourceFile();
+                        if (!source?.trim()) {
+                            throw new Error(
+                                "Font conversion returned no C source. Check the source file, glyph ranges and converter dependencies."
+                            );
+                        }
+                        await writeTextFile(filePath, source);
                     }
-                })()
-            )
-        );
+                },
+                async error => {
+                    const details =
+                        'Font "' + font.name + '" could not be exported to ' +
+                        filePath + ":\n" + error.message;
+                    store.outputSectionsStore.write(
+                        Section.OUTPUT,
+                        MessageType.WARNING,
+                        details
+                    );
+
+                    const { response } = await dialog.showMessageBox(
+                        getCurrentWindow(),
+                        {
+                            type: "error",
+                            title: "Font export failed",
+                            message: 'Unable to export font "' + font.name + '".',
+                            detail: error.message + "\n\nOutput: " + filePath +
+                                "\n\nSkipping the font creates an incomplete build. " +
+                                "Do not import or deploy it as a complete project.",
+                            buttons: [
+                                "Retry",
+                                "Skip font (incomplete build)",
+                                "Cancel export"
+                            ],
+                            defaultId: 0,
+                            cancelId: 2,
+                            noLink: true
+                        }
+                    );
+                    return response === 0
+                        ? "retry"
+                        : response === 1
+                          ? "skip"
+                          : "cancel";
+                }
+            );
+
+            if (!exported) {
+                // A previous build's generated font must not silently stand in
+                // for this explicitly skipped font.
+                await fs.promises.rm(filePath, { force: true });
+                store.outputSectionsStore.write(
+                    Section.OUTPUT,
+                    MessageType.ERROR,
+                    'Font "' + font.name +
+                        '" was skipped by user choice: export is incomplete (' +
+                        filePath + ")."
+                );
+            }
+        }
     }
 }
 

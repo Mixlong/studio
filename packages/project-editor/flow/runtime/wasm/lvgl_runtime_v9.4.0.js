@@ -72,8 +72,21 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
 // include: /home/mvladic/studio-wasm-libs/lvgl-runtime/v9.4.0/../common/pre.js
+// Electron renderer processes expose Node's require, but Emscripten chooses
+// its browser loader when process.type is "renderer". Browser fetch/XHR can
+// fail for the local .wasm path, leaving onRuntimeInitialized uncalled.
+// Read the matching binary via Node once and pass it to Emscripten before
+// runWasmModule consumes Module.wasmBinary.
+var cachedElectronRendererWasmBinary;
 module["exports"] = function (postWorkerToRendererMessage) {
     var Module = {};
+
+    if (globalThis.process?.type === "renderer" && typeof require === "function") {
+        cachedElectronRendererWasmBinary ??= require("fs").readFileSync(
+            require("path").join(__dirname, "lvgl_runtime_v9.4.0.wasm")
+        );
+        Module["wasmBinary"] = cachedElectronRendererWasmBinary;
+    }
 
     Module.postWorkerToRendererMessage = postWorkerToRendererMessage;
 

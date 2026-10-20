@@ -15,7 +15,9 @@ import {
 } from "eez-studio-ui/action";
 import { BuildConfiguration } from "project-editor/project/project";
 import { ProjectContext } from "project-editor/project/context";
+import { ProjectChangesPopover } from "project-editor/features/changes/ChangesPopover";
 import { PageTabState } from "project-editor/features/page/PageEditor";
+import { getLVGLEditorPreviewGeometry } from "project-editor/lvgl/EditorPreview";
 import {
     getChildren,
     getObjectIcon,
@@ -42,6 +44,10 @@ import { isDark } from "eez-studio-shared/color";
 import { Icon } from "eez-studio-ui/icon";
 import { dockerBuildState } from "project-editor/lvgl/docker-build/docker-build-state";
 import { ThemedColorInput } from "project-editor/ui-components/PropertyGrid/ThemedColorInput";
+import {
+    showEmbeddedBuildWindow,
+    showEmbeddedDownloadWindow
+} from "project-editor/features/embedded-platform/EmbeddedPlatformTab";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -143,12 +149,20 @@ export const Toolbar = observer(
                 >
                     <div className="EezStudio_ProjectEditor_ToolbarNav_LeftGroup">
                         <WorkspaceSwitcher />
+                        {showEditorButtons && !this.context.runtime && (
+                            <PrimaryEditActions />
+                        )}
                         {showEditorButtons && <EditorButtons />}
                     </div>
 
                     <ToolbarProjectContext />
 
                     <div className="EezStudio_ProjectEditor_ToolbarNav_RightGroup">
+                        {!this.context.runtime &&
+                            this.context.context.type === "project-editor" &&
+                            this.context.project.changes && (
+                                <ProjectChangesPopover />
+                            )}
                         {showRunEditSwitchControls && (
                             <RunEditSwitchControls />
                         )}
@@ -628,6 +642,49 @@ const WorkspaceSwitcher = observer(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Keep Save, Undo and Redo visible when secondary actions are clipped.
+const PrimaryEditActions = observer(() => {
+    const store = React.useContext(ProjectContext);
+    const history = store.undoManager;
+
+    return (
+        <div
+            className="EezStudio_ProjectEditor_ToolbarNav_PrimaryEditActions"
+            role="group"
+            aria-label="Save and edit history"
+        >
+            <IconAction
+                title="Save"
+                icon="material:save"
+                onClick={() => store.save()}
+                enabled={store.isModified}
+            />
+            <IconAction
+                title={
+                    history.canUndo
+                        ? "Undo \"" + (history.undoDescription || "change") + "\""
+                        : "Undo"
+                }
+                icon="material:undo"
+                onClick={() => history.undo()}
+                enabled={history.canUndo}
+            />
+            <IconAction
+                title={
+                    history.canRedo
+                        ? "Redo \"" + (history.redoDescription || "change") + "\""
+                        : "Redo"
+                }
+                icon="material:redo"
+                onClick={() => history.redo()}
+                enabled={history.canRedo}
+            />
+        </div>
+    );
+});
+
+////////////////////////////////////////////////////////////////////////////////
+
 const EditorButtons = observer(
     class EditorButtons extends React.Component {
         static contextType = ProjectContext;
@@ -741,45 +798,7 @@ const EditorButtons = observer(
             return (
                 <div className="EezStudio_ProjectEditor_ToolbarNav_EditorButtons">
                     {!this.context.runtime && (
-                        <div className="btn-group" role="group">
-                            <IconAction
-                                title="Save"
-                                icon="material:save"
-                                onClick={() => this.context.save()}
-                                enabled={this.context.isModified}
-                            />
-                        </div>
-                    )}
-
-                    {!this.context.runtime && (
                         <>
-                            <div className="btn-group" role="group">
-                                <IconAction
-                                    title={
-                                        this.context.undoManager.canUndo
-                                            ? `Undo "${this.context.undoManager.undoDescription}"`
-                                            : "Undo"
-                                    }
-                                    icon="material:undo"
-                                    onClick={() =>
-                                        this.context.undoManager.undo()
-                                    }
-                                    enabled={this.context.undoManager.canUndo}
-                                />
-                                <IconAction
-                                    title={
-                                        this.context.undoManager.canRedo
-                                            ? `Redo "${this.context.undoManager.redoDescription}"`
-                                            : "Redo"
-                                    }
-                                    icon="material:redo"
-                                    onClick={() =>
-                                        this.context.undoManager.redo()
-                                    }
-                                    enabled={this.context.undoManager.canRedo}
-                                />
-                            </div>
-
                             <div className="btn-group" role="group">
                                 {false && (
                                     <IconAction
@@ -997,6 +1016,80 @@ const EditorButtons = observer(
                             })}
                         </div>
                     )}
+
+                    {this.pageTabState &&
+                        this.context.projectTypeTraits.isLVGL &&
+                        !this.context.runtime && (
+                            <div className="btn-group" role="group">
+                                <IconAction
+                                    title="Full editing view: expand the original LVGL screen to show all widgets"
+                                    icon="material:view_module"
+                                    iconSize={20}
+                                    selected={
+                                        this.pageTabState.lvglEditorViewMode ===
+                                        "expanded"
+                                    }
+                                    onClick={action(() => {
+                                        this.pageTabState!.lvglEditorViewMode =
+                                            "expanded";
+                                    })}
+                                />
+                                <IconAction
+                                    title="Device view: show actual clipped LVGL screen"
+                                    icon="material:crop_original"
+                                    iconSize={20}
+                                    selected={
+                                        this.pageTabState.lvglEditorViewMode ===
+                                        "device"
+                                    }
+                                    onClick={action(() => {
+                                        this.pageTabState!.lvglEditorViewMode =
+                                            "device";
+                                    })}
+                                />
+                                {this.pageTabState.lvglEditorViewMode ===
+                                    "expanded" && (
+                                    <IconAction
+                                        title="Fit device and all editing widgets in viewport"
+                                        icon="material:fit_screen"
+                                        iconSize={20}
+                                        onClick={action(() => {
+                                            const state = this.pageTabState!;
+                                            const page = state.page;
+                                            const geometry =
+                                                getLVGLEditorPreviewGeometry(page);
+                                            const transform =
+                                                state.transform.clone();
+                                            const client =
+                                                transform.clientRect;
+                                            if (
+                                                client.width <= 1 ||
+                                                client.height <= 1
+                                            ) {
+                                                return;
+                                            }
+                                            const scale = Math.max(
+                                                0.02,
+                                                Math.min(
+                                                    1,
+                                                    (client.width - 60) / geometry.width,
+                                                    (client.height - 60) /
+                                                        geometry.height
+                                                )
+                                            );
+                                            transform.scale = scale;
+                                            transform.translate = {
+                                                x: -(geometry.left + geometry.width / 2) *
+                                                    scale,
+                                                y: -(geometry.top + geometry.height / 2) *
+                                                    scale
+                                            };
+                                            state.transform = transform;
+                                        })}
+                                    />
+                                )}
+                            </div>
+                        )}
 
                     {this.pageTabState && (
                         <PageZoomButton pageTabState={this.pageTabState} />
@@ -1409,6 +1502,9 @@ const RunEditSwitchControls = observer(
             const iconSize = 18;
             const isExecuting =
                 !!this.context.runtime || this.isFullSimulatorMode;
+            const showEmbeddedFirmwareActions =
+                this.context.projectTypeTraits.isLVGL &&
+                !!this.context.project.embeddedPlatform;
 
             return (
                 <div className="EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls">
@@ -1423,6 +1519,30 @@ const RunEditSwitchControls = observer(
                         />
                     ) : (
                         <>
+                            {showEmbeddedFirmwareActions && (
+                                <div className="EezStudio_ProjectEditor_ToolbarNav_FirmwareControls">
+                                    <ButtonAction
+                                        className="DigiStudio_FirmwareAction"
+                                        text="Build"
+                                        title="Build firmware through the configured middleware"
+                                        icon="material:build"
+                                        iconSize={iconSize}
+                                        onClick={() =>
+                                            showEmbeddedBuildWindow(this.context)
+                                        }
+                                    />
+                                    <ButtonAction
+                                        className="DigiStudio_FirmwareAction"
+                                        text="Download"
+                                        title="Download firmware through the configured middleware"
+                                        icon="material:system_update_alt"
+                                        iconSize={iconSize}
+                                        onClick={() =>
+                                            showEmbeddedDownloadWindow(this.context)
+                                        }
+                                    />
+                                </div>
+                            )}
                             <ButtonAction
                                 className="DigiStudio_RunAction"
                                 text="Run"
