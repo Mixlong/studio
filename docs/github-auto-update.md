@@ -1,4 +1,4 @@
-# GitHub Actions 自动更新
+# GitHub 构建、云效上传自动更新
 
 当前发布方案使用一套代码、两类 GitHub Runner：
 
@@ -7,10 +7,13 @@ GitHub 仓库
 ├── macOS Runner    -> npm run release:dev:mac
 └── Windows Runner  -> npm run release:dev:win
                          ↓
-                 Ubuntu 上传任务 -> 阿里云 OSS
+                 GitHub 临时 Release
+                         ↓
+                 云效流水线下载并上传 OSS
 ```
 
 业务代码只维护在 GitHub 仓库中，不需要再维护一份独立的 macOS 代码。
+GitHub 不直接连接 OSS，也不保存 OSS AccessKey。
 
 ## 开发版流水线
 
@@ -21,20 +24,51 @@ GitHub 仓库
   `0.0.14-dev.10`。
 - macOS 和 Windows 使用同一个 `RELEASE_VERSION`，避免客户端版本不一致。
 - OSS 目标目录为 `d-space/DigiwiseStudio/dev/`。
+- 构建完成后，GitHub 会生成一个临时预发布版本：
+  `digi-dev-<RELEASE_VERSION>`。
+- 临时 Release 只用于把 macOS/Windows 构建结果交给云效，不是客户端最终更新地址。
 
 正式版暂不自动发布，后续可以单独增加 Tag 或人工审批工作流，上传到
 `d-space/DigiwiseStudio/stable/`。
 
-## GitHub Secrets
+## 云效流水线配置
 
-在 GitHub 仓库的 `Settings -> Secrets and variables -> Actions` 中添加：
+云效流水线使用 GitHub 代码源或 Webhook 触发，触发版本为：
 
-- `OSS_ACCESS_KEY_ID`
-- `OSS_ACCESS_KEY_SECRET`
+```text
+digi-dev-0.0.14-dev.10
+```
 
-这两个值只用于上传 OSS，不要写入代码、工作流文件或提交记录。建议使用仅允许访问
-`bikewise` 目标目录的 RAM 凭证。GitHub Actions 不会自动读取云效中已经创建的 OSS
-服务连接，因此需要单独配置 GitHub Secrets。
+在云效构建任务中执行：
+
+```bash
+export RELEASE_TAG=digi-dev-0.0.14-dev.10
+./scripts/fetch-github-dev-release.sh
+```
+
+脚本会把 GitHub 临时 Release 解压到：
+
+```text
+release-oss/DigiwiseStudio/
+├── dist-mac/
+└── dist-win-x64/
+```
+
+然后在云效流水线添加“OSS 上传”步骤：
+
+| 配置项 | 值 |
+| --- | --- |
+| 服务连接 | 云效中已有的 OSS 服务连接 |
+| Bucket 地域 | `华南1（深圳）` |
+| Bucket | `bikewise` |
+| Bucket 目录 | `d-space/DigiwiseStudio/dev` |
+| 源文件目录 | `release-oss/DigiwiseStudio` |
+
+云效的 OSS 服务连接负责授权，GitHub 仓库不需要配置
+`OSS_ACCESS_KEY_ID` 或 `OSS_ACCESS_KEY_SECRET`。
+
+如果仓库设置为私有，需要在云效中配置 GitHub 代码源/下载凭证；如果仓库公开，脚本可以直接下载
+临时 Release。客户端最终仍然只从 OSS 的公开 HTTPS 地址下载更新。
 
 ## macOS 签名与公证
 

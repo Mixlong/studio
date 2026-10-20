@@ -96,18 +96,17 @@ jobs:
                   if-no-files-found: error
                   retention-days: 7
 
-    upload:
-        name: Upload release to OSS
+    stage:
+        name: Stage release for Yunxiao
         needs:
             - prepare
             - build
         runs-on: ubuntu-22.04
+        permissions:
+            actions: read
+            contents: write
         env:
-            OSS_ENDPOINT: oss-cn-shenzhen.aliyuncs.com
-            OSS_BUCKET: bikewise
-            OSS_PREFIX: d-space/DigiwiseStudio/dev
-            OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-            OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+            RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         steps:
             - name: Download staged releases
               uses: actions/download-artifact@v4
@@ -116,54 +115,37 @@ jobs:
                   path: release-oss/DigiwiseStudio
                   merge-multiple: true
 
-            - name: Verify OSS credentials and release files
+            - name: Verify release files
               shell: bash
               run: |
-                  test -n "$OSS_ACCESS_KEY_ID" || { echo "Missing OSS_ACCESS_KEY_ID secret" >&2; exit 1; }
-                  test -n "$OSS_ACCESS_KEY_SECRET" || { echo "Missing OSS_ACCESS_KEY_SECRET secret" >&2; exit 1; }
                   test -f release-oss/DigiwiseStudio/dist-mac/latest-mac.yml
                   test -f release-oss/DigiwiseStudio/dist-win-x64/latest.yml
                   find release-oss/DigiwiseStudio -type f -maxdepth 3 -print
 
-            - name: Install ossutil
+            - name: Create Yunxiao handoff packages
               shell: bash
               run: |
-                  version=2.4.0
-                  archive="ossutil-${version}-linux-amd64.zip"
-                  curl --fail --location --silent --show-error \
-                    "https://gosspublic.alicdn.com/ossutil/v2/${version}/${archive}" \
-                    --output "$RUNNER_TEMP/$archive"
-                  unzip -q "$RUNNER_TEMP/$archive" -d "$RUNNER_TEMP/ossutil"
-                  chmod 755 "$RUNNER_TEMP/ossutil/ossutil-${version}-linux-amd64/ossutil"
-                  echo "$RUNNER_TEMP/ossutil/ossutil-${version}-linux-amd64" >> "$GITHUB_PATH"
+                  mkdir -p yunxiao-release
+                  tar -czf "yunxiao-release/DigiStudio-${RELEASE_VERSION}-mac.tar.gz" \
+                    -C release-oss/DigiwiseStudio dist-mac
+                  tar -czf "yunxiao-release/DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz" \
+                    -C release-oss/DigiwiseStudio dist-win-x64
+                  sha256sum yunxiao-release/*
 
-            - name: Configure ossutil
+            - name: Publish temporary GitHub release for Yunxiao
+              env:
+                  GH_TOKEN: ${{ github.token }}
               shell: bash
               run: |
-                  cat > "$RUNNER_TEMP/ossutilconfig" <<EOF
-                  [Credentials]
-                  endpoint = $OSS_ENDPOINT
-                  region = cn-shenzhen
-                  accessKeyID = $OSS_ACCESS_KEY_ID
-                  accessKeySecret = $OSS_ACCESS_KEY_SECRET
-                  mode = AK
-                  EOF
-
-            - name: Upload macOS artifacts
-              shell: bash
-              run: |
-                  ossutil -c "$RUNNER_TEMP/ossutilconfig" cp -rf \
-                    release-oss/DigiwiseStudio/dist-mac/ \
-                    "oss://$OSS_BUCKET/$OSS_PREFIX/dist-mac/"
-
-            - name: Upload Windows artifacts
-              shell: bash
-              run: |
-                  ossutil -c "$RUNNER_TEMP/ossutilconfig" cp -rf \
-                    release-oss/DigiwiseStudio/dist-win-x64/ \
-                    "oss://$OSS_BUCKET/$OSS_PREFIX/dist-win-x64/"
-
-            - name: Remove temporary OSS credentials
-              if: always()
-              shell: bash
-              run: rm -f "$RUNNER_TEMP/ossutilconfig"
+                  tag="digi-dev-${RELEASE_VERSION}"
+                  title="DigiStudio Dev ${RELEASE_VERSION}"
+                  if gh release view "$tag" >/dev/null 2>&1; then
+                    gh release upload "$tag" yunxiao-release/* --clobber
+                  else
+                    gh release create "$tag" yunxiao-release/* \
+                      --prerelease \
+                      --target "$GITHUB_SHA" \
+                      --title "$title" \
+                      --notes "GitHub 负责构建，云效负责上传 OSS。"
+                  fi
+                  echo "Yunxiao release tag: $tag"

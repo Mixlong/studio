@@ -44,9 +44,14 @@ EEZ_UPDATE_ROOT=https://<your-public-domain>/d-space/DigiwiseStudio
 
 云效 Flow 的 OSS 上传步骤配置如下：
 
+如果构建使用 GitHub Actions，GitHub 只负责生成 macOS/Windows 安装包，并将它们打成
+临时 Release。云效流水线使用 `scripts/fetch-github-dev-release.sh` 下载并解压到
+`release-oss/DigiwiseStudio/`，再由云效自己的 OSS 服务连接执行下面的上传步骤。
+GitHub 不直接访问 OSS，也不需要保存 OSS AccessKey。
+
 | 流水线 | 触发方式 | 上传源目录 | OSS 目标目录 |
 | --- | --- | --- | --- |
-| DigiStudio-Dev | 开发分支 Push | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/dev/` |
+| DigiStudio-Dev | GitHub `digi-dev-*` Tag / 云效 Webhook | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/dev/` |
 | DigiStudio-Stable | Tag 或手动审批 | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/stable/` |
 
 开发流水线可以覆盖同名的 `latest*.yml` 和安装包；正式流水线只在测试通过后上传。
