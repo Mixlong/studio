@@ -1,74 +1,61 @@
-# GitHub 构建、云效上传自动更新
+# GitHub Actions 自动更新
 
-当前发布方案使用一套代码、两类 GitHub Runner：
+开发版发布现在是一条完整链路：
 
 ```text
-GitHub 仓库
-├── macOS Runner    -> npm run release:dev:mac
-└── Windows Runner  -> npm run release:dev:win
-                         ↓
-                 GitHub 临时 Release
-                         ↓
-                 云效流水线下载并上传 OSS
+推送代码
+  ↓
+GitHub Actions
+  ├── macOS Runner 构建 macOS 包
+  └── Windows Runner 构建 Windows 包
+        ↓
+创建 GitHub 开发版 Release
+        ↓ Webhook 自动触发
+云效流水线
+        ↓ 使用云效中已配置的 OSS 服务连接
+阿里云 OSS：d-space/DigiwiseStudio/dev/
+        ↓
+客户端 electron-updater 自动检查并更新
 ```
 
-业务代码只维护在 GitHub 仓库中，不需要再维护一份独立的 macOS 代码。
-GitHub 不直接连接 OSS，也不保存 OSS AccessKey。
+业务代码只维护在 GitHub 仓库中，不需要维护第二套代码，也不需要把 OSS 密钥放进
+GitHub。OSS 上传由云效完成，GitHub 只负责构建和生成 Release 资产。
 
 ## 开发版流水线
 
 工作流文件为 `.github/workflows/release-dev.yml`。
 
 - 推送 `codex/integrate-upstream` 或 `dev` 分支会自动构建开发版。
-- 也可以在 GitHub Actions 页面手动运行，并填写版本号，例如
-  `0.0.14-dev.10`。
+- 也可以在 GitHub Actions 页面手动运行，并填写版本号，例如 `0.0.14-dev.10`。
 - macOS 和 Windows 使用同一个 `RELEASE_VERSION`，避免客户端版本不一致。
+- 构建成功后会创建 `digi-dev-版本号` 的 GitHub prerelease。
+- 随后自动调用云效 Webhook；云效从该 Release 下载两个平台的资产并上传 OSS。
 - OSS 目标目录为 `d-space/DigiwiseStudio/dev/`。
-- 构建完成后，GitHub 会生成一个临时预发布版本：
-  `digi-dev-<RELEASE_VERSION>`。
-- 临时 Release 只用于把 macOS/Windows 构建结果交给云效，不是客户端最终更新地址。
+
+如果手动运行工作流，版本号必须是尚未创建过的开发版版本号，否则 GitHub Release 会明确
+报错，避免覆盖已经发布的版本。
+
+## 只需要配置一次的连接
+
+在云效流水线中开启 Webhook 触发，并将 Webhook 地址保存到 GitHub 仓库：
+
+`Settings -> Secrets and variables -> Actions -> New repository secret`
+
+Secret 名称必须是：
+
+```text
+YUNXIAO_RELEASE_WEBHOOK_URL
+```
+
+这个 Secret 只是云效流水线的触发地址，不是 OSS 密钥。云效流水线内部继续使用已有的
+`黄江龙的对象存储(OSS)服务连接` 完成上传，因此 GitHub 不需要配置
+`OSS_ACCESS_KEY_ID` 或 `OSS_ACCESS_KEY_SECRET`。
+
+云效脚本会优先使用 Webhook 传入的 `RELEASE_TAG`，手动运行云效时则自动选择最新的
+`digi-dev-*` GitHub prerelease。这样自动发布和手动补发使用同一套逻辑。
 
 正式版暂不自动发布，后续可以单独增加 Tag 或人工审批工作流，上传到
 `d-space/DigiwiseStudio/stable/`。
-
-## 云效流水线配置
-
-云效流水线使用 GitHub 代码源或 Webhook 触发，触发版本为：
-
-```text
-digi-dev-0.0.14-dev.10
-```
-
-在云效构建任务中执行：
-
-```bash
-export RELEASE_TAG=digi-dev-0.0.14-dev.10
-./scripts/fetch-github-dev-release.sh
-```
-
-脚本会把 GitHub 临时 Release 解压到：
-
-```text
-release-oss/DigiwiseStudio/
-├── dist-mac/
-└── dist-win-x64/
-```
-
-然后在云效流水线添加“OSS 上传”步骤：
-
-| 配置项 | 值 |
-| --- | --- |
-| 服务连接 | 云效中已有的 OSS 服务连接 |
-| Bucket 地域 | `华南1（深圳）` |
-| Bucket | `bikewise` |
-| Bucket 目录 | `d-space/DigiwiseStudio/dev` |
-| 源文件目录 | `release-oss/DigiwiseStudio` |
-
-云效的 OSS 服务连接负责授权，GitHub 仓库不需要配置
-`OSS_ACCESS_KEY_ID` 或 `OSS_ACCESS_KEY_SECRET`。
-
-如果仓库设置为私有，需要在云效中配置 GitHub 代码源/下载凭证；如果仓库公开，脚本可以直接下载
-临时 Release。客户端最终仍然只从 OSS 的公开 HTTPS 地址下载更新。
 
 ## macOS 签名与公证
 

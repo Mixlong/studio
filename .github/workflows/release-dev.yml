@@ -86,7 +86,7 @@ jobs:
               shell: bash
               run: |
                   test -d release-oss/DigiwiseStudio
-                  find release-oss/DigiwiseStudio -type f -maxdepth 3 -print
+                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
 
             - name: Upload staged release
               uses: actions/upload-artifact@v4
@@ -96,17 +96,17 @@ jobs:
                   if-no-files-found: error
                   retention-days: 7
 
-    stage:
-        name: Stage release for Yunxiao
+    publish:
+        name: Create GitHub release and trigger Yunxiao
         needs:
             - prepare
             - build
         runs-on: ubuntu-22.04
         permissions:
-            actions: read
             contents: write
         env:
             RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+            YUNXIAO_RELEASE_WEBHOOK_URL: ${{ secrets.YUNXIAO_RELEASE_WEBHOOK_URL }}
         steps:
             - name: Download staged releases
               uses: actions/download-artifact@v4
@@ -115,40 +115,71 @@ jobs:
                   path: release-oss/DigiwiseStudio
                   merge-multiple: true
 
-            - name: Verify release files
+            - name: Verify staged release files
               shell: bash
               run: |
                   test -f release-oss/DigiwiseStudio/dist-mac/latest-mac.yml
                   test -f release-oss/DigiwiseStudio/dist-win-x64/latest.yml
-                  find release-oss/DigiwiseStudio -type f -maxdepth 3 -print
+                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
 
-            - name: Create Yunxiao handoff packages
+            - name: Package release assets
               shell: bash
               run: |
-                  mkdir -p yunxiao-release
-                  tar -czf "yunxiao-release/DigiStudio-${RELEASE_VERSION}-mac.tar.gz" \
-                    -C release-oss/DigiwiseStudio dist-mac
-                  tar -czf "yunxiao-release/DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz" \
-                    -C release-oss/DigiwiseStudio dist-win-x64
-                  sha256sum yunxiao-release/*
+                  set -euo pipefail
+                  mac_archive="DigiStudio-${RELEASE_VERSION}-mac.tar.gz"
+                  win_archive="DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz"
 
-            - name: Publish temporary GitHub release for Yunxiao
+                  tar -czf "$RUNNER_TEMP/$mac_archive" \
+                    -C release-oss/DigiwiseStudio dist-mac
+                  tar -czf "$RUNNER_TEMP/$win_archive" \
+                    -C release-oss/DigiwiseStudio dist-win-x64
+
+                  test -s "$RUNNER_TEMP/$mac_archive"
+                  test -s "$RUNNER_TEMP/$win_archive"
+
+            - name: Create GitHub development release
+              id: release
+              shell: bash
               env:
                   GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  tag="digi-dev-${RELEASE_VERSION}"
+
+                  if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                    echo "GitHub release already exists: $tag" >&2
+                    echo "Choose a new release_version for a manual run." >&2
+                    exit 1
+                  fi
+
+                  gh release create "$tag" \
+                    "$RUNNER_TEMP/DigiStudio-${RELEASE_VERSION}-mac.tar.gz" \
+                    "$RUNNER_TEMP/DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --target "$GITHUB_SHA" \
+                    --title "DigiStudio ${RELEASE_VERSION}" \
+                    --notes "自动生成的开发版 ${RELEASE_VERSION}" \
+                    --prerelease
+
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
+                  echo "Created GitHub release: $tag"
+
+            - name: Trigger Yunxiao release pipeline
               shell: bash
               run: |
-                  tag="digi-dev-${RELEASE_VERSION}"
-                  title="DigiStudio Dev ${RELEASE_VERSION}"
-                  if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-                    gh release upload "$tag" yunxiao-release/* \
-                      --repo "$GITHUB_REPOSITORY" \
-                      --clobber
-                  else
-                    gh release create "$tag" yunxiao-release/* \
-                      --repo "$GITHUB_REPOSITORY" \
-                      --prerelease \
-                      --target "$GITHUB_SHA" \
-                      --title "$title" \
-                      --notes "GitHub 负责构建，云效负责上传 OSS。"
-                  fi
-                  echo "Yunxiao release tag: $tag"
+                  set -euo pipefail
+                  test -n "$YUNXIAO_RELEASE_WEBHOOK_URL" || {
+                    echo "Missing YUNXIAO_RELEASE_WEBHOOK_URL GitHub secret" >&2
+                    exit 1
+                  }
+
+                  payload="$(printf '{\"RELEASE_TAG\":\"%s\"}' '${{ steps.release.outputs.tag }}')"
+                  curl --fail --silent --show-error --location \
+                    --retry 5 --retry-delay 2 \
+                    --connect-timeout 20 --max-time 60 \
+                    -X POST \
+                    -H 'Content-Type: application/json' \
+                    --data "$payload" \
+                    "$YUNXIAO_RELEASE_WEBHOOK_URL"
+
+                  echo "Yunxiao release pipeline triggered for ${{ steps.release.outputs.tag }}"
