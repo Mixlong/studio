@@ -1,10 +1,14 @@
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
     copyFileSync,
     mkdirSync,
+    readFileSync,
     readdirSync,
-    rmSync
+    rmSync,
+    statSync,
+    writeFileSync
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -112,29 +116,106 @@ function stageDirectory(sourceDirectory, targetDirectory) {
     }
 }
 
+function writeUpdateManifest(targetDirectory, manifestName) {
+    if (dryRun) {
+        return;
+    }
+
+    const artifactFiles = readdirSync(targetDirectory, { withFileTypes: true })
+        .filter(
+            entry =>
+                entry.isFile() &&
+                /\.(?:dmg|pkg|zip|exe)$/.test(entry.name)
+        )
+        .map(entry => entry.name)
+        .sort((left, right) => {
+            const priority = fileName =>
+                fileName.endsWith(".zip")
+                    ? 0
+                    : fileName.endsWith(".dmg")
+                      ? 1
+                      : 2;
+
+            return priority(left) - priority(right) || left.localeCompare(right);
+        });
+
+    if (artifactFiles.length === 0) {
+        throw new Error(`No update artifacts found in ${targetDirectory}`);
+    }
+
+    const files = artifactFiles.map(fileName => {
+        const filePath = path.join(targetDirectory, fileName);
+        const sha512 = createHash("sha512")
+            .update(readFileSync(filePath))
+            .digest("base64");
+
+        return {
+            url: fileName,
+            sha512,
+            size: statSync(filePath).size
+        };
+    });
+    const primaryFile = files[0];
+    const version = JSON.parse(
+        readFileSync(path.join(projectRoot, "package.json"), "utf8")
+    ).version;
+    const lines = [
+        `version: ${version}`,
+        "files:",
+        ...files.flatMap(file => [
+            `  - url: ${file.url}`,
+            `    sha512: ${file.sha512}`,
+            `    size: ${file.size}`
+        ]),
+        `path: ${primaryFile.url}`,
+        `sha512: ${primaryFile.sha512}`,
+        `releaseDate: '${new Date().toISOString()}'`,
+        ""
+    ];
+
+    writeFileSync(path.join(targetDirectory, manifestName), lines.join("\n"));
+}
+
 function stageRelease() {
     if (mode === "all" && !dryRun) {
         rmSync(stagingRoot, { recursive: true, force: true });
     }
 
+    const manifests = [];
     if (mode === "all") {
-        stageDirectory("dist-mac", path.join(stagingDirectory, "dist-mac"));
+        const macDirectory = path.join(stagingDirectory, "dist-mac");
+        stageDirectory("dist-mac", macDirectory);
+        manifests.push([macDirectory, "latest-mac.yml"]);
+        const windowsDirectory = path.join(stagingDirectory, "dist-win-x64");
         stageDirectory(
             "dist-win-x64",
-            path.join(stagingDirectory, "dist-win-x64")
+            windowsDirectory
         );
+        manifests.push([windowsDirectory, "latest.yml"]);
+        const windowsIa32Directory = path.join(stagingDirectory, "win-ia32");
         stageDirectory(
             "dist-win-ia32",
-            path.join(stagingDirectory, "win-ia32")
+            windowsIa32Directory
         );
+        manifests.push([windowsIa32Directory, "latest.yml"]);
     } else if (mode === "win-ia32") {
-        stageDirectory("dist", path.join(stagingDirectory, "win-ia32"));
+        const windowsIa32Directory = path.join(stagingDirectory, "win-ia32");
+        stageDirectory("dist", windowsIa32Directory);
+        manifests.push([windowsIa32Directory, "latest.yml"]);
     } else if (mode === "mac") {
-        stageDirectory("dist", path.join(stagingDirectory, "dist-mac"));
+        const macDirectory = path.join(stagingDirectory, "dist-mac");
+        stageDirectory("dist", macDirectory);
+        manifests.push([macDirectory, "latest-mac.yml"]);
     } else if (mode === "win") {
-        stageDirectory("dist", path.join(stagingDirectory, "dist-win-x64"));
+        const windowsDirectory = path.join(stagingDirectory, "dist-win-x64");
+        stageDirectory("dist", windowsDirectory);
+        manifests.push([windowsDirectory, "latest.yml"]);
     } else {
         stageDirectory("dist", stagingDirectory);
+    }
+
+    for (const [targetDirectory, manifestName] of manifests) {
+        writeUpdateManifest(targetDirectory, manifestName);
     }
 }
 

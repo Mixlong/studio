@@ -205,8 +205,10 @@ EEZ_UPDATE_URL=https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStu
 ```
 
 `dist-oss` 会清理旧的 `dist/`、生成源码和样式、注入 OSS 更新地址，最后只在本地
-生成安装包和更新元数据，不会向 OSS、GitHub 或云效自动上传。它会按执行机选择发布目标：
-macOS 生成 DMG/ZIP，Windows 生成 NSIS，Linux 使用项目配置中的 Linux 目标。
+生成安装包，不会向 OSS、GitHub 或云效自动上传。`release:patch*` 和 `release:*`
+命令会在整理产物时根据安装包自动生成 `latest*.yml`，并把它们放入
+`release-oss/DigiwiseStudio/`。它会按执行机选择发布目标：macOS 生成 DMG/ZIP，Windows
+生成 NSIS，Linux 使用项目配置中的 Linux 目标。
 
 Windows 32 位构建使用：
 
