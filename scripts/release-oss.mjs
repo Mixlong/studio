@@ -68,7 +68,9 @@ function run(args) {
 
     const result = spawnSync(npmCommand, args, {
         cwd: projectRoot,
-        stdio: "inherit"
+        stdio: "inherit",
+        // npm.cmd is a shell command on Windows and needs shell mode here.
+        shell: process.platform === "win32"
     });
 
     if (result.error) throw result.error;
