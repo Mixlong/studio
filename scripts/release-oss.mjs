@@ -1,10 +1,14 @@
 import "dotenv/config";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
     copyFileSync,
     mkdirSync,
+    readFileSync,
     readdirSync,
-    rmSync
+    rmSync,
+    statSync,
+    writeFileSync
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -111,6 +115,66 @@ function stageDirectory(sourceDirectory, targetDirectory) {
     }
 }
 
+function writeUpdateMetadata(
+    targetDirectory,
+    metadataFileName,
+    artifactPattern,
+    primaryPattern
+) {
+    if (dryRun) {
+        console.log(
+            `metadata ${metadataFileName} <- ${path.relative(projectRoot, targetDirectory)}/`
+        );
+        return;
+    }
+
+    const artifacts = readdirSync(targetDirectory, { withFileTypes: true })
+        .filter(entry => entry.isFile() && artifactPattern.test(entry.name))
+        .map(entry => {
+            const filePath = path.join(targetDirectory, entry.name);
+            return {
+                name: entry.name,
+                sha512: createHash("sha512")
+                    .update(readFileSync(filePath))
+                    .digest("base64"),
+                size: statSync(filePath).size
+            };
+        })
+        .sort((left, right) => left.name.localeCompare(right.name));
+
+    if (artifacts.length === 0) {
+        throw new Error(`No update artifacts found in ${targetDirectory}`);
+    }
+
+    const primaryArtifact =
+        artifacts.find(artifact => primaryPattern.test(artifact.name)) ||
+        artifacts[0];
+    const releaseDate = new Date().toISOString();
+    const version = JSON.parse(
+        readFileSync(path.join(projectRoot, "package.json"), "utf8")
+    ).version;
+    const lines = [
+        `version: ${version}`,
+        "files:",
+        ...artifacts.flatMap(artifact => [
+            `  - url: ${artifact.name}`,
+            `    sha512: ${artifact.sha512}`,
+            `    size: ${artifact.size}`
+        ]),
+        `path: ${primaryArtifact.name}`,
+        `sha512: ${primaryArtifact.sha512}`,
+        `releaseDate: '${releaseDate}'`
+    ];
+
+    writeFileSync(
+        path.join(targetDirectory, metadataFileName),
+        `${lines.join("\n")}\n`
+    );
+    console.log(
+        `generated ${path.relative(projectRoot, path.join(targetDirectory, metadataFileName))}`
+    );
+}
+
 function stageRelease() {
     if (mode === "all" && !dryRun) {
         rmSync(stagingRoot, { recursive: true, force: true });
@@ -126,12 +190,44 @@ function stageRelease() {
             "dist-win-ia32",
             path.join(stagingDirectory, "win-ia32")
         );
+        writeUpdateMetadata(
+            path.join(stagingDirectory, "dist-mac"),
+            "latest-mac.yml",
+            /\.(?:dmg|zip)$/,
+            /\.zip$/
+        );
+        writeUpdateMetadata(
+            path.join(stagingDirectory, "dist-win-x64"),
+            "latest.yml",
+            /\.exe$/,
+            /\.exe$/
+        );
     } else if (mode === "win-ia32") {
         stageDirectory("dist", path.join(stagingDirectory, "win-ia32"));
+        writeUpdateMetadata(
+            path.join(stagingDirectory, "win-ia32"),
+            "latest.yml",
+            /\.exe$/,
+            /\.exe$/
+        );
     } else if (mode === "mac") {
-        stageDirectory("dist", path.join(stagingDirectory, "dist-mac"));
+        const targetDirectory = path.join(stagingDirectory, "dist-mac");
+        stageDirectory("dist", targetDirectory);
+        writeUpdateMetadata(
+            targetDirectory,
+            "latest-mac.yml",
+            /\.(?:dmg|zip)$/,
+            /\.zip$/
+        );
     } else if (mode === "win") {
-        stageDirectory("dist", path.join(stagingDirectory, "dist-win-x64"));
+        const targetDirectory = path.join(stagingDirectory, "dist-win-x64");
+        stageDirectory("dist", targetDirectory);
+        writeUpdateMetadata(
+            targetDirectory,
+            "latest.yml",
+            /\.exe$/,
+            /\.exe$/
+        );
     } else {
         stageDirectory("dist", stagingDirectory);
     }
