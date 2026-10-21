@@ -1,0 +1,193 @@
+name: DigiStudio Stable Release
+
+on:
+    push:
+        tags:
+            - "v*"
+    workflow_dispatch:
+        inputs:
+            release_version:
+                description: "正式版版本号，例如 0.0.14"
+                required: true
+                type: string
+
+permissions:
+    contents: read
+
+concurrency:
+    group: digistudio-stable-release
+    cancel-in-progress: false
+
+env:
+    EEZ_UPDATE_ROOT: https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStudio
+
+jobs:
+    prepare:
+        name: Prepare stable release version
+        runs-on: ubuntu-22.04
+        outputs:
+            version: ${{ steps.version.outputs.value }}
+        steps:
+            - name: Resolve stable release version
+              id: version
+              env:
+                  REQUESTED_VERSION: ${{ inputs.release_version }}
+              run: |
+                  set -euo pipefail
+
+                  if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+                    version="${GITHUB_REF_NAME#v}"
+                  else
+                    version="$REQUESTED_VERSION"
+                  fi
+
+                  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "Invalid stable release version: $version" >&2
+                    echo "Use a SemVer such as 0.0.14; stable releases cannot use -dev suffixes." >&2
+                    exit 1
+                  fi
+
+                  echo "value=$version" >> "$GITHUB_OUTPUT"
+                  echo "Building stable release $version"
+
+    build:
+        name: Build stable ${{ matrix.platform }}
+        needs: prepare
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - platform: macOS
+                      runner: macos-15
+                      script: release:stable:mac
+                      artifact: release-stable-macos
+                      metadata: dist-mac/latest-mac.yml
+                    - platform: Windows x64
+                      runner: windows-2022
+                      script: release:stable:win
+                      artifact: release-stable-windows-x64
+                      metadata: dist-win-x64/latest.yml
+        runs-on: ${{ matrix.runner }}
+        env:
+            RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        steps:
+            - name: Check out Git repository
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Build stable release package
+              run: npm run ${{ matrix.script }}
+
+            - name: Verify staged release files
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  test -d release-oss/DigiwiseStudio
+                  test -f "release-oss/DigiwiseStudio/${{ matrix.metadata }}"
+                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
+
+            - name: Upload staged stable release
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.artifact }}
+                  path: release-oss/DigiwiseStudio
+                  if-no-files-found: error
+                  retention-days: 14
+
+    publish:
+        name: Publish stable release and trigger Yunxiao
+        needs:
+            - prepare
+            - build
+        runs-on: ubuntu-22.04
+        environment: production
+        permissions:
+            contents: write
+        env:
+            RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+            YUNXIAO_STABLE_RELEASE_WEBHOOK_URL: ${{ secrets.YUNXIAO_STABLE_RELEASE_WEBHOOK_URL }}
+        steps:
+            - name: Download staged stable releases
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: release-stable-*
+                  path: release-oss/DigiwiseStudio
+                  merge-multiple: true
+
+            - name: Verify staged stable release files
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  test -f release-oss/DigiwiseStudio/dist-mac/latest-mac.yml
+                  test -f release-oss/DigiwiseStudio/dist-win-x64/latest.yml
+                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
+
+            - name: Package stable release assets
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  mac_archive="DigiStudio-${RELEASE_VERSION}-mac.tar.gz"
+                  win_archive="DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz"
+
+                  tar -czf "$RUNNER_TEMP/$mac_archive" \
+                    -C release-oss/DigiwiseStudio dist-mac
+                  tar -czf "$RUNNER_TEMP/$win_archive" \
+                    -C release-oss/DigiwiseStudio dist-win-x64
+
+                  test -s "$RUNNER_TEMP/$mac_archive"
+                  test -s "$RUNNER_TEMP/$win_archive"
+
+            - name: Create GitHub stable release
+              id: release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  set -euo pipefail
+                  tag="digi-stable-${RELEASE_VERSION}"
+
+                  if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+                    echo "GitHub release already exists: $tag" >&2
+                    echo "Choose a new stable release version." >&2
+                    exit 1
+                  fi
+
+                  gh release create "$tag" \
+                    "$RUNNER_TEMP/DigiStudio-${RELEASE_VERSION}-mac.tar.gz" \
+                    "$RUNNER_TEMP/DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz" \
+                    --repo "$GITHUB_REPOSITORY" \
+                    --target "$GITHUB_SHA" \
+                    --title "DigiStudio ${RELEASE_VERSION}" \
+                    --notes "正式版 ${RELEASE_VERSION}" \
+                    --latest
+
+                  echo "tag=$tag" >> "$GITHUB_OUTPUT"
+                  echo "Created GitHub stable release: $tag"
+
+            - name: Trigger Yunxiao stable release pipeline
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  test -n "$YUNXIAO_STABLE_RELEASE_WEBHOOK_URL" || {
+                    echo "Missing YUNXIAO_STABLE_RELEASE_WEBHOOK_URL GitHub secret" >&2
+                    exit 1
+                  }
+
+                  payload="$(printf '{\"RELEASE_TAG\":\"%s\"}' '${{ steps.release.outputs.tag }}')"
+                  curl --fail --silent --show-error --location \
+                    --retry 5 --retry-delay 2 \
+                    --connect-timeout 20 --max-time 60 \
+                    -X POST \
+                    -H 'Content-Type: application/json' \
+                    --data "$payload" \
+                    "$YUNXIAO_STABLE_RELEASE_WEBHOOK_URL"
+
+                  echo "Yunxiao stable release pipeline triggered for ${{ steps.release.outputs.tag }}"
