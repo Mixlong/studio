@@ -31,6 +31,7 @@ interface AudioPreviewState {
     loading: boolean;
     fileSize?: number;
     mp3Duration?: number;
+    playbackError?: string;
 }
 
 const MAX_WAVEFORM_POINTS = 320;
@@ -236,9 +237,18 @@ export async function readWavPreview(
             format.sampleRate < 1 ||
             format.byteRate < 1 ||
             format.blockAlign < 1 ||
-            format.bitsPerSample < 1
+            !(
+                (format.audioFormat === 1 &&
+                    [8, 16, 24, 32].includes(format.bitsPerSample)) ||
+                (format.audioFormat === 3 && format.bitsPerSample === 32)
+            ) ||
+            format.blockAlign !==
+                format.channels * (format.bitsPerSample / 8) ||
+            format.byteRate !== format.sampleRate * format.blockAlign ||
+            dataSize === 0 ||
+            dataSize % format.blockAlign !== 0
         ) {
-            throw new Error("The WAV format values are invalid.");
+            throw new Error("The WAV audio format is invalid or unsupported.");
         }
 
         return {
@@ -425,7 +435,8 @@ export const AudioPreview = observer(
                     info: undefined,
                     loading: false,
                     fileSize: undefined,
-                    mp3Duration: undefined
+                    mp3Duration: undefined,
+                    playbackError: undefined
                 });
                 return;
             }
@@ -434,27 +445,51 @@ export const AudioPreview = observer(
                 this.setState({
                     error: "Select an audio file for this resource.",
                     info: undefined,
-                    loading: false
+                    loading: false,
+                    fileSize: undefined,
+                    mp3Duration: undefined,
+                    playbackError: undefined
                 });
                 return;
             }
+
+            this.setState({
+                error: undefined,
+                info: undefined,
+                loading: true,
+                fileSize: undefined,
+                mp3Duration: undefined,
+                playbackError: undefined
+            });
 
             if (resource.format === "mp3") {
                 const absolutePath = this.context.getAbsoluteFilePath(filePath);
-                const stats = await fs.promises.stat(absolutePath).catch(() => undefined);
-                if (loadId !== this.loadId || this.unmounted) {
-                    return;
+                try {
+                    const stats = await fs.promises.stat(absolutePath);
+                    if (loadId !== this.loadId || this.unmounted) return;
+                    if (!stats.isFile() || stats.size === 0) {
+                        throw new Error("The MP3 file is empty or invalid.");
+                    }
+                    this.setState({
+                        error: "MP3 waveform is not decoded in Studio; use the player below to preview it.",
+                        info: undefined,
+                        loading: false,
+                        fileSize: stats.size
+                    });
+                } catch (error) {
+                    if (!this.unmounted && loadId === this.loadId) {
+                        this.setState({
+                            error: error instanceof Error
+                                ? "Cannot preview MP3: " + error.message
+                                : "Cannot preview the MP3 file.",
+                            info: undefined,
+                            loading: false,
+                            fileSize: undefined
+                        });
+                    }
                 }
-                this.setState({
-                    error: "MP3 waveform is not decoded in Studio; use the player below to preview it.",
-                    info: undefined,
-                    loading: false,
-                    fileSize: stats?.size
-                });
                 return;
             }
-
-            this.setState({ error: undefined, info: undefined, loading: true });
 
             try {
                 const info = await readWavPreview(
@@ -634,8 +669,11 @@ export const AudioPreview = observer(
                         </div>
                     </div>
 
-                    {absoluteFilePath && !loading && (
+                    {absoluteFilePath && !loading &&
+                        (info || (resource.format === "mp3" &&
+                            this.state.fileSize !== undefined)) && (
                             <audio
+                            key={absoluteFilePath}
                             className="EezStudio_AudioPreview_Player"
                             controls
                             preload="metadata"
@@ -643,15 +681,32 @@ export const AudioPreview = observer(
                                 aria-label={`Play ${resource.name}`}
                                 onLoadedMetadata={event => {
                                     if (resource.format === "mp3") {
-                                        this.setState({ mp3Duration: event.currentTarget.duration });
+                                        const duration = event.currentTarget.duration;
+                                        this.setState({
+                                            mp3Duration: Number.isFinite(duration) && duration >= 0
+                                                ? duration : undefined
+                                        });
+                                    }
+                                }}
+                                onError={() => this.setState({
+                                    playbackError: "The audio player could not decode this file."
+                                })}
+                                onCanPlay={() => {
+                                    if (this.state.playbackError) {
+                                        this.setState({ playbackError: undefined });
                                     }
                                 }}
                         />
                     )}
+                    {this.state.playbackError && (
+                        <div role="alert" className="EezStudio_AudioPreview_WaveformMessage">
+                            {this.state.playbackError}
+                        </div>
+                    )}
 
                     {(info || resource.format === "mp3") && (
                         <div className="EezStudio_AudioPreview_Metadata">
-                            <AudioMetadataItem label="Duration" value={formatDuration(info?.duration ?? this.state.mp3Duration ?? 0)} />
+                            <AudioMetadataItem label="Duration" value={formatDuration(info?.duration ?? this.state.mp3Duration ?? NaN)} />
                             <AudioMetadataItem
                                 label="Format"
                                 value={info ? getFormatName(info) : "MP3 audio"}
