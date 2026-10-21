@@ -73,8 +73,35 @@ Codeup 到 GitHub 的同步流水线使用云效的 GitHub 服务连接完成写
 云效脚本会优先使用 Webhook 传入的 `RELEASE_TAG`，手动运行云效时则自动选择最新的
 `digi-dev-*` GitHub prerelease。这样自动发布和手动补发使用同一套逻辑。
 
-正式版暂不自动发布，后续可以单独增加 Tag 或人工审批工作流，上传到
-`d-space/DigiwiseStudio/stable/`。
+## 正式版发布
+
+正式版工作流为 `.github/workflows/release-stable.yml`，只接受正式 SemVer，不能带
+`-dev` 后缀。它支持两种入口：
+
+- Codeup/GitHub 同步了 `v0.0.14` 这类 Tag 后自动构建；
+- 在 GitHub Actions 手动运行，并填写尚未使用的正式版本号。
+
+正式版使用 GitHub `production` Environment。配置 Required reviewers 后，构建完成会在
+发布和上传 OSS 前暂停，审批通过才会创建正式 Release 并调用云效正式发布 Webhook。
+
+版本规则建议：
+
+- `0.0.14`：当前 `0.0.14-dev.*` 开发线验收后的正式版；
+- `0.0.15`：向后兼容的修复或小功能版本；
+- `0.1.0`：新增较大功能但保持兼容；
+- `1.0.0`：正式稳定 API/产品基线发生重大变化。
+
+因此当前这条开发线建议发布为 `0.0.14`。正式版发布后，创建新的开发线使用
+`0.0.15-dev.1`，不要继续在 `0.0.14-dev.*` 上开发。
+
+正式版还需要在 GitHub Secrets 中配置：
+
+```text
+YUNXIAO_STABLE_RELEASE_WEBHOOK_URL
+```
+
+该地址必须指向上传 `d-space/DigiwiseStudio/stable/` 的云效流水线，不能复用开发版的
+Webhook。云效仍使用已授权的 OSS 服务连接，不需要把 OSS 密钥放进 GitHub。
 
 ## macOS 签名与公证
 
