@@ -68,7 +68,8 @@ function run(args) {
 
     const result = spawnSync(npmCommand, args, {
         cwd: projectRoot,
-        stdio: "inherit"
+        stdio: "inherit",
+        shell: process.platform === "win32"
     });
 
     if (result.error) throw result.error;
