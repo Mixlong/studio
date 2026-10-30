@@ -206,25 +206,40 @@ function prepareWinCrossBuild() {
 
     if (
         process.platform === "linux" &&
-        !existsSync("/usr/lib64/gconv/CP1252.so") &&
-        !process.env.GCONV_PATH
+        !existsSync("/usr/lib64/gconv/CP1252.so")
     ) {
         const gconvDir = path.join(os.tmpdir(), "digistudio-nsis-gconv");
+        rmSync(gconvDir, { recursive: true, force: true });
         mkdirSync(gconvDir, { recursive: true });
+        if (existsSync("/usr/lib64/gconv")) {
+            spawnSync("cp", ["-a", "/usr/lib64/gconv/.", gconvDir]);
+        }
+        rmSync(path.join(gconvDir, "gconv-modules.cache"), { force: true });
+        const existingModules = existsSync(path.join(gconvDir, "gconv-modules"))
+            ? readFileSync(path.join(gconvDir, "gconv-modules"), "utf8") + "\n"
+            : "";
         writeFileSync(
             path.join(gconvDir, "gconv-modules"),
-            [
-                "alias CP1252// ISO-8859-1//",
-                "alias WINDOWS-1252// ISO-8859-1//",
-                "alias CP1250// ISO-8859-1//",
-                "alias CP1251// ISO-8859-1//",
-                "alias CP437// ISO-8859-1//",
-                "alias CP850// ISO-8859-1//",
-                "alias CP932// UTF-8//",
-                "alias CP936// UTF-8//",
-                "alias CP949// UTF-8//",
-                "alias CP950// UTF-8//"
-            ].join("\n") + "\n",
+            existingModules +
+                [
+                    "module UTF-16// INTERNAL UTF-16 1",
+                    "module INTERNAL UTF-16// UTF-16 1",
+                    "module UTF-16LE// INTERNAL UTF-16 1",
+                    "module INTERNAL UTF-16LE// UTF-16 1",
+                    "module UTF-16BE// INTERNAL UTF-16 1",
+                    "module INTERNAL UTF-16BE// UTF-16 1",
+                    "alias CP1252// ISO-8859-1//",
+                    "alias WINDOWS-1252// ISO-8859-1//",
+                    "alias CP1250// ISO-8859-1//",
+                    "alias CP1251// ISO-8859-1//",
+                    "alias CP437// ISO-8859-1//",
+                    "alias CP850// ISO-8859-1//",
+                    "alias CP932// UTF-8//",
+                    "alias CP936// UTF-8//",
+                    "alias CP949// UTF-8//",
+                    "alias CP950// UTF-8//"
+                ].join("\n") +
+                "\n",
             "utf8"
         );
         process.env.GCONV_PATH = gconvDir;
