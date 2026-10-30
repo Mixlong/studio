@@ -203,6 +203,33 @@ function prepareWinCrossBuild() {
             );
         }
     }
+
+    if (
+        process.platform === "linux" &&
+        !existsSync("/usr/lib64/gconv/CP1252.so") &&
+        !process.env.GCONV_PATH
+    ) {
+        const gconvDir = path.join(os.tmpdir(), "digistudio-nsis-gconv");
+        mkdirSync(gconvDir, { recursive: true });
+        writeFileSync(
+            path.join(gconvDir, "gconv-modules"),
+            [
+                "alias CP1252// ISO-8859-1//",
+                "alias WINDOWS-1252// ISO-8859-1//",
+                "alias CP1250// ISO-8859-1//",
+                "alias CP1251// ISO-8859-1//",
+                "alias CP437// ISO-8859-1//",
+                "alias CP850// ISO-8859-1//",
+                "alias CP932// UTF-8//",
+                "alias CP936// UTF-8//",
+                "alias CP949// UTF-8//",
+                "alias CP950// UTF-8//"
+            ].join("\n") + "\n",
+            "utf8"
+        );
+        process.env.GCONV_PATH = gconvDir;
+        console.log(`[cross-win] Configured GCONV_PATH=${gconvDir} for makensis`);
+    }
 }
 
 function stageDirectory(sourceDirectory, targetDirectory) {
