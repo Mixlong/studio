@@ -135,6 +135,9 @@ files.push(
         nodeGypRebuild: false,
         npmRebuild: false,
         buildDependenciesFromSource: true,
+        toolsets: {
+            nsis: "1.2.1"
+        },
 
         files,
 
