@@ -49,7 +49,8 @@ EEZ_UPDATE_ROOT=https://<your-public-domain>/d-space/DigiwiseStudio
 | DigiStudio-Dev | 开发分支 Push | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/dev/` |
 | DigiStudio-Stable | Tag 或手动审批 | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/stable/` |
 
-开发流水线可以覆盖同名的 `latest*.yml` 和安装包；正式流水线只在测试通过后上传。
+开发流水线会更新同名的 `latest*.yml` 最新版本指针，但安装包和 `blockmap` 文件名带版本号，
+历史版本会在 OSS 中叠加保留；正式流水线只在测试通过后上传。
 `latest*.yml`、安装包和 `blockmap` 都必须允许客户端匿名读取。
 
 旧的 `release:patch*` 命令仍保留兼容，继续使用原来的根目录；采用双通道后，云效流水线
@@ -109,17 +110,17 @@ dist-win-ia32/
 release-oss/DigiwiseStudio/
 ├── dist-mac/
 │   ├── latest-mac.yml
-│   ├── DigiStudio-arm64.dmg
-│   ├── DigiStudio-arm64.zip
-│   └── DigiStudio-arm64.zip.blockmap
+│   ├── DigiStudio-0.0.14-dev.10-arm64.dmg
+│   ├── DigiStudio-0.0.14-dev.10-arm64.zip
+│   └── DigiStudio-0.0.14-dev.10-arm64.zip.blockmap
 ├── dist-win-x64/
 │   ├── latest.yml
-│   ├── DigiStudio-x64-setup.exe
-│   └── DigiStudio-x64-setup.exe.blockmap
+│   ├── DigiStudio-0.0.14-dev.10-x64-setup.exe
+│   └── DigiStudio-0.0.14-dev.10-x64-setup.exe.blockmap
 └── win-ia32/
     ├── latest.yml
-    ├── DigiStudio-ia32-setup.exe
-    └── DigiStudio-ia32-setup.exe.blockmap
+    ├── DigiStudio-0.0.14-dev.10-ia32-setup.exe
+    └── DigiStudio-0.0.14-dev.10-ia32-setup.exe.blockmap
 ```
 
 在 OSS 控制台进入 `d-space/`，把本地的整个 `release-oss/DigiwiseStudio/`
@@ -150,13 +151,14 @@ Linux        -> dist-linux/latest-linux.yml
 版本高于当前版本后，才会下载对应安装包。因此手动上传时必须同时上传元数据和它引用
 的安装包，不能只上传一个新的 `.dmg` 或 `.exe`。
 
-安装包文件名固定，不包含版本号，发布时直接覆盖 OSS 中的同名文件：
+安装包和 `blockmap` 文件名包含版本号，发布时不会覆盖历史版本；只有用于指向当前版本的
+`latest*.yml` 会被更新：
 
 ```text
-DigiStudio-arm64.zip
-DigiStudio-arm64.dmg
-DigiStudio-x64-setup.exe
-DigiStudio-ia32-setup.exe
+DigiStudio-0.0.14-dev.10-arm64.zip
+DigiStudio-0.0.14-dev.10-arm64.dmg
+DigiStudio-0.0.14-dev.10-x64-setup.exe
+DigiStudio-0.0.14-dev.10-ia32-setup.exe
 ```
 
 `latest*.yml` 中仍然保留版本号，客户端通过它判断是否更新。
@@ -245,8 +247,9 @@ dist-linux/latest-linux.yml
 dist-linux/DigiStudio-*.AppImage
 ```
 
-每次发布新版本时，覆盖对应平台的 `latest*.yml`，保留安装包文件。应用会从
-这些元数据读取版本、文件名、大小和校验值。
+每次发布新版本时，更新对应平台的 `latest*.yml`，并把新的带版本号安装包和 blockmap
+上传到同一平台目录。应用会从这些元数据读取版本、文件名、大小和校验值；旧版本文件
+无需删除，可用于回滚或历史下载。
 
 更新器允许降级。如果需要回退到旧版本，重新构建并上传较低版本号的完整发布文件，
 包括安装包、blockmap 和 `latest*.yml`。上传完成后，客户端会把 OSS 上的低版本当作

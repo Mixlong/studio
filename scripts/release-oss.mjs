@@ -3,13 +3,16 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
     copyFileSync,
+    existsSync,
     mkdirSync,
+    mkdtempSync,
     readFileSync,
     readdirSync,
     rmSync,
     statSync,
     writeFileSync
 } from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -87,6 +90,118 @@ function validateMacRelease() {
 
     if (process.platform !== "darwin") {
         throw new Error("macOS releases must be built on macOS");
+    }
+}
+
+function ensureWinUsbPrebuild(arch) {
+    const pkgName = `@node-usb/usb-win32-${arch}-msvc`;
+    const targetDir = path.join(
+        projectRoot,
+        "node_modules",
+        "@node-usb",
+        `usb-win32-${arch}-msvc`
+    );
+    const nodeBinary = path.join(targetDir, `usb.win32-${arch}-msvc.node`);
+    if (existsSync(nodeBinary)) {
+        return;
+    }
+
+    const usbPkgPath = path.join(projectRoot, "node_modules", "usb", "package.json");
+    if (!existsSync(usbPkgPath)) {
+        return;
+    }
+    const usbPkg = JSON.parse(readFileSync(usbPkgPath, "utf8"));
+    const usbVersion =
+        usbPkg.optionalDependencies?.[pkgName] || usbPkg.version || "3.0.1";
+
+    console.log(`[cross-win] Installing prebuild ${pkgName}@${usbVersion}...`);
+    const tmpDir = mkdtempSync(path.join(os.tmpdir(), "digistudio-usb-win-"));
+    try {
+        const packRes = spawnSync(
+            npmCommand,
+            ["pack", `${pkgName}@${usbVersion}`, "--silent"],
+            { cwd: tmpDir, encoding: "utf8", shell: process.platform === "win32" }
+        );
+        if (packRes.status !== 0) {
+            throw new Error(
+                `Failed to npm pack ${pkgName}@${usbVersion}: ${packRes.stderr || packRes.stdout}`
+            );
+        }
+        const tarball = readdirSync(tmpDir).find(f => f.endsWith(".tgz"));
+        if (!tarball) {
+            throw new Error(`No .tgz produced for ${pkgName}@${usbVersion}`);
+        }
+        mkdirSync(targetDir, { recursive: true });
+        const tarRes = spawnSync(
+            "tar",
+            [
+                "-xzf",
+                path.join(tmpDir, tarball),
+                "--strip-components=1",
+                "-C",
+                targetDir
+            ],
+            { stdio: "inherit" }
+        );
+        if (tarRes.status !== 0) {
+            throw new Error(`Failed to extract ${tarball} into ${targetDir}`);
+        }
+    } finally {
+        rmSync(tmpDir, { recursive: true, force: true });
+    }
+}
+
+function prepareWinCrossBuild() {
+    if (
+        dryRun ||
+        process.platform === "win32" ||
+        (mode !== "win" && mode !== "win-ia32" && mode !== "all")
+    ) {
+        return;
+    }
+
+    // Remove host-compiled native build directories so N-API prebuilds/win32-* are used.
+    for (const relBuildDir of [
+        "node_modules/better-sqlite3/build",
+        "node_modules/@serialport/bindings-cpp/build"
+    ]) {
+        const fullBuildDir = path.join(projectRoot, relBuildDir);
+        if (existsSync(fullBuildDir)) {
+            rmSync(fullBuildDir, { recursive: true, force: true });
+            console.log(`[cross-win] Removed host build dir: ${relBuildDir}`);
+        }
+    }
+
+    if (mode === "win" || mode === "all") {
+        ensureWinUsbPrebuild("x64");
+    }
+    if (mode === "win-ia32" || mode === "all") {
+        ensureWinUsbPrebuild("ia32");
+    }
+
+    // Patch electron-builder NsisTarget to use pure-JS UninstallerReader on Linux
+    // (same as macOS Catalina+), avoiding any dependency on Wine.
+    const nsisTargetPath = path.join(
+        projectRoot,
+        "node_modules",
+        "app-builder-lib",
+        "out",
+        "targets",
+        "nsis",
+        "NsisTarget.js"
+    );
+    if (existsSync(nsisTargetPath)) {
+        const original = readFileSync(nsisTargetPath, "utf8");
+        const updated = original.replace(
+            "if ((0, macosVersion_1.isMacOsCatalina)()) {",
+            'if (process.platform !== "win32") {'
+        );
+        if (updated !== original) {
+            writeFileSync(nsisTargetPath, updated, "utf8");
+            console.log(
+                "[cross-win] Patched NsisTarget.js to use UninstallerReader without Wine"
+            );
+        }
     }
 }
 
@@ -176,7 +291,7 @@ function writeUpdateMetadata(
 }
 
 function stageRelease() {
-    if (mode === "all" && !dryRun) {
+    if (!dryRun) {
         rmSync(stagingRoot, { recursive: true, force: true });
     }
 
@@ -248,6 +363,7 @@ if (mode === "all") {
     run(["run", "clean-dist"]);
 }
 run(["run", "build"]);
+prepareWinCrossBuild();
 for (const command of commands[mode]) {
     run(command);
 }

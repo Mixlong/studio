@@ -112,7 +112,9 @@ let files = [
 ];
 
 files.push(
-    `node_modules/koffi/build/koffi/${os.platform()}_${os.arch()}/koffi.node`
+    ...Array.from(
+        new Set([`${os.platform()}_${os.arch()}`, "win32_x64", "win32_ia32"])
+    ).map(target => `node_modules/koffi/build/koffi/${target}/koffi.node`)
 );
 
 (async function () {
@@ -158,7 +160,7 @@ files.push(
         ],
 
         mac: {
-            artifactName: "${productName}-${arch}.${ext}",
+            artifactName: "${productName}-${version}-${arch}.${ext}",
             target: [
                 {
                     target: "dmg",
@@ -212,11 +214,14 @@ files.push(
 
         win: {
             target: ["nsis"], // [, "squirrel", "portable", "zip"],
-            icon: "./icon.ico"
+            icon: "./icon.ico",
+            ...(!process.env.WIN_CSC_LINK && !process.env.CSC_LINK
+                ? { signExecutable: false }
+                : {})
         },
 
         nsis: {
-            artifactName: "${productName}-${arch}-setup.${ext}",
+            artifactName: "${productName}-${version}-${arch}-setup.${ext}",
             installerIcon: "./icon.ico",
             license: "LICENSE.TXT",
             warningsAsErrors: false,
@@ -224,7 +229,7 @@ files.push(
         },
 
         linux: {
-            artifactName: "${productName}-${arch}.${ext}",
+            artifactName: "${productName}-${version}-${arch}.${ext}",
             target:
                 process.arch == "arm"
                     ? [{ target: "deb", arch: ["armv7l"] }]
