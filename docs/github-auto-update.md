@@ -47,6 +47,8 @@ GitHub 服务连接推送，不在脚本或仓库中保存 GitHub Token。
 - 构建成功后会创建 `digi-dev-版本号` 的 GitHub prerelease。
 - 随后自动调用云效 Webhook；云效从该 Release 下载两个平台的资产并上传 OSS。
 - OSS 目标目录为 `d-space/DigiwiseStudio/dev/`。
+- OSS 中的安装包和 `blockmap` 文件名包含 `RELEASE_VERSION`，历史版本会保留；只有
+  `latest*.yml` 最新版本指针会被更新。
 
 如果手动运行工作流，版本号必须是尚未创建过的开发版版本号，否则 GitHub Release 会明确
 报错，避免覆盖已经发布的版本。
