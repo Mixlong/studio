@@ -1,7 +1,7 @@
 # ADR-0002：评估 NocoBase 作为 Digiwise 内部管理后台
 
 - 日期：2026-11-10
-- 状态：候选方案 / 推荐 2.2.41 Community PoC / **尚未部署或正式选型**
+- 状态：候选方案 / AI 优先评估 NocoBase 3 Core Beta；2.2 Stable 作为生产保守备选 / **未部署及未选型**
 - 涉及：Digiwise Admin、Digiwise Cloud API、SFTPGo Admin API、用户/企业/工作空间、发布管理
 - 关联：[总体架构](../architecture/digiwise-platform-and-oss.md)、[ADR-0001 文件面采用 SFTPGo](0001-sftpgo-file-plane.md)
 
@@ -47,17 +47,29 @@ NocoBase 后台角色和内部会话不应直接暴露给所有桌面客户；�
 
 严禁在 NocoBase 可公开查询的业务表中保存 SFTPGo Admin Token。密钥应在受控后端配置/密钥服务中管理。
 
-## 2.1 版本基线建议（2026-11-10）
+## 2.1 版本选型修订：以 AI 开发为优先（2026-11-10）
 
-**推荐 DigiwiseStudio 的内部后台 PoC 固定 NocoBase 2.2.41 Community Stable，使用 Docker Compose + PostgreSQL；暂不采用 NocoBase 3 Beta、2.3 Beta 或 2.4 Alpha。**
+**修订建议：如果开发主要由 Codex / Claude Code 和项目级 Skills 驱动，优先使用 NocoBase 3 Core Community 的隔离测试环境进行 PoC；NocoBase 2.2.41 Community Stable 保留为近期生产部署需要稳定可视化配置时的备选。** 此建议替代此前“一律只用 2.2.41”的判断；不是批准将 Beta 直接上线。
 
-理由：当前项目强调可视化配置企业/用户/成员/存储配额/后台审核页面；NocoBase 2 的表、页面、权限和工作流以可视化配置为主，而 NocoBase 3 的架构采用 Agent 编写代码，当前仍为 Beta，属不同开发模式。参考 https://docs.nocobase.com/zh-CN/faq/from-v2/ 。
+| 判断依据 | NocoBase 2.x | NocoBase 3 |
+| --- | --- | --- |
+| 工作模式 | 浏览器中可视化配置数据、表单、页面、工作流 | 应用代码驱动；Agent 编写页面、接口、逻辑，使用 Core 基础模块 |
+| AI 开发与 Skills | 有 AI 辅助/插件能力，代码开发需独立组织 | 原生提供 Agent Skills、CLI、可测试的项目源码及开发约定 |
+| 运行稳定性（2026-11-10） | 2.2 Stable | **仍为 Beta**，接口和依赖迭代频繁 |
+| 授权 | 2.x Community / 付费插件需按版本核对 | **Core Community 免费**，使用自选 Codex/Claude Code；**Studio 是独立商业协作平台**，并非使用 AI 编程的前提 |
 
-发布核对：NocoBase 官方发布流水线中 `v2.2.41` 于 2026-11-08 发布成功；`v2.2.42` 于 2026-11-09 的发布流水线显示失败，虽然 Docker Hub 已出现同版本标签，但不作为本轮首选。核对来源：https://github.com/nocobase/nocobase/actions/workflows/release.yml 。
+**重要区别：NocoBase 3 Core（免费）≠ NocoBase Studio（商业版）。** 小团队可以在 Core 项目目录使用现有 Codex/Claude Code 开发，并自行管理 Git、CI 和评审；若需要 Studio 协调多 Agent 任务、审查、发布，再单独评估许可证成本。
 
-部署建议固定具体镜像版本（如官方镜像 `nocobase/nocobase:2.2.41`；若需 full，请先核实 `2.2.41-full` 镜像与依赖是否实际存在），**避免 `latest` 漂移**。正式部署前需确认镜像签名/摘要、漏洞公告及组件兼容性，并准备数据库备份和升级回滚方案。镜像标签可用性、环境部署和端到端集成仍待 PoC 验证。安装指南：https://nocode.docs.nocobase.com/get-started/installation/docker 。
+**首个 AI PoC：** 使用固定、经核对的 NocoBase 3 Beta 版本，在非生产环境让 Agent 实现企业列表、新增企业、邮箱审核状态、Workspace 配额界面和受保护的 SFTPGo Admin API 集成；复用仓库的 docs-first、云存储安全和 MCP/发布 Skills 规范。验证 Core 授权、API、用户/组织权限、数据库迁移、安全、自动化测试和可回滚发布。禁止管理员 Token 进入桌面端；客户端仍只访问 Digiwise Public API 和 SFTPGo 用户级文件 API。
 
-这只是**版本选型建议**，不是已经安装或生产验收。
+**上线门槛：** 在 NocoBase 3 的授权、版本稳定性、API/Schema 兼容性、迁移与可恢复备份、真实业务权限与 SFTPGo 集成测试满足要求后再决定是否生产部署。若 3 Beta 在现阶段不足以承担正式客户开通服务，应先在独立测试环境迭代，生产可选 2.x Stable；**不要假设 2.x 直接升级至 3 而无需重构/迁移**。
+
+官方依据：
+- NocoBase 3 AI 应用与 Core：https://docs.nocobase.com/getting-started/what-is-nocobase/
+- Core 使用现有 Coding Agent，无需 Studio：https://docs.nocobase.com/faq/core-and-studio/
+- 3 Core / Studio 授权：https://www.nocobase.com/pricing/
+- NocoBase 3 代码应用开发：https://docs.nocobase.com/core/developing-apps/overview/
+- NocoBase 正式/预发布记录：https://github.com/nocobase/nocobase/releases
 
 ## 3. 官方版本差异（必须锁定版本）
 
@@ -114,4 +126,5 @@ NocoBase 2.x 与 3 的实现体系已有差异，不能将两套文档混用：
 | 日期 | 内容 |
 | --- | --- |
 | 2026-11-10 | NocoBase 内部后台候选架构与 2.x/3 插件边界评估；保留待 PoC 决策 |
-| 2026-11-10 | 建议 PoC 固定 NocoBase v2.2.41 Community Stable，明确禁止未评审的 beta/alpha 或 latest 自动漂移 |
+| 2026-11-10 | 初始建议 2.2.41 Community Stable 作为可视化配置/生产稳妥基线（后续按 AI 开发目标修订） |
+| 2026-11-10 | 依照用户 AI 驱动开发目标，将 NocoBase 3 Core Community Beta 改为隔离 PoC 优先选项；2.2 Stable 保留近期生产备选，明确 Studio 商业许可与安全门槛 |
