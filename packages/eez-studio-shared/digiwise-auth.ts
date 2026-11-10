@@ -22,8 +22,8 @@ export type DigiwiseLicenseStatus =
 
 export interface DigiwiseTrial {
     status: DigiwiseTrialStatus;
-    startedAt: string | null;
-    expiresAt: string | null;
+    startedAt?: string | null;
+    expiresAt?: string | null;
 }
 
 export interface DigiwiseLicense {
@@ -36,7 +36,7 @@ export interface DigiwiseLicense {
 export interface DigiwiseEntitlementSnapshot {
     serverTime: string;
     accountStatus: DigiwiseAccountStatus;
-    workspaceId?: string;
+    workspaceId?: string | null;
     trial: DigiwiseTrial;
     license: DigiwiseLicense;
     capabilities: string[];
@@ -54,6 +54,15 @@ export interface DigiwiseSendCodeResponse {
     accepted: true;
 }
 
+export interface DigiwiseLoginResponse {
+    accessToken: string;
+    tokenType: "Bearer";
+    expiresIn: number;
+    refreshToken?: string;
+    userId?: string;
+    email?: string;
+}
+
 export interface DigiwiseRedeemResponse {
     redemptionId: string;
     entitlements: DigiwiseEntitlementSnapshot;
@@ -61,7 +70,6 @@ export interface DigiwiseRedeemResponse {
 
 export interface DigiwiseAuthState {
     authenticated: boolean;
-    isMockApi: boolean;
     email?: string;
     userId?: string;
     accountStatus?: DigiwiseAccountStatus;
@@ -79,7 +87,3 @@ export type DigiwiseIpcResult<T> =
     | { ok: true; data: T }
     | { ok: false; error: DigiwiseIpcError };
 
-export interface DigiwiseRedeemIpcResponse {
-    redemptionId: string;
-    state: DigiwiseAuthState;
-}
