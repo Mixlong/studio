@@ -11,8 +11,8 @@
 | [总体架构与后台 OSS 技术方案](architecture/digiwise-platform-and-oss.md) | Node + SFTPGo + OSS、个人与企业统一空间、安全、配额、部署、实施与验收 | 首选方案 / 待 PoC |
 | [ADR-0001：SFTPGo 文件面选型](adr/0001-sftpgo-file-plane.md) | Node 管业务、SFTPGo 管文件、OSS 管存储的架构决策、风险与验收门槛 | 原则同意 / 待 PoC |
 | [ADR-0002：NocoBase 内部后台评估](adr/0002-nocobase-internal-admin-evaluation.md) | NocoBase 2.x/3 功能差异、授权成本、SFTPGo 集成及验证计划 | 候选 / 待 PoC |
-| [后台平台选型对比](architecture/internal-admin-platform-comparison.md) | Budibase、NocoBase、Appsmith、ToolJet、Directus 及 PoC 验收 | 调研 / 待评审 |
-| [多项目数据接入规划](architecture/multi-project-data-integration.md) | 外部数据库、外部 API、权限及商业插件选型 | 预研 / 未实现 |
+| [后台平台选型对比](architecture/internal-admin-platform-comparison.md) | 以 Digiwise 业务为主，NocoBase 优先 PoC，其他平台保留备选 | 调研 / 待评审 |
+| [迪太云数据接入预留](architecture/multi-project-data-integration.md) | 仅预留读取现有迪太云管理系统部分数据的可选接口 | 预研 / 未实施 |
 | [桌面端 API 接入方案](api/desktop-integration.md) | NocoBase、Digiwise Public API、SFTPGo 文件接口的责任分工 | 设计建议 / 未实现 |
 | [文档编写与变更规范](standards/documentation.md) | 目录、命名、模板、评审与维护规则 | 拟实施 |
 | [项目 Agent Skills 规范](standards/agent-skills.md) | Skill 结构、触发、评审和验证流程 | 拟实施 |
