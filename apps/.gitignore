@@ -1,0 +1,13 @@
+# Generated NocoBase application source should be versioned,
+# but local configuration, data, dependencies and build outputs must not be committed.
+**/config.yml
+**/storage/
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules/
+**/dist/
+**/.cache/
+**/coverage/
+**/playwright-report/
+**/test-results/
