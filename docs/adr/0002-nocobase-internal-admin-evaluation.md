@@ -1,7 +1,7 @@
 # ADR-0002：评估 NocoBase 作为 Digiwise 内部管理后台
 
 - 日期：2026-11-10
-- 状态：候选方案 / 推荐 PoC / **尚未替代当前已记录的 Node.js 业务方案**
+- 状态：候选方案 / 推荐 2.2.41 Community PoC / **尚未部署或正式选型**
 - 涉及：Digiwise Admin、Digiwise Cloud API、SFTPGo Admin API、用户/企业/工作空间、发布管理
 - 关联：[总体架构](../architecture/digiwise-platform-and-oss.md)、[ADR-0001 文件面采用 SFTPGo](0001-sftpgo-file-plane.md)
 
@@ -46,6 +46,18 @@ flowchart TB
 NocoBase 后台角色和内部会话不应直接暴露给所有桌面客户；即使 NocoBase 支持 HTTP API，也需要设计客户端的登录、令牌生命周期、SFTPGo User API 认证、用户/企业空间切换、成员权限撤销与并发补偿。可以实现成 NocoBase 后端插件或独立最小 Node 服务，具体部署由 PoC 决定。
 
 严禁在 NocoBase 可公开查询的业务表中保存 SFTPGo Admin Token。密钥应在受控后端配置/密钥服务中管理。
+
+## 2.1 版本基线建议（2026-11-10）
+
+**推荐 DigiwiseStudio 的内部后台 PoC 固定 NocoBase 2.2.41 Community Stable，使用 Docker Compose + PostgreSQL；暂不采用 NocoBase 3 Beta、2.3 Beta 或 2.4 Alpha。**
+
+理由：当前项目强调可视化配置企业/用户/成员/存储配额/后台审核页面；NocoBase 2 的表、页面、权限和工作流以可视化配置为主，而 NocoBase 3 的架构采用 Agent 编写代码，当前仍为 Beta，属不同开发模式。参考 https://docs.nocobase.com/zh-CN/faq/from-v2/ 。
+
+发布核对：NocoBase 官方发布流水线中 `v2.2.41` 于 2026-11-08 发布成功；`v2.2.42` 于 2026-11-09 的发布流水线显示失败，虽然 Docker Hub 已出现同版本标签，但不作为本轮首选。核对来源：https://github.com/nocobase/nocobase/actions/workflows/release.yml 。
+
+部署建议固定具体镜像版本（如官方镜像 `nocobase/nocobase:2.2.41`；若需 full，请先核实 `2.2.41-full` 镜像与依赖是否实际存在），**避免 `latest` 漂移**。正式部署前需确认镜像签名/摘要、漏洞公告及组件兼容性，并准备数据库备份和升级回滚方案。镜像标签可用性、环境部署和端到端集成仍待 PoC 验证。安装指南：https://nocode.docs.nocobase.com/get-started/installation/docker 。
+
+这只是**版本选型建议**，不是已经安装或生产验收。
 
 ## 3. 官方版本差异（必须锁定版本）
 
@@ -102,3 +114,4 @@ NocoBase 2.x 与 3 的实现体系已有差异，不能将两套文档混用：
 | 日期 | 内容 |
 | --- | --- |
 | 2026-11-10 | NocoBase 内部后台候选架构与 2.x/3 插件边界评估；保留待 PoC 决策 |
+| 2026-11-10 | 建议 PoC 固定 NocoBase v2.2.41 Community Stable，明确禁止未评审的 beta/alpha 或 latest 自动漂移 |
