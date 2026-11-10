@@ -8,13 +8,12 @@ import type {
     DigiwiseEntitlementSnapshot,
     DigiwiseIpcError,
     DigiwiseIpcResult,
-    DigiwiseRedeemIpcResponse,
     DigiwiseRegisterResponse,
     DigiwiseSendCodeResponse
 } from "eez-studio-shared/digiwise-auth";
 
 type AuthMode = "register" | "login";
-type BusyAction = "send-code" | "register" | "login" | "redeem" | "logout" | null;
+type BusyAction = "send-code" | "register" | "login" | "logout" | null;
 
 interface Notice {
     kind: "info" | "success" | "error";
@@ -26,17 +25,12 @@ interface ServerClockAnchor {
     monotonicTimeMs: number;
 }
 
-const initialAuthState: DigiwiseAuthState = {
-    authenticated: false,
-    isMockApi: true
-};
+const initialAuthState: DigiwiseAuthState = { authenticated: false };
 
-function createIdempotencyKey() {
-    const randomId = window.crypto?.randomUUID?.();
-    return `digiwise-${randomId || Math.random().toString(36).slice(2)}`;
-}
-
-function formatServerDate(value: string | null, isChinese: boolean) {
+function formatServerDate(
+    value: string | null | undefined,
+    isChinese: boolean
+) {
     if (!value) {
         return isChinese ? "未设置" : "Not set";
     }
@@ -77,11 +71,14 @@ function formatRemaining(
 
 function errorMessage(error: DigiwiseIpcError, isChinese: boolean) {
     const messages: Record<string, [string, string]> = {
-        AUTH_EMAIL_EXISTS: ["该邮箱已注册", "This email is already registered"],
-        AUTH_CODE_INVALID: ["验证码无效或已过期", "The verification code is invalid or expired"],
-        AUTH_INVALID_CREDENTIALS: ["邮箱或密码不正确", "Email or password is incorrect"],
+        ACCOUNT_EXISTS: ["该邮箱已注册", "This email is already registered"],
+        CODE_INVALID: ["验证码无效或已过期", "The verification code is invalid or expired"],
+        INVALID_CREDENTIALS: ["邮箱或密码不正确", "Email or password is incorrect"],
         AUTH_REQUIRED: ["请先登录", "Please sign in first"],
-        LICENSE_INVALID: ["授权码无效", "The license code is invalid"],
+        MAIL_UNAVAILABLE: ["邮件服务暂不可用", "Email delivery is unavailable"],
+        PUBLIC_API_UNAVAILABLE: ["公共 API 暂不可用", "The Public API is unavailable"],
+        PUBLIC_API_NOT_CONFIGURED: ["公共 API 尚未配置", "The Public API is not configured"],
+        TRIAL_NOT_CONFIGURED: ["服务端尚未配置试用策略", "The server trial policy is not configured"],
         VALIDATION_ERROR: ["请检查输入内容", "Please check the input"],
         CLIENT_AUTH_ERROR: ["认证服务暂时不可用", "The authentication service is unavailable"]
     };
@@ -143,8 +140,6 @@ export const DigiwiseAccount = observer(() => {
     const [codeSent, setCodeSent] = React.useState(false);
     const [loginEmail, setLoginEmail] = React.useState("");
     const [loginPassword, setLoginPassword] = React.useState("");
-    const [licenseCode, setLicenseCode] = React.useState("");
-    const [redemptionKey, setRedemptionKey] = React.useState<string | null>(null);
 
     const applyAuthState = (nextState: DigiwiseAuthState) => {
         setAuthState(nextState);
@@ -275,35 +270,6 @@ export const DigiwiseAccount = observer(() => {
                 text: isChinese ? "登录成功" : "Signed in successfully"
             });
         } else {
-            setNotice({ kind: "error", text: errorMessage(result.error, isChinese) });
-        }
-    };
-
-    const handleRedeem = async (event: React.FormEvent) => {
-        event.preventDefault();
-        const currentRedemptionKey = redemptionKey || createIdempotencyKey();
-        setRedemptionKey(currentRedemptionKey);
-        setBusy("redeem");
-        setNotice(null);
-        const result = await invokeAuth<DigiwiseRedeemIpcResponse>(
-            "digistudio:auth:redeem",
-            { code: licenseCode.trim(), idempotencyKey: currentRedemptionKey }
-        );
-        setBusy(null);
-
-        if (result.ok) {
-            applyAuthState(result.data.state);
-            setLicenseCode("");
-            setRedemptionKey(null);
-            setNotice({
-                kind: "success",
-                text: isChinese
-                    ? `授权成功（${result.data.redemptionId.slice(0, 8)}）`
-                    : `License activated (${result.data.redemptionId.slice(0, 8)})`
-            });
-        } else {
-            // Keep the same idempotency key so a retry cannot create a second
-            // redemption after a transient transport failure.
             setNotice({ kind: "error", text: errorMessage(result.error, isChinese) });
         }
     };
@@ -455,14 +421,6 @@ export const DigiwiseAccount = observer(() => {
                 </form>
             )}
 
-            <div className="DigiwiseAccount_MockNotice">
-                <strong>{isChinese ? "当前为 Mock API" : "Mock API"}</strong>
-                <span>
-                    {isChinese
-                        ? "开发验证码：000000；测试授权码：MOCK-LICENSE-001"
-                        : "Dev code: 000000; test license: MOCK-LICENSE-001"}
-                </span>
-            </div>
         </div>
     );
 
@@ -536,41 +494,14 @@ export const DigiwiseAccount = observer(() => {
                         </div>
                     )}
 
-                <form className="DigiwiseAccount_RedeemForm" onSubmit={handleRedeem}>
-                    <div>
-                        <span className="DigiwiseAccount_Eyebrow">
-                            {isChinese ? "兑换授权码" : "Redeem license code"}
-                        </span>
-                        <p>
-                            {isChinese
-                                ? "每次提交都带有幂等键，网络重试不会重复兑换。"
-                                : "Each submission uses an idempotency key, so retries cannot redeem twice."}
-                        </p>
-                    </div>
-                    <div className="DigiwiseAccount_InlineField">
-                        <input
-                            type="text"
-                            value={licenseCode}
-                            onChange={event => setLicenseCode(event.target.value)}
-                            placeholder="MOCK-LICENSE-001"
-                            minLength={6}
-                            required
-                        />
-                        <button
-                            type="submit"
-                            className="DigiwiseAccount_PrimaryButton"
-                            disabled={busy !== null}
-                        >
-                            {busy === "redeem"
-                                ? isChinese
-                                    ? "兑换中…"
-                                    : "Redeeming…"
-                                : isChinese
-                                  ? "兑换"
-                                  : "Redeem"}
-                        </button>
-                    </div>
-                </form>
+                <div className="DigiwiseAccount_IntegrationNotice">
+                    <strong>{isChinese ? "正式授权" : "Formal license"}</strong>
+                    <span>
+                        {isChinese
+                            ? "后台授权码兑换接口尚未接入，当前仅显示真实账号和试用状态。"
+                            : "The backend license redemption endpoint is not available yet; account and trial status are live."}
+                    </span>
+                </div>
 
                 {entitlements && entitlements.capabilities.length > 0 && (
                     <div className="DigiwiseAccount_Capabilities">
@@ -596,12 +527,12 @@ export const DigiwiseAccount = observer(() => {
                     <h2>{isChinese ? "账号与授权" : "Account and license"}</h2>
                     <p>
                         {isChinese
-                            ? "注册、查看服务端试用状态并兑换授权码。"
-                            : "Register, view server-side trial status, and redeem a license code."}
+                            ? "连接后台完成邮箱注册、登录并查看服务端试用状态。"
+                            : "Connect to the backend to register, sign in, and view the server-side trial status."}
                     </p>
                 </div>
                 <span className="DigiwiseAccount_Badge">
-                    {authState.isMockApi ? "Mock API" : "Public API"}
+                    Public API
                 </span>
             </div>
 
@@ -619,3 +550,4 @@ export const DigiwiseAccount = observer(() => {
         </div>
     );
 });
+
