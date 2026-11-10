@@ -24,6 +24,7 @@ import { instrumentDatabases } from "eez-studio-shared/db";
 import { productConfig } from "eez-studio-shared/product-config";
 import * as notification from "eez-studio-ui/notification";
 import { getHomePath } from "eez-studio-shared/util-electron";
+import { DigiwiseAccount } from "home/digiwise-account";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +37,7 @@ type HomeTabId =
     | "run"
     | "instruments"
     | "extensions"
+    | "account"
     | "settings";
 
 function normalizeHomeTabId(value: unknown): HomeTabId {
@@ -46,6 +48,7 @@ function normalizeHomeTabId(value: unknown): HomeTabId {
         "run",
         "instruments",
         "extensions",
+        "account",
         "settings"
     ];
 
@@ -284,6 +287,22 @@ export const Home = observer(
                         </div>
                         <div className="EezStudio_HomeTab_NavigationGroup">
                             <div className="EezStudio_HomeTab_NavigationGroupTitle">
+                                Digiwise
+                            </div>
+                            <HomeNavigationItem
+                                icon="material:account_circle"
+                                label="Account"
+                                title="Account and license"
+                                selected={
+                                    homeTabStore.activeTab == "account"
+                                }
+                                onClick={action(() => {
+                                    homeTabStore.activeTab = "account";
+                                })}
+                            />
+                        </div>
+                        <div className="EezStudio_HomeTab_NavigationGroup">
+                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
                                 System
                             </div>
                             {productConfig.extensionsCatalog.enabled && (
@@ -351,6 +370,7 @@ export const Home = observer(
                             homeTabStore.activeTab == "extensions" && (
                                 <ExtensionsManager />
                             )}
+                        {homeTabStore.activeTab == "account" && <DigiwiseAccount />}
                         {homeTabStore.activeTab == "settings" && <Settings />}
                     </div>
                 </div>

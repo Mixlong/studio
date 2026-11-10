@@ -1,0 +1,345 @@
+.EezStudio_DigiwiseAccount {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 32px 40px 48px;
+    overflow: auto;
+    color: var(--dw-text-primary, #1f2329);
+    background: var(--dw-app-bg, #f7f8fa);
+
+    .DigiwiseAccount_PageHeader,
+    .DigiwiseAccount_AuthPanel,
+    .DigiwiseAccount_SignedInPanel {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto;
+    }
+
+    .DigiwiseAccount_PageHeader {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        margin-bottom: 20px;
+
+        h2 {
+            margin: 4px 0 6px;
+            color: var(--dw-text-primary, #1f2329);
+            font-size: 25px;
+            font-weight: 650;
+            line-height: 1.25;
+        }
+
+        p {
+            max-width: 680px;
+            margin: 0;
+            color: var(--dw-text-secondary, #4e5969);
+            font-size: 13px;
+        }
+    }
+
+    .DigiwiseAccount_Eyebrow {
+        display: block;
+        color: var(--dw-text-muted, #86909c);
+        font-size: 11px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .DigiwiseAccount_Badge {
+        flex: 0 0 auto;
+        padding: 4px 9px;
+        color: #27784d;
+        background: rgba(46, 160, 67, 0.12);
+        border: 1px solid rgba(46, 160, 67, 0.3);
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 650;
+    }
+
+    .DigiwiseAccount_Notice,
+    .DigiwiseAccount_Warning {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto 16px;
+        padding: 10px 12px;
+        border: 1px solid var(--dw-panel-border, #d9d9d9);
+        border-radius: 3px;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .DigiwiseAccount_Notice.info {
+        color: var(--dw-text-secondary, #4e5969);
+        background: var(--dw-panel-header-bg, #ffffff);
+    }
+
+    .DigiwiseAccount_Notice.success {
+        color: #236b3d;
+        background: rgba(46, 160, 67, 0.1);
+        border-color: rgba(46, 160, 67, 0.3);
+    }
+
+    .DigiwiseAccount_Notice.error,
+    .DigiwiseAccount_Warning {
+        color: #9b4a00;
+        background: rgba(255, 166, 0, 0.12);
+        border-color: rgba(199, 117, 0, 0.35);
+    }
+
+    .DigiwiseAccount_AuthPanel,
+    .DigiwiseAccount_SignedInPanel {
+        padding: 20px;
+        background: var(--dw-panel-bg, #ffffff);
+        border: 1px solid var(--dw-panel-border, #d9d9d9);
+        border-radius: 5px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .DigiwiseAccount_ModeTabs {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--dw-panel-border, #d9d9d9);
+
+        button {
+            min-height: 34px;
+            padding: 0 2px 8px;
+            color: var(--dw-text-secondary, #4e5969);
+            background: transparent;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            font: inherit;
+            font-size: 13px;
+            cursor: pointer;
+
+            &:hover,
+            &.selected {
+                color: var(--dw-accent, #2ea043);
+            }
+
+            &.selected {
+                border-bottom-color: var(--dw-accent, #2ea043);
+                font-weight: 650;
+            }
+        }
+    }
+
+    .DigiwiseAccount_Form {
+        display: grid;
+        max-width: 620px;
+        gap: 14px;
+
+        label {
+            display: grid;
+            gap: 6px;
+            color: var(--dw-text-secondary, #4e5969);
+            font-size: 12px;
+        }
+
+        input,
+        .DigiwiseAccount_InlineField input {
+            box-sizing: border-box;
+            min-width: 0;
+            height: 32px;
+            padding: 0 9px;
+            color: var(--dw-text-primary, #1f2329);
+            background: var(--dw-input-bg, #ffffff);
+            border: 1px solid var(--dw-panel-border, #c9cdd4);
+            border-radius: 3px;
+            outline: none;
+            font: inherit;
+            font-size: 13px;
+
+            &:focus {
+                border-color: var(--dw-accent, #2ea043);
+                box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.15);
+            }
+        }
+    }
+
+    .DigiwiseAccount_InlineField {
+        display: flex;
+        gap: 8px;
+
+        input {
+            flex: 1 1 auto;
+        }
+    }
+
+    .DigiwiseAccount_PrimaryButton,
+    .DigiwiseAccount_SecondaryButton {
+        box-sizing: border-box;
+        min-height: 32px;
+        padding: 0 12px;
+        border-radius: 3px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+    }
+
+    .DigiwiseAccount_PrimaryButton {
+        color: #ffffff;
+        background: var(--dw-accent, #2ea043);
+        border: 1px solid var(--dw-accent, #2ea043);
+
+        &:hover:not(:disabled) {
+            background: #238636;
+            border-color: #238636;
+        }
+    }
+
+    .DigiwiseAccount_SecondaryButton {
+        color: var(--dw-text-primary, #1f2329);
+        background: var(--dw-panel-header-bg, #ffffff);
+        border: 1px solid var(--dw-panel-border, #c9cdd4);
+
+        &:hover:not(:disabled) {
+            border-color: var(--dw-accent, #2ea043);
+            color: var(--dw-accent, #2ea043);
+        }
+    }
+
+    .DigiwiseAccount_Hint,
+    .DigiwiseAccount_RedeemForm p {
+        margin: 0;
+        color: var(--dw-text-muted, #86909c);
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    .DigiwiseAccount_MockNotice {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        margin-top: 20px;
+        padding-top: 12px;
+        color: var(--dw-text-muted, #86909c);
+        border-top: 1px solid var(--dw-panel-border, #e5e6eb);
+        font-size: 11px;
+
+        strong {
+            color: var(--dw-text-secondary, #4e5969);
+        }
+    }
+
+    .DigiwiseAccount_AccountHeader {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--dw-panel-border, #e5e6eb);
+
+        strong {
+            display: block;
+            margin-top: 5px;
+            color: var(--dw-text-primary, #1f2329);
+            font-size: 15px;
+        }
+    }
+
+    .DigiwiseAccount_EntitlementGrid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin: 16px 0;
+    }
+
+    .DigiwiseAccount_EntitlementCard {
+        display: grid;
+        min-width: 0;
+        gap: 6px;
+        padding: 14px;
+        background: var(--dw-panel-header-bg, #f7f8fa);
+        border: 1px solid var(--dw-panel-border, #e5e6eb);
+        border-radius: 3px;
+
+        strong {
+            color: var(--dw-text-primary, #1f2329);
+            font-size: 17px;
+        }
+
+        small {
+            overflow: hidden;
+            color: var(--dw-text-secondary, #4e5969);
+            font-size: 11px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .DigiwiseAccount_RedeemForm {
+        display: grid;
+        gap: 10px;
+        padding-top: 4px;
+
+        .DigiwiseAccount_InlineField {
+            max-width: 620px;
+        }
+    }
+
+    .DigiwiseAccount_Capabilities {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid var(--dw-panel-border, #e5e6eb);
+
+        > div {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        span:not(.DigiwiseAccount_Eyebrow) {
+            padding: 3px 7px;
+            color: #27784d;
+            background: rgba(46, 160, 67, 0.1);
+            border: 1px solid rgba(46, 160, 67, 0.25);
+            border-radius: 3px;
+            font-size: 11px;
+        }
+    }
+
+    .DigiwiseAccount_Loading {
+        width: 100%;
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 24px;
+        color: var(--dw-text-secondary, #4e5969);
+        background: var(--dw-panel-bg, #ffffff);
+        border: 1px solid var(--dw-panel-border, #d9d9d9);
+        border-radius: 5px;
+        text-align: center;
+    }
+}
+
+@media (max-width: 700px) {
+    .EezStudio_DigiwiseAccount {
+        padding: 20px;
+
+        .DigiwiseAccount_PageHeader {
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .DigiwiseAccount_EntitlementGrid {
+            grid-template-columns: 1fr;
+        }
+
+        .DigiwiseAccount_InlineField {
+            align-items: stretch;
+            flex-direction: column;
+        }
+    }
+}
