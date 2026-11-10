@@ -262,7 +262,7 @@ app.on("ready", async function () {
     const { loadSettings } = await import("main/settings");
     await loadSettings();
 
-    // CLIENT-001 currently uses a contract-compatible Mock Public API. The
+    // CLIENT-001 connects to the configured local/hosted Public API. The
     // access token remains in the main process and is never sent to React.
     const { registerDigiwiseAuthIpc } = await import("main/digiwise-auth");
     await registerDigiwiseAuthIpc();
