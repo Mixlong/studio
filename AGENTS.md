@@ -5,13 +5,13 @@
 ## 项目事实与边界
 - 本仓库包含基于 EEZ Studio 的 Electron 桌面 IDE，涉及 LVGL、Style、工程编辑、MCP 和构建发布。执行任务前先检查实际源码和分支，不能把讨论中的云服务方案当作已实现功能。
 - 规划的后台仅供内部员工使用；个人及企业客户通过同一个桌面 IDE 和账号使用个人/组织 Workspace。企业不需要 Web 后台。
-- 客户文件必须由后端 Cloud API + 内部 Storage Gateway 流式中转至 Private OSS；**客户端不得接触 OSS AccessKey、STS、预签名 URL 或可直接访问的 OSS 对象地址**。任何与此相冲突的改动须先取得项目方批准。
+- 客户文件首选 **Node.js 业务控制面 + SFTPGo 文件服务面 + Private OSS 存储面**：Node 经内网 Admin API 管理账号/目录/配额，不传输文件字节；桌面端仅访问受限 SFTPGo 用户文件 API（或批准的传输协议）。**客户端不得直接访问 OSS，也不得获得 OSS AccessKey、STS、预签名 URL、对象直链或 SFTPGo 管理员密钥**。详见 `docs/adr/0001-sftpgo-file-plane.md`。
 - 已有 `docs/architecture/digiwise-platform-and-oss.md` 是设计草案。未落实的 Cloud API、数据库、配额、网关及商业功能不得声称已上线。
 
 ## 改动前必须执行
 1. 确认用户批准的范围、目标分支、代码版本、相关文件与已有文档；不擅自增加功能、不随意覆盖最近调整。
 2. 非微小改动先补充/更新书面文档：需求、架构/API/数据模型、兼容性、测试与回滚；与代码一同提交。适用的文档规范：`docs/standards/documentation.md`。
-3. 涉及重要架构选择，先记录在 `docs/adr/`，标注“已确认 / 设计建议 / 待验证”。
+3. 涉及重要架构选择，先记录在 `docs/adr/`，标注“已确认 / 设计建议 / 待验证”；SFTPGo 原生配额不应当作并发严格配额通过验收。
 4. 不能访问用户电脑、云环境或无法运行测试时，明确写“未验证”，绝不虚构测试通过、已部署、已发布或已合并。
 
 ## 项目专用 Skills
