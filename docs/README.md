@@ -10,6 +10,13 @@
 | --- | --- | --- |
 | [总体架构与后台 OSS 技术方案](architecture/digiwise-platform-and-oss.md) | 个人与企业统一空间、内部后台、OSS、安全、配额、部署、实施与验收 | 设计草案 |
 | [文档编写与变更规范](standards/documentation.md) | 目录、命名、模板、评审与维护规则 | 拟实施 |
+| [项目 Agent Skills 规范](standards/agent-skills.md) | Skill 结构、触发、评审和验证流程 | 拟实施 |
+
+## AI 开发约束与 Skills
+
+- 根目录 [`AGENTS.md`](../AGENTS.md) 定义持续有效的项目边界和文档先行规则。
+- [`.agents/skills/`](../.agents/skills/) 存放按任务加载的 5 个项目级 Skills（文档、云存储、MCP、UI、发布）。
+- Skills 格式及维护细则参见 [项目 Agent Skills 规范](standards/agent-skills.md)。
 
 ## 目录规范
 
