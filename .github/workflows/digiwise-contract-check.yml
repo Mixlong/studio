@@ -1,0 +1,26 @@
+name: Digiwise Public API contract check
+on:
+  push:
+    paths:
+      - "contracts/openapi.yaml"
+      - "scripts/verify_contract.py"
+      - ".github/workflows/digiwise-contract-check.yml"
+  pull_request:
+    paths:
+      - "contracts/openapi.yaml"
+      - "scripts/verify_contract.py"
+      - ".github/workflows/digiwise-contract-check.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install PyYAML==6.0.3
+      - run: python scripts/verify_contract.py
