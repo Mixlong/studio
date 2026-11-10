@@ -1,91 +1,65 @@
-# Digiwise 统一管理平台：多项目数据源接入规划
+# 迪太云管理系统数据接入 Digiwise 后台的预留设计
 
 - 文档编号：ARCH-INTEGRATION-001
-- 版本：v0.1（预研草案）
+- 版本：v0.2（范围修订）
 - 日期：2026-11-10
-- 状态：**未来能力规划 / 未实施 / 未确认具体项目及数据库**
-- 关联：[后台候选 NocoBase ADR](../adr/0002-nocobase-internal-admin-evaluation.md)、[后台与 OSS 架构](digiwise-platform-and-oss.md)
+- 状态：可选未来集成 / 未实施 / 数据库结构与具体字段待核实
+- 关联：[NocoBase 后台评估](../adr/0002-nocobase-internal-admin-evaluation.md)、[Digiwise 后台总体架构](digiwise-platform-and-oss.md)
 
-## 1. 需求与边界
+## 1. 已明确的实际范围
 
-考虑将 NocoBase 作为 Digiwise 多个独立产品的统一**内部**管理控制台。除 DigiwiseStudio 外，后续可能接入其他项目的 PostgreSQL、MySQL、MariaDB、SQL Server 或 REST API，统一展示用户/组织/授权、运营指标和故障，但不要求将所有业务数据库合并，也不赋予后台绕过各项目业务权限的权利。
+当前并不是建设多个产品的统一管理平台。DigiwiseStudio 的内部后台先服务 DigiwiseStudio 的账号、企业、许可、开通和 SFTPGo 存储管理。**另有一个已存在的“迪太云管理系统”，未来可能需要读取其中部分数据并在同一内部后台查看**。
 
-原则：**项目数据库独立，业务所有权独立；统一管理界面与跨项目报表在管理层聚合**。SFTPGo/OSS 只管理经批准的文件面，不因接入外部数据源而暴露 OSS。
+- 迪太云仍是独立系统，数据库归属、升级、备份、业务逻辑均由原系统维护。
+- 接入是可选功能，现阶段**不要求**统一登录、跨项目用户合并、跨系统写数据、共享工作流或集中管理全部产品。
+- 暂未确认迪太云的数据库类型、API 可用性、实际需要的字段和数据分类。不能将 PostgreSQL/MySQL/SQL Server 任何一种写成已确认技术事实。
+- SFTPGo + OSS 继续只承担 Digiwise 的用户文件服务，与迪太云数据接入无直接依赖。
 
-## 2. 逻辑架构
+## 2. 最小目标拓扑
 
 ```mermaid
-flowchart TB
-  OPS[内部运营] --> ADMIN[NocoBase / 统一内部 Admin]
-  ADMIN --> MAIN[(NocoBase 主数据库\n管理配置 / 统一目录)]
-  ADMIN -->|外部数据源插件/FDW（受限）| DBB[(项目 B PostgreSQL)]
-  ADMIN -->|外部数据源插件/FDW（受限）| DBC[(项目 C MySQL)]
-  ADMIN -->|工作流 HTTP / 受控集成接口| API[项目服务 API]
-  API --> DBD[(其他项目业务数据库)]
-  ADMIN -->|管理请求| BRIDGE[Digiwise Integration Service]
-  BRIDGE -->|内网 Admin REST API| SFTP[SFTPGo]
-  SFTP --> OSS[(阿里云 OSS Private)]
+flowchart LR
+  STAFF[内部人员] --> NB[NocoBase 候选 / Digiwise Admin]
+  NB --> CORE[(Digiwise 后台业务数据)]
+  NB -->|仅需要时：受限只读 API 或数据源| DTS[迪太云管理系统]
+  DTS --> DTDB[(迪太云原有数据库)]
+  NB -->|业务开通接口| S[SFTPGo 文件服务]
+  S --> OSS[(Private OSS)]
 ```
 
-不要让外部业务数据库成为 NocoBase 主数据库；不同项目的迁移、备份和故障恢复仍由其原系统负责。
+这里的“只读”是第一阶段的安全默认建议，不代表用户已确认只能读取。未获得明确需求前，不设计跨系统写回或共用数据库。
 
-## 3. 可选连接方式与版本/费用边界
+## 3. 两种接入方式
 
-| 模式 | 适用 | 价格/限制 |
+| 方式 | 适用情况 | 约束 |
 | --- | --- | --- |
-| 官方外部数据库数据源插件 | 可视化挂接整个独立业务库，按表、字段、权限、页面、流程使用 | **NocoBase 2.x 的 MySQL/PostgreSQL/MariaDB/MSSQL 外部数据源为 Standard+**，非 Community；对应商用插件需要授权 |
-| Community FDW 外部数据表 | PostgreSQL/MySQL 个别外部表的只读报表/轻量展示 | 1.x/2.x 社区版包含 `@nocobase/plugin-collection-fdw`，底层数据库需 FDW/FEDERATED 支持；属于逐表映射，有远程查询与结构约束，不等同完整数据源管理 |
-| 工作流 HTTP Request | 调用其他项目已有的业务 API 做通知、状态同步、管理动作 | 2.x Community 含 HTTP 请求工作流节点；不等于外部 REST 数据源的 CRUD 页面插件 |
-| 官方 REST API 数据源 | 把第三方 API 映射为可视化数据源页面 | 1.x/2.x 的 `@nocobase/plugin-data-source-rest-api` 是 **Standard+**，不是 Community |
-| 自定义 Node/NocoBase 插件 | 深度集成复杂业务，或避开商业数据源插件、需要高安全隔离 | 需自行实现认证/授权、字段映射、缓存、错误、测试与运维；开发成本不能视为零 |
-| NocoBase 3 外部数据库连接（代码） | 使用 3.x 代码化应用，读取现有数据库架构并绑定权限 | 使用 `schemaManagement: 'external'`；表示不由框架迁移 DDL，不代表数据库读写权限自动变为只读。须按目标版本验证部署与界面体验 |
+| **优先：迪太云现有 API** | 原系统有查询 API，且需要保留业务鉴权/计算逻辑 | 使用服务账号或受控服务间身份；仅获取获准字段；设置超时、限流、缓存和故障隔离 |
+| **备选：只读数据库接入** | 确实没有合适 API，仅需要少量列表、统计、报表 | 独立只读账号、视图或只读副本、网络白名单、字段权限、查询限额；不可管理迪太云业务表结构 |
 
-版本差异必须锁定：**2.x 的低代码外部数据源插件价格不能直接套用到 3.x 核心代码化数据库连接**。
+若采用 NocoBase，外部数据库插件的社区版/商业版限制与所选 2.x/3 版本有关，应在确认迪太云实际数据库后按版本核价；不能仅因预留的单个外部系统就提前购买昂贵插件或改换平台。
 
-## 4. 安全架构
+## 4. 优先级与实施条件
 
-1. **优先 API 集成**处理修改客户资料、授权、订单、设备等有业务规则的操作；不允许 NocoBase 绕过目标项目服务而直接更新核心事务表。
-2. 数据库直连用于只读查询、审计/统计或明确批准的 CRUD；使用独立低权限 DB 账号，优先只读副本和 View；网络仅允许内部私网/VPN，TLS 加密，凭据存安全的后端密钥服务。
-3. 每个外部项目配置数据源别名、owner、数据分类、权限范围、接口/表结构版本、故障处理和容量上限。不可通过普通 UI 配置暴露他人数据库密码。
-4. 跨数据库操作不具备自动分布式事务；涉及跨项目写操作必须实施幂等、补偿与对账流程。
-5. 多项目管理不等于统一用户登录：如需统一客户身份，应新增中央账户映射和 SSO 设计；不要简单地跨库复用用户 ID。
-6. 数据源异常必须隔离，不应导致 NocoBase 其他模块或各项目客户端停机。
+1. **P0：不接迪太云**。先验证 Digiwise 后台个人/企业账号、邮箱开通、软件授权、SFTPGo 存储空间创建和配额管理。
+2. **P1：确有业务需求时**，明确要显示的迪太云字段/页面、原系统负责人、数据敏感等级、是否有现成 API 和网络访问条件。
+3. **P2：做最小只读 PoC**，只实现一个有明确业务价值的查询页，比较 API 和数据库两条路径的维护成本。
+4. 通过权限、性能、容错、安全与费用评审后，再决定是否将集成正式纳入 Digiwise Admin。
 
-## 5. 建议路线
+## 5. 安全与验收
 
-### P0：现在
-- 保持 DigiwiseStudio 与 SFTPGo 的业务/文件面清晰分离。
-- NocoBase 选型 PoC 先验证内部客户/组织/存储配额管理及 SFTPGo Admin API。
-- 先定义标准的 project_id、external_user_id、data_source_id 映射表，避免未来跨系统 ID 冲突。
+- [ ] Digiwise 后台失去迪太云连接时，DigiwiseStudio 用户管理、授权和存储服务照常运行。
+- [ ] NocoBase 不自动修改迪太云数据库结构，不跨库写入核心事务数据。
+- [ ] 迪太云接口/数据库凭据仅在受控服务端保存，不出现在浏览器或桌面软件中。
+- [ ] 仅内部有权限人员可查看获准的字段；敏感数据应最小化、脱敏并审计访问。
+- [ ] 明确访问方式、所需字段、同步时效、原系统负责人及维护责任后才实施。
 
-### P1：第一个外部项目
-- 优先挑选一个外部项目的只读列表/报表进行验证，比较 Community FDW、官方 Standard 外部数据库插件与业务 API。
-- 验证读权限、分页、查询性能、字段变更、凭据轮换、断连恢复与数据库网络边界。
-- 根据插件购买成本与二次开发成本决定采用官方插件还是自定义集成。
+## 6. 对后台选型的影响
 
-### P2：多项目管理
-- 统一内部项目目录、权限与审计，形成项目级概览指标；再逐个引入修改类管理操作。
-- 保持每个业务数据库独立迁移和备份，统一后台不得代替各项目运维。
+**只有一个未来可能接入的既有外部系统，不足以作为将 NocoBase 更换为 Budibase 的主要理由。** 当前优先按内部业务关系、授权流程、SFTPGo API 集成、安全性和总体维护成本选型。
 
-## 6. 验收与风险
-
-- [ ] 外部项目 DB 单独维护，其 schema 变化不由 NocoBase 自动修改。
-- [ ] 只读管理员无法通过 API 或表单修改外部业务数据。
-- [ ] 数据源凭据和客户数据不进入前端或日志。
-- [ ] 单个外部 DB 中断不影响其它项目管理界面及 DigiwiseStudio 本地能力。
-- [ ] 线上环境已核对 NocoBase 2.x/3 的实际插件与许可证。
-- [ ] 跨项目管理动作经过目标业务 API，能审计且具备重试/补偿。
-
-## 7. 官方参考
-
-- NocoBase 外部数据库及商业版限制：https://nocode.docs.nocobase.com/data-sources/data-source-manager/external-database
-- NocoBase 2.x 社区版 FDW：https://docs.nocobase.com/data-sources/collection-fdw/
-- NocoBase 外部 REST API 插件：https://docs.nocobase.com/cn/plugins/%40nocobase/plugin-data-source-rest-api/
-- NocoBase 3 外部数据库编程指南：https://docs.nocobase.com/core/developing-apps/existing-databases/
-- NocoBase 2.x HTTP Request 工作流：https://docs.nocobase.com/plugins/
-
-## 8. 变更记录
+## 7. 变更记录
 
 | 日期 | 版本 | 说明 |
 | --- | --- | --- |
-| 2026-11-10 | v0.1 | 新增未来多项目数据库、API 及平台化管理规划；尚未选型/实现 |
+| 2026-11-10 | v0.1 | 原泛化多项目数据源规划（已被 v0.2 收窄） |
+| 2026-11-10 | v0.2 | 明确唯一已知外部系统为迪太云管理系统，接入可选且优先只读，不建设通用多项目运营平台 |
