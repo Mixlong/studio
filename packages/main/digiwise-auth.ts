@@ -6,15 +6,17 @@ import type {
     DigiwiseAuthState,
     DigiwiseIpcError,
     DigiwiseIpcResult,
-    DigiwiseRedeemIpcResponse,
     DigiwiseRegisterResponse,
     DigiwiseSendCodeResponse
 } from "eez-studio-shared/digiwise-auth";
-import { MockDigiwiseApiError, MockDigiwisePublicApi } from "main/digiwise-auth-mock";
+import {
+    DigiwisePublicApi,
+    DigiwisePublicApiError
+} from "main/digiwise-auth-api";
 
 interface StoredAuthSession {
     accessToken: string;
-    userId: string;
+    userId?: string;
     email: string;
 }
 
@@ -24,20 +26,50 @@ interface EncryptedSessionFile {
     payload: string;
 }
 
-const MOCK_AUTH_POLICY = {
-    // Mock-only server fixture. Product trial duration remains a backend
-    // configuration value and is not used by the renderer.
-    trialDurationMs: 14 * 24 * 60 * 60 * 1000,
-    verificationCodeLifetimeMs: 10 * 60 * 1000,
-    verificationCode: "000000",
-    licenseCode: "MOCK-LICENSE-001",
-    trialCapabilities: ["desktop.editor"],
-    licensedCapabilities: ["desktop.editor", "cloud.storage.read"]
-};
-
-const mockApi = new MockDigiwisePublicApi(MOCK_AUTH_POLICY);
+// Local development uses the locally running studio-admin Public API. Packaged
+// builds must provide the deployed gateway through the environment instead of
+// silently falling back to a local or simulated service.
+const publicApiBaseUrl =
+    process.env.DIGIWISE_PUBLIC_API_BASE_URL?.trim() ||
+    (!app.isPackaged
+        ? "http://127.0.0.1:13000/main/api/v1"
+        : undefined);
+let publicApi: DigiwisePublicApi | null = null;
+let publicApiConfigError: DigiwisePublicApiError | null = null;
 let currentSession: StoredAuthSession | null = null;
 let ipcRegistered = false;
+
+function getPublicApi() {
+    if (publicApiConfigError) {
+        throw publicApiConfigError;
+    }
+
+    if (!publicApiBaseUrl) {
+        publicApiConfigError = new DigiwisePublicApiError(
+            500,
+            "PUBLIC_API_NOT_CONFIGURED",
+            "The Digiwise Public API URL is not configured",
+            "local-config"
+        );
+        throw publicApiConfigError;
+    }
+
+    try {
+        publicApi ||= new DigiwisePublicApi(publicApiBaseUrl);
+        return publicApi;
+    } catch (error) {
+        publicApiConfigError =
+            error instanceof DigiwisePublicApiError
+                ? error
+                : new DigiwisePublicApiError(
+                      500,
+                      "PUBLIC_API_NOT_CONFIGURED",
+                      "The Digiwise Public API URL is invalid",
+                      "local-config"
+                  );
+        throw publicApiConfigError;
+    }
+}
 
 function sessionFilePath() {
     return path.join(app.getPath("userData"), "digiwise-auth-session.json");
@@ -62,7 +94,8 @@ async function loadSession() {
         const session = JSON.parse(decrypted) as StoredAuthSession;
         if (
             typeof session.accessToken === "string" &&
-            typeof session.userId === "string" &&
+            (typeof session.userId === "string" ||
+                typeof session.userId === "undefined") &&
             typeof session.email === "string"
         ) {
             currentSession = session;
@@ -100,10 +133,6 @@ async function saveSession(session: StoredAuthSession) {
 }
 
 async function clearSession() {
-    const token = currentSession?.accessToken;
-    if (token) {
-        mockApi.revokeSession(token);
-    }
     currentSession = null;
 
     try {
@@ -114,11 +143,11 @@ async function clearSession() {
 }
 
 function emptyState(): DigiwiseAuthState {
-    return { authenticated: false, isMockApi: true };
+    return { authenticated: false };
 }
 
 function toIpcError(error: unknown): DigiwiseIpcError {
-    if (error instanceof MockDigiwiseApiError) {
+    if (error instanceof DigiwisePublicApiError) {
         return {
             status: error.status,
             code: error.code,
@@ -153,12 +182,22 @@ async function call<T>(operation: () => Promise<T>): Promise<DigiwiseIpcResult<T
 
 function readString(input: unknown, field: string) {
     if (!input || typeof input !== "object") {
-        throw new MockDigiwiseApiError(422, "VALIDATION_ERROR", `${field} is required`);
+        throw new DigiwisePublicApiError(
+            422,
+            "VALIDATION_ERROR",
+            `${field} is required`,
+            "local-validation"
+        );
     }
 
     const value = (input as Record<string, unknown>)[field];
     if (typeof value !== "string") {
-        throw new MockDigiwiseApiError(422, "VALIDATION_ERROR", `${field} is required`);
+        throw new DigiwisePublicApiError(
+            422,
+            "VALIDATION_ERROR",
+            `${field} is required`,
+            "local-validation"
+        );
     }
 
     return value;
@@ -170,29 +209,28 @@ async function getAuthState(): Promise<DigiwiseAuthState> {
     }
 
     try {
-        const entitlements = await mockApi.getEntitlements(
+        const entitlements = await getPublicApi().getEntitlements(
             currentSession.accessToken
         );
         return {
             authenticated: true,
-            isMockApi: true,
             email: currentSession.email,
-            userId: currentSession.userId,
+            ...(currentSession.userId
+                ? { userId: currentSession.userId }
+                : {}),
             accountStatus: entitlements.accountStatus,
             entitlements
         };
-    } catch (_error) {
-        await clearSession();
-        return emptyState();
+    } catch (error) {
+        if (
+            error instanceof DigiwisePublicApiError &&
+            error.status === 401
+        ) {
+            await clearSession();
+            return emptyState();
+        }
+        throw error;
     }
-}
-
-async function requireSession() {
-    if (!currentSession) {
-        throw new MockDigiwiseApiError(401, "AUTH_REQUIRED", "Authentication is required");
-    }
-
-    return currentSession;
 }
 
 export async function registerDigiwiseAuthIpc() {
@@ -203,12 +241,15 @@ export async function registerDigiwiseAuthIpc() {
     ipcRegistered = true;
     await loadSession();
 
-    ipcMain.handle("digistudio:auth:state", () => getAuthState());
+    ipcMain.handle("digistudio:auth:state", () => call(() => getAuthState()));
 
     ipcMain.handle(
         "digistudio:auth:send-code",
         (_event, input: unknown): Promise<DigiwiseIpcResult<DigiwiseSendCodeResponse>> =>
-            call(() => mockApi.sendCode(readString(input, "email"), "register"))
+            call(() => {
+                const email = readString(input, "email");
+                return getPublicApi().sendCode(email);
+            })
     );
 
     ipcMain.handle(
@@ -217,49 +258,27 @@ export async function registerDigiwiseAuthIpc() {
             _event,
             input: unknown
         ): Promise<DigiwiseIpcResult<DigiwiseRegisterResponse>> =>
-            call(() =>
-                mockApi.register(
-                    readString(input, "email"),
-                    readString(input, "code"),
-                    readString(input, "password")
-                )
-            )
+            call(() => {
+                const email = readString(input, "email");
+                const code = readString(input, "code");
+                const password = readString(input, "password");
+                return getPublicApi().register(email, code, password);
+            })
     );
 
     ipcMain.handle(
         "digistudio:auth:login",
         async (_event, input: unknown): Promise<DigiwiseIpcResult<DigiwiseAuthState>> =>
             call(async () => {
-                const login = await mockApi.login(
-                    readString(input, "email"),
-                    readString(input, "password")
-                );
+                const email = readString(input, "email");
+                const password = readString(input, "password");
+                const login = await getPublicApi().login(email, password);
                 await saveSession({
                     accessToken: login.accessToken,
-                    userId: login.userId,
-                    email: login.email
+                    ...(login.userId ? { userId: login.userId } : {}),
+                    email: login.email || email
                 });
                 return getAuthState();
-            })
-    );
-
-    ipcMain.handle(
-        "digistudio:auth:redeem",
-        async (
-            _event,
-            input: unknown
-        ): Promise<DigiwiseIpcResult<DigiwiseRedeemIpcResponse>> =>
-            call(async () => {
-                const session = await requireSession();
-                const redemption = await mockApi.redeem(
-                    session.accessToken,
-                    readString(input, "code"),
-                    readString(input, "idempotencyKey")
-                );
-                return {
-                    redemptionId: redemption.redemptionId,
-                    state: await getAuthState()
-                };
             })
     );
 
@@ -268,3 +287,4 @@ export async function registerDigiwiseAuthIpc() {
         return ok(emptyState());
     });
 }
+
