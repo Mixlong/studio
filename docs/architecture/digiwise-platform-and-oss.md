@@ -61,34 +61,7 @@ flowchart TB
 SFTPGo WebAdmin 仅内部运维访问；用户文件接口通过网关 HTTPS/TLS、用户权限及限流对外提供。SFTPGo 访问 OSS 使用服务器端最小权限 RAM 身份，优先使用同地域私网端点。
 
 
-```mermaid
-flowchart TB
-    U[个人开发者 / 企业成员] --> IDE[DigiwiseStudio Desktop\nElectron + LVGL + 本地 Build]
-    OPS[内部开发/运营] --> ADMIN[Digiwise Admin\n内部 Web 管理后台]
-    IDE -->|HTTPS + Token| API[Digiwise Cloud API\n认证/空间/项目/授权/发布]
-    ADMIN -->|HTTPS + RBAC| API
-    API --> DB[(PostgreSQL\n用户/空间/配额/文件元数据)]
-    API --> REDIS[(Redis / Worker\n任务/限流/清理)]
-    API -->|内部调用| GATEWAY[Storage Gateway\n流式上传/下载/删除]
-    GATEWAY -->|服务端 RAM 权限/私网优先| OSS[(阿里云 OSS Private)]
-    CI[云效 Flow] -->|构建与发布产物| OSS
-    API -->|查询已审核构建状态| CI
-```
 
-客户端只能访问 Cloud API 的业务域名；Storage Gateway 默认处于内部网络，不对互联网公开独立文件服务端口。云效构建产物可由受控发布管道管理；客户文件和发行包必须分 Bucket。
-
-### 2.1 服务职责
-
-| 部件 | 职责 | 不负责 |
-| --- | --- | --- |
-| Desktop IDE | 登录、切换 Workspace、本地编辑/编译、云文件上传下载、更新 | OSS 凭据和全局配额裁决 |
-| Admin | 客户、组织、用户、空间、配额、版本、构建、资源、授权、监控、审计 | 直接替用户编辑工程 |
-| Cloud API | 身份认证、RBAC、Workspace/项目授权、元数据、配额事务、上传会话、版本策略 | 大文件直接缓存在 API 内存 |
-| Storage Gateway | API 已授权任务的流式传输、OSS CRUD、完整性验证、带宽/并发控制 | 决定业务所有权或跳过容量校验 |
-| PostgreSQL | 事实记录、事务、空间及项目关联、预留量与审计 | 保存文件正文 |
-| Redis / Worker | 异步清理、告警、限流、对账调度 | 作为唯一容量事实来源 |
-| OSS | 对象持久化、生命周期、加密、版本化按策略配置 | 自行实现业务租户配额 |
-| 云效 Flow | Windows/macOS 构建、签名、测试、制品发布 | 客户云项目存储授权 |
 
 ## 3. 用户、企业与工作空间
 
@@ -157,17 +130,7 @@ SFTPGo 官方 `track_quota` 说明：并发上传开始时可能读取同一个�
 推荐监控：空间用量、文件数、传输流量、失败率、配额扫描偏差、未完成分片、跨实例短时超限和网关带宽成本。
 
 
-`available_bytes = quota_bytes - used_bytes - reserved_bytes`，上述计数以数据库事务为准，所有长度均用 BIGINT bytes。
 
-- 申请上传时根据 Workspace 加锁或原子更新，验证用户/项目权限、空间状态、文件尺寸和剩余容量，创建 `upload_sessions` 并预留 `reserved_bytes`。
-- 对象不可被用户直接写入/覆盖；网关只能处理已经授权且未过期的上传会话。
-- 服务端边接收边统计流量与对象大小，超出会话允许大小立即中断；不得因 HTTP chunked body 无 Content-Length 而放弃限制。
-- 成功后网关从 OSS 核验对象真实大小、ETag/校验信息和 Key，事务提交 `storage_objects`，将预留转为已用，记录用量事件。
-- 失败、超时、取消及服务重启时通过幂等补偿清理暂存对象/未完成分片并回退预留量。
-- 替换文件采用新对象写入、版本提交、旧对象按回收策略清理；统计逻辑需同时考虑新旧对象占用。
-- 多设备并发上传、请求重试、配额缩小、空间冻结、软删除与恢复都需要测试。
-- **提醒阈值设计建议**：80% 预警、95% 高容量提醒、100% 拒绝增长；不得自动删除工程。
-- 文件版本、回收站、OSS 版本化、备份对象是否计入计费和逻辑配额，应分别说明；不能将 `used_bytes` 视为 OSS 账单用量。
 
 ## 6. 上传下载、身份认证与安全数据流
 
@@ -196,29 +159,7 @@ sequenceDiagram
 客户端不能获得 OSS AccessKey/STS/预签名 URL，下载不得重定向至 OSS 公网地址。文件只在 SFTPGo 和 OSS 间流动，Node 不直接承载字节流；断点续传、Range、路径穿越/越权、恶意文件、密钥轮换及单文件/会话限流都需验收。
 
 
-```mermaid
-sequenceDiagram
-    participant IDE as Desktop IDE
-    participant API as Cloud API
-    participant DB as PostgreSQL
-    participant GW as Storage Gateway
-    participant OSS as Private OSS
-    IDE->>API: POST /client/uploads (workspace, project, size)
-    API->>DB: 校验成员/项目权限，原子预留配额
-    DB-->>API: 上传会话 id
-    API-->>IDE: 业务上传端点 + 会话令牌（非 OSS 凭据）
-    IDE->>API: 上传文件流（HTTPS）
-    API->>GW: 内部已授权上传流 / 会话上下文
-    GW->>OSS: 服务端流式写入 / 分片
-    OSS-->>GW: 对象结果
-    GW->>API: 真实大小、哈希、对象状态
-    API->>DB: 幂等提交元数据，结算配额
-    API-->>IDE: 文件 id / 版本 / 已用量
-```
 
-下载：IDE 请求文件 ID → API 验证 Workspace 和项目权限 → 网关从 OSS 读取流 → API/网关经受控入口流式返回。严禁重定向到 OSS 对象 URL；不提供客户端 STS/签名 URL。支持 Range 下载、断点续传、流量限速与审计。大型工程传输避免整文件加载内存。
-
-网关流式传输会增加应用网络出流量和算力成本，需做峰值并发、GB 级文件、客户端断线和出口费用的专项压测。
 
 ## 7. 后台规划（仅内部使用）
 
@@ -280,44 +221,7 @@ POST   /admin/releases/{id}/publish
 配置变更需具备幂等性、异步补偿和审计：例如 Node 创建企业成功但 SFTPGo 建立虚拟目录失败时，该 Workspace 必须处于不可用的“开通中/失败”状态，并可重试。
 
 
-关键数据表（第一期重点标 *）：
 
-- `users`*、`organizations`、`organization_members`、`workspaces`*、`workspace_members`*；
-- `storage_spaces`*、`storage_objects`*、`upload_sessions`*、`storage_usage_events`*、`storage_reconcile_runs`*；
-- `cloud_projects`*、`project_members`、`file_revisions`；
-- `app_versions`*、`release_channels`*、`release_artifacts`*、`build_runs`*；
-- `license_plans`、`licenses`、`license_seats`；
-- `admin_users`*、`admin_roles`*、`admin_audit_logs`*、`background_jobs`*。
-
-所有带空间归属的数据表建立 `workspace_id` 索引；后台查询及 API 操作均须执行真实租户边界检查。容量预留使用事务、约束和幂等键，不能依赖 Redis 作为唯一数据源。
-
-API 草案（需单独落 OpenAPI 文件）：
-
-```http
-POST   /client/auth/login
-GET    /client/workspaces
-GET    /client/workspaces/{id}/usage
-GET    /client/projects
-POST   /client/uploads
-PUT    /client/uploads/{id}/content
-POST   /client/uploads/{id}/complete
-POST   /client/uploads/{id}/abort
-GET    /client/files/{id}/content
-DELETE /client/files/{id}
-GET    /client/releases/latest
-
-GET    /admin/users
-POST   /admin/organizations
-GET    /admin/workspaces
-PATCH  /admin/workspaces/{id}/quota
-GET    /admin/storage/reconciliations
-GET    /admin/releases
-POST   /admin/releases/{id}/publish
-GET    /admin/builds
-GET    /admin/audit-logs
-```
-
-业务错误码至少包括：`UNAUTHENTICATED`、`FORBIDDEN`、`WORKSPACE_SUSPENDED`、`QUOTA_EXCEEDED`、`UPLOAD_EXPIRED`、`FILE_CONFLICT`、`TRANSFER_INTERRUPTED`、`STORAGE_UNAVAILABLE`。
 
 ## 10. 技术选型与部署建议
 
@@ -337,20 +241,7 @@ GET    /admin/audit-logs
 Open Source 版 SFTPGo 为 AGPLv3 并有 Web UI 主题额外许可限制；不能默认把其页面复制或改成自有产品 UI。投入生产前需核对使用版本的功能分层、商业许可、网络服务条款和部署方式。
 
 
-| 层 | 建议 | 状态 |
-| --- | --- | --- |
-| Admin 前端 | React + TypeScript + Ant Design Pro | 待选型 |
-| API | NestJS 模块化单体 | 待选型 |
-| Storage Gateway | 独立进程/容器 + OSS SDK 流式中转 | 待实现 |
-| 数据库 | PostgreSQL | 待部署 |
-| 队列与限流 | Redis + Worker | 待部署 |
-| 对象存储 | 阿里云 OSS 三 Bucket + dev/prod 隔离 | 规划 |
-| CI/CD | 延续云效 Flow，构建制品受控发布 | 延续现有 |
-| 运维 | 指标/日志/链路追踪/备份恢复 | 待建立 |
 
-部署建议：独立 API 与网关进程，网关可水平扩容；入口 HTTPS + WAF/限流；内部服务在私有网络访问 OSS，RAM 最小权限；数据库自动备份及可验证恢复；密钥放专用密钥管理，不放源码/配置明文。测试与生产数据、Bucket、数据库和凭据必须隔离。
-
-开源选型（SFTPGo/Cloudreve 等）须专项验证许可证、OSS 兼容性及**是否确实不向客户端暴露 OSS**；不将候选产品当作已确定依赖。
 
 ## 11. 安全与风险
 
@@ -364,13 +255,7 @@ Open Source 版 SFTPGo 为 AGPLv3 并有 Web UI 主题额外许可限制；不�
 8. 对客户文件的个人信息、数据驻留、删除保留、恢复及 SFTPGo AGPL 许可进行专门评审。
 
 
-- OSS Bucket Private、服务端 RAM、禁止客户端 OSS 凭据和直接 URL。
-- API 强制 Workspace/Project 权限，防止只用客户端传来的 workspace_id 做授权。
-- 管理 API 和 Client API 分离，审计所有高权限动作；管理员默认不读取用户文件正文。
-- 支持单文件上限、请求限流、网关背压、上传超时、恶意文件与资源滥用检测策略。
-- 云端故障时 IDE 本地功能可离线继续；上传有断点/重试与幂等恢复。
-- 处理客户工程的个人信息、删除申请、保留期及跨境存储地域需进行合规评审。
-- 发行版涉及 EEZ Studio GPLv3 派生代码，商业授权及源码分发义务应独立法律审查。
+
 
 ## 12. 分阶段实施与验收
 
@@ -392,29 +277,7 @@ Open Source 版 SFTPGo 为 AGPLv3 并有 Web UI 主题额外许可限制；不�
 **注意**：PoC 与上线实现是不同状态，此方案不代表当前项目已部署 SFTPGo。
 
 
-### P0：基础平台与个人空间
 
-- 内部 Admin 登录/RBAC、Dashboard 基础指标、用户与 Workspace 列表。
-- 个人账号、Personal Workspace、OSS Private、网关上传下载和文件列表。
-- 严格并发配额预留、取消/失败补偿、对账、日志和审计。
-- 复用云效 OSS 更新，建立文档及验收追踪。
-
-**验收**：客户 A 无法访问 B；客户端无 OSS 凭据及 OSS 重定向；10 GB 配额在 2 台设备并发上传中不超卖；网关重启后会话可回收；本地 Build 不依赖云服务。
-
-### P1：企业与运营
-
-- 企业创建/审批、成员邀请、企业 Workspace、企业共享配额和席位。
-- 软件资源中心、授权、客户存储回收机制、错误告警。
-- 组织与个人空间切换、项目访问控制、空间迁移的显式审批。
-
-**验收**：用户可同时属于个人和两个企业空间；退企业不影响个人空间；不同企业数据完全隔离；企业成员角色不能越权。
-
-### P2：规模化与商业化
-
-- 套餐/订阅、自动扩容、历史版本、可选同步、运营报表、成本与流量配额。
-- 大文件高并发网关扩容、限速、容灾、多 Bucket/地域策略。
-
-**验收**：流式传输压测、对象元数据对账、备份恢复演练及可审计收费口径。
 
 ## 13. 待评审决策
 
@@ -430,14 +293,7 @@ Open Source 版 SFTPGo 为 AGPLv3 并有 Web UI 主题额外许可限制；不�
 详见 [ADR-0001](../adr/0001-sftpgo-file-plane.md) 的 PoC 验收门槛。
 
 
-1. 企业工作空间可否由个人自助创建？正式企业是否需后台审核？
-2. 默认个人/企业配额、单文件上限、回收站保留期和流量上限。
-3. 客户上传备份和文件历史是否计入逻辑配额。
-4. OSS Bucket 所在地域、跨区域与国际客户的数据驻留要求。
-5. Storage Gateway 使用自研 OSS SDK 还是经严格安全验证的开源网关。
-6. 对发行安装包是否同样要求全量服务端中转，或允许 CDN 受控分发。
 
-以上属于待决策项，不能作为现有实现或已获批准功能处理。
 
 ## 14. 变更记录
 
