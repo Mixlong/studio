@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | [总体架构与后台 OSS 技术方案](architecture/digiwise-platform-and-oss.md) | Node + SFTPGo + OSS、个人与企业统一空间、安全、配额、部署、实施与验收 | 首选方案 / 待 PoC |
 | [ADR-0001：SFTPGo 文件面选型](adr/0001-sftpgo-file-plane.md) | Node 管业务、SFTPGo 管文件、OSS 管存储的架构决策、风险与验收门槛 | 原则同意 / 待 PoC |
+| [ADR-0002：NocoBase 内部后台评估](adr/0002-nocobase-internal-admin-evaluation.md) | NocoBase 2.x/3 功能差异、授权成本、SFTPGo 集成及验证计划 | 候选 / 待 PoC |
 | [文档编写与变更规范](standards/documentation.md) | 目录、命名、模板、评审与维护规则 | 拟实施 |
 | [项目 Agent Skills 规范](standards/agent-skills.md) | Skill 结构、触发、评审和验证流程 | 拟实施 |
 
