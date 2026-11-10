@@ -1,7 +1,7 @@
 # Digiwise 统一内部管理平台候选产品比较
 
 - 文档编号：ARCH-ADMIN-COMPARE-001
-- 版本：v0.2（需求范围修订）
+- 版本：v0.3（AI 开发方式修订）
 - 日期：2026-11-10
 - 状态：选型调研 / 未完成部署 PoC / 未批准替换现有后台
 - 关联：[NocoBase 候选 ADR](../adr/0002-nocobase-internal-admin-evaluation.md)、[SFTPGo 文件面 ADR](../adr/0001-sftpgo-file-plane.md)、[多项目数据库接入](multi-project-data-integration.md)
@@ -23,7 +23,7 @@
 
 | 平台 | 长处 | 短板 / 许可注意 | 优先场景 |
 | --- | --- | --- | --- |
-| **NocoBase 2.x** | 数据模型、关联关系、内部 CRUD、表单、基础工作流、权限；低代码搭业务管理 | 2.x 完整外部 PostgreSQL/MySQL/REST 数据源插件归 Standard+；高级审批及审计等部分插件更高档付费 | 组织、用户、许可、审批重的业务后台 |
+| **NocoBase 3 Core / 2.x Stable** | 3 的 Core 支持 Codex/Claude Code、Skills、代码化界面/API/流程；2.x 适合可视化配置 | **3 截至 2026-11-10 仍 Beta**，需要隔离 PoC 和上线审查；3 Studio 为独立商业产品；2.x 插件授权按版本核对 | **AI 主导开发先测试 3 Core；生产稳定性优先时保留 2.x** |
 | **Budibase** | 自托管开源版有外部数据源、REST、可视化页面、表单和自动化 | 免费档 Workspace 数及许可需核对；复杂业务和跨系统补偿需另写服务 | 如果后续发现 NocoBase 的后台配置流程不适用，作为备选验证 |
 | **Appsmith** | 自由拖拽布局、数据库/API 连接、JavaScript/SQL、Git 协作 | 高级权限、Workflows、审计和部分协作能力属于 Business；复杂业务域模型非强项 | 高度自定义运维控制台和 API 管理页面 |
 | **ToolJet** | API/数据库连接广、页面组件与 AI 辅助 | 自托管免费档限制约 2 Builders/50 End Users/10 Apps（以具体版本/报价核实）；AGPLv3 | 快速构建内部工具、数据查询 |
@@ -60,7 +60,7 @@
 
 ## 6. 初步结论
 
-**修订结论：先验证 NocoBase 是否满足 DigiwiseStudio 内部管理业务；Budibase 保留备选，而非因为未来可能接入迪太云就优先替换。** 两者都不替代 SFTPGo + OSS，也不意味着无需 Digiwise Public API。迪太云仅作为可能的数据来源，按独立集成实施。
+**修订结论：团队若用 Codex/Claude Code 和 Skills 作为主要开发方式，优先在隔离环境验证 NocoBase 3 Core Community；若现在必须承载真实用户开通和生产数据，则需满足严格 Beta 上线门槛，否则使用 NocoBase 2.x Stable。Budibase 仅保留备选，不因未来可能接入迪太云就优先替换。** 两者都不替代 SFTPGo + OSS，也不意味着无需 Digiwise Public API。迪太云仅作为可能的数据来源，按独立集成实施。
 
 ## 7. 官方资料（核对时点：2026-11-10）
 
@@ -79,3 +79,4 @@
 | --- | --- | --- |
 | 2026-11-10 | v0.1 | 增加 Budibase、Appsmith、ToolJet、Directus 与 NocoBase 的可用性/费用/架构对比及同等 PoC 验收 |
 | 2026-11-10 | v0.2 | 将“多项目平台”需求收窄为未来可能读取迪太云部分数据，NocoBase 优先 PoC，其他作为备选 |
+| 2026-11-10 | v0.3 | 用户明确偏向 AI 开发；NocoBase 3 Core Beta 隔离 PoC 优先，2.x Stable 保留生产备选 |
