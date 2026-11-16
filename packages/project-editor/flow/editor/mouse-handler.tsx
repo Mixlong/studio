@@ -303,11 +303,11 @@ export class RubberBandSelectionMouseHandler extends MouseHandler {
                         top: this.rubberBendRect.top,
                         width: this.rubberBendRect.width,
                         height: this.rubberBendRect.height,
-                        backgroundColor: addAlphaToColor(
+                        backgroundColor: `var(--dw-canvas-selection-marquee-fill, ${addAlphaToColor(
                             theme().selectionBackgroundColor,
                             0.5
-                        ),
-                        border: `1px solid ${theme().selectionBackgroundColor}`
+                        )})`,
+                        border: `1px solid var(--dw-canvas-selection-marquee-border, ${theme().selectionBackgroundColor})`
                     }}
                 />
             )

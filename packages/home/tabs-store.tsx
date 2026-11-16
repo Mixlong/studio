@@ -990,6 +990,26 @@ interface ISavedTab {
 export class Tabs {
     tabs: IHomeTab[] = [];
     activeTab: IHomeTab | undefined;
+    private recentProjectTabs: ProjectEditorTab[] = [];
+
+    get returnToProjectTab(): ProjectEditorTab | undefined {
+        const recent = this.recentProjectTabs.find(tab =>
+            this.tabs.includes(tab)
+        );
+        if (recent) {
+            return recent;
+        }
+
+        // Restored sessions can contain inactive projects that have not been
+        // activated in this process yet.
+        for (let i = this.tabs.length - 1; i >= 0; i--) {
+            const tab = this.tabs[i];
+            if (tab instanceof ProjectEditorTab) {
+                return tab;
+            }
+        }
+        return undefined;
+    }
 
     get allTabs() {
         const TabClassToTabDefinition = (TabClass: any) => ({
@@ -1039,9 +1059,11 @@ export class Tabs {
     constructor() {
         initProjectEditor(tabs, ProjectEditorTab);
 
-        makeObservable(this, {
+        makeObservable<this, "recentProjectTabs">(this, {
             tabs: observable,
             activeTab: observable,
+            recentProjectTabs: observable.shallow,
+            returnToProjectTab: computed,
             allTabs: computed,
             addInstrumentTab: action,
             addProjectTab: action,
@@ -1242,6 +1264,11 @@ export class Tabs {
         if (tabIndex > 0) {
             const tab = this.tabs[tabIndex];
             this.tabs.splice(tabIndex, 1);
+            if (tab instanceof ProjectEditorTab) {
+                this.recentProjectTabs = this.recentProjectTabs.filter(
+                    recent => recent !== tab
+                );
+            }
             if (tab.active) {
                 if (tabIndex >= this.tabs.length) {
                     this.makeActive(this.tabs[this.tabs.length - 1]);
@@ -1257,6 +1284,12 @@ export class Tabs {
     }
 
     makeActive(tab: IHomeTab | undefined) {
+        if (tab instanceof ProjectEditorTab) {
+            this.recentProjectTabs = [
+                tab,
+                ...this.recentProjectTabs.filter(recent => recent !== tab)
+            ];
+        }
         if (this.activeTab) {
             this.activeTab.active = false;
         }
@@ -1363,6 +1396,16 @@ export let tabs: Tabs;
 
 export function loadTabs() {
     tabs = new Tabs();
+
+    // Resolve the active ProjectStore anew on every MCP read request.
+    void import("mcp/renderer-agent")
+        .then(module => module.registerMcpProjectProvider(() => {
+            const activeTab = tabs.activeTab;
+            return activeTab instanceof ProjectEditorTab
+                ? activeTab
+                : undefined;
+        }))
+        .catch(error => console.error("[mcp] Renderer registration failed:", error));
 
     ipcRenderer.on("show-next-tab", async () => {
         tabs.showNextTab();

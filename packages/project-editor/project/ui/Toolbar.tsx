@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom";
+import * as FlexLayout from "flexlayout-react";
 import {
     action,
     computed,
@@ -21,14 +22,14 @@ import { getLVGLEditorPreviewGeometry } from "project-editor/lvgl/EditorPreview"
 import {
     getChildren,
     getObjectIcon,
-    objectToString
+    objectToString,
+    LayoutModels
 } from "project-editor/store";
 import { RenderVariableStatus } from "project-editor/features/variable/global-variable-status";
 import { FlowTabState } from "project-editor/flow/flow-tab-state";
 import { RuntimeType } from "project-editor/project/project-type-traits";
 import {
-    PROJECT_EDITOR_SCRAPBOOK,
-    RUN_ICON
+    PROJECT_EDITOR_SCRAPBOOK
 } from "project-editor/ui-components/icons";
 import { getEditorComponent } from "./EditorComponentFactory";
 import { getId } from "project-editor/core/object";
@@ -57,6 +58,291 @@ export const Toolbar = observer(
         declare context: React.ContextType<typeof ProjectContext>;
 
         toolbarRef = React.createRef<HTMLElement>();
+        rightPanelLayoutModel: FlexLayout.Model | undefined;
+        renderedNavigationTabId: string | undefined;
+        renderedRightPanelId: string | undefined;
+        renderedRightPanelTitle: string | undefined;
+        editorPaneResizeObserver: ResizeObserver | undefined;
+        editorPaneElement: HTMLElement | undefined;
+        layoutMutationObserver: MutationObserver | undefined;
+        editorPaneMeasureFrame: number | undefined;
+        editorPaneMeasureTimer: number | undefined;
+
+        get activeRightPanel() {
+            const model = this.context.layoutModels.root;
+            const tabIds = [
+                LayoutModels.STYLES_TAB_ID,
+                LayoutModels.FONTS_TAB_ID,
+                LayoutModels.BITMAPS_TAB_ID,
+                LayoutModels.THEMES_TAB_ID,
+                LayoutModels.LVGL_GROUPS_TAB_ID
+            ];
+
+            for (const tabId of tabIds) {
+                const node = model.getNodeById(tabId);
+                if (node instanceof FlexLayout.TabNode) {
+                    const parent = node.getParent();
+                    // FlexLayout border tabs do not always report isSelected()
+                    // until an explicit select action has run. Read the actual
+                    // selected child from the BorderNode for resource panels.
+                    const selected =
+                        parent instanceof FlexLayout.BorderNode
+                            ? parent.getSelectedNode() === node
+                            : node.isSelected();
+                    if (selected) {
+                        return { id: node.getId(), title: node.getName() };
+                    }
+                }
+            }
+
+            return undefined;
+        }
+
+        get activeNavigationTabId() {
+            const model = this.context.layoutModels.root;
+            for (const id of [
+                LayoutModels.PAGES_TAB_ID,
+                LayoutModels.USER_WIDGETS_TAB_ID,
+                LayoutModels.ACTIONS_TAB_ID
+            ]) {
+                const node = model.getNodeById(id);
+                if (node instanceof FlexLayout.TabNode && node.isSelected()) {
+                    return id;
+                }
+            }
+            return undefined;
+        }
+
+        onRightPanelLayoutChange = () => {
+            const active = this.activeRightPanel;
+            // FlexLayout emits change events for every resize step. Only
+            // rerender React when the displayed tab actually changes.
+            if (
+                active?.id !== this.renderedRightPanelId ||
+                active?.title !== this.renderedRightPanelTitle ||
+                this.activeNavigationTabId !== this.renderedNavigationTabId
+            ) {
+                this.forceUpdate();
+            }
+            this.scheduleEditorPaneMeasurement();
+        };
+
+        observeRightPanelLayout = () => {
+            const model = this.context.layoutModels.root;
+            if (model === this.rightPanelLayoutModel) {
+                return;
+            }
+
+            this.rightPanelLayoutModel?.removeChangeListener(
+                this.onRightPanelLayoutChange
+            );
+            this.rightPanelLayoutModel = model;
+            this.rightPanelLayoutModel?.addChangeListener(
+                this.onRightPanelLayoutChange
+            );
+        };
+
+        componentDidMount() {
+            this.observeRightPanelLayout();
+            this.scheduleEditorPaneMeasurement();
+            this.editorPaneMeasureTimer = window.setInterval(() => {
+                if (this.measureEditorPane()) {
+                    window.clearInterval(this.editorPaneMeasureTimer);
+                    this.editorPaneMeasureTimer = undefined;
+                }
+            }, 100);
+
+            window.addEventListener("resize", this.scheduleEditorPaneMeasurement);
+
+            const toolbar = this.toolbarRef.current;
+            const wrapper = toolbar?.parentElement;
+            if (wrapper && typeof MutationObserver !== "undefined") {
+                this.layoutMutationObserver = new MutationObserver(() =>
+                    this.scheduleEditorPaneMeasurement()
+                );
+                this.layoutMutationObserver.observe(wrapper, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        }
+
+        componentWillUnmount() {
+            this.rightPanelLayoutModel?.removeChangeListener(
+                this.onRightPanelLayoutChange
+            );
+            this.editorPaneResizeObserver?.disconnect();
+            this.layoutMutationObserver?.disconnect();
+            window.removeEventListener(
+                "resize",
+                this.scheduleEditorPaneMeasurement
+            );
+            if (this.editorPaneMeasureFrame !== undefined) {
+                cancelAnimationFrame(this.editorPaneMeasureFrame);
+            }
+            if (this.editorPaneMeasureTimer !== undefined) {
+                window.clearInterval(this.editorPaneMeasureTimer);
+            }
+        }
+
+        componentDidUpdate() {
+            this.observeRightPanelLayout();
+            this.scheduleEditorPaneMeasurement();
+        }
+
+        scheduleEditorPaneMeasurement = () => {
+            if (this.editorPaneMeasureFrame !== undefined) {
+                return;
+            }
+
+            this.editorPaneMeasureFrame = requestAnimationFrame(() => {
+                this.editorPaneMeasureFrame = undefined;
+                this.measureEditorPane();
+            });
+        };
+
+        measureRightPanelTitle = (toolbar: HTMLElement, wrapper: HTMLElement) => {
+            const titleElement = toolbar.querySelector<HTMLElement>(
+                ".DigiStudio_ProjectEditor_ToolbarNav_ActivePanelTitle"
+            );
+            if (!titleElement) {
+                return;
+            }
+
+            const activePanel = this.activeRightPanel;
+            const panelElement = activePanel
+                ? wrapper.ownerDocument.getElementById(
+                      `flexlayout-tab-${activePanel.id}`
+                  )
+                : null;
+            const borderContent = wrapper.querySelector<HTMLElement>(
+                ".flexlayout__border_right .flexlayout__border_tab_contents"
+            );
+            const toolbarRect = toolbar.getBoundingClientRect();
+            const panelElementRect = panelElement?.getBoundingClientRect();
+            // Saved FlexLayout workspaces may expose the border content before
+            // its tab wrapper has a measurable rectangle. Fall back to the
+            // visible right-border content, not the canvas edge, so the toolbar
+            // does not reserve a phantom gap beside Styles/Fonts/Bitmaps.
+            const panelRect =
+                panelElementRect &&
+                panelElementRect.width > 1 &&
+                panelElementRect.height > 1
+                    ? panelElementRect
+                    : borderContent?.getBoundingClientRect();
+
+            // Use the actual rendered border-tab content, which excludes
+            // the vertical icon rail and changes size while dragging.
+            if (!panelRect || panelRect.width <= 1 || panelRect.height <= 1) {
+                titleElement.style.visibility = "hidden";
+                toolbar.style.removeProperty("--dw-resource-panel-right");
+                return;
+            }
+
+            const left = Math.max(0, panelRect.left - toolbarRect.left);
+            const right = Math.min(
+                toolbarRect.width,
+                panelRect.right - toolbarRect.left
+            );
+            const width = Math.max(0, right - left);
+            // Align the EXISTING toolbar action group with the left edge
+            // of the actual right resource panel. No extra tool area.
+            toolbar.style.setProperty(
+                "--dw-resource-panel-right",
+                `${Math.round(Math.max(0, toolbarRect.width - left))}px`
+            );
+            titleElement.style.visibility = width > 1 ? "visible" : "hidden";
+            const nextLeft = `${Math.round(left)}px`;
+            const nextWidth = `${Math.round(width)}px`;
+            if (titleElement.style.left !== nextLeft) {
+                titleElement.style.left = nextLeft;
+            }
+            if (titleElement.style.width !== nextWidth) {
+                titleElement.style.width = nextWidth;
+            }
+        };
+
+        measureEditorPane = () => {
+            const toolbar = this.toolbarRef.current;
+            const wrapper = toolbar?.parentElement;
+            if (!toolbar || !wrapper) {
+                return false;
+            }
+
+            this.measureRightPanelTitle(toolbar, wrapper);
+
+            const layoutModel = this.context.layoutModels.root;
+            const editorsTabsetId = this.context.runtime
+                ? LayoutModels.RUNTIME_MODE_EDITORS_TABSET_ID
+                : LayoutModels.EDITOR_MODE_EDITORS_TABSET_ID;
+            const editorsTabset = layoutModel?.getNodeById(editorsTabsetId);
+            const layoutPath = editorsTabset?.getPath();
+            const activeEditorTab = this.context.editorsStore.activeEditor
+                ?.tabId
+                ? wrapper.ownerDocument.getElementById(
+                      `flexlayout-tab-${this.context.editorsStore.activeEditor.tabId}`
+                  )
+                : undefined;
+            const editorPane =
+                (activeEditorTab?.closest(
+                    ".flexlayout__tabset"
+                ) as HTMLElement | null) ||
+                (layoutPath
+                    ? Array.from(
+                          wrapper.querySelectorAll<HTMLElement>(
+                              ".flexlayout__tabset[data-layout-path]"
+                          )
+                      ).find(
+                          element =>
+                              element.getAttribute("data-layout-path") ===
+                              layoutPath
+                      )
+                    : undefined);
+
+            if (!editorPane) {
+                toolbar.style.removeProperty("--editor-toolbar-left");
+                toolbar.style.removeProperty("--editor-toolbar-right");
+
+                this.editorPaneResizeObserver?.disconnect();
+                this.editorPaneResizeObserver = undefined;
+                this.editorPaneElement = undefined;
+                return false;
+            }
+
+            const toolbarRect = toolbar.getBoundingClientRect();
+            const editorPaneRect = editorPane.getBoundingClientRect();
+            const leftOffset = Math.max(
+                0,
+                Math.round(editorPaneRect.left - toolbarRect.left)
+            );
+            toolbar.style.setProperty(
+                "--editor-toolbar-left",
+                `${leftOffset}px`
+            );
+            const rightOffset = Math.max(
+                0,
+                Math.round(toolbarRect.right - editorPaneRect.right)
+            );
+            toolbar.style.setProperty(
+                "--editor-toolbar-right",
+                `${rightOffset}px`
+            );
+
+            if (this.editorPaneElement !== editorPane) {
+                this.editorPaneResizeObserver?.disconnect();
+                this.editorPaneResizeObserver = undefined;
+                this.editorPaneElement = editorPane;
+
+                if (typeof ResizeObserver !== "undefined") {
+                    this.editorPaneResizeObserver = new ResizeObserver(() =>
+                        this.scheduleEditorPaneMeasurement()
+                    );
+                    this.editorPaneResizeObserver.observe(editorPane);
+                }
+            }
+
+            return true;
+        };
 
         get globalVariableStatuses() {
             let globalVariablesStatus: React.ReactNode[] = [];
@@ -134,6 +420,54 @@ export const Toolbar = observer(
                 this.context.context.type == "project-editor" ||
                 this.context.context.type == "run-tab";
 
+            // Always render the navigation controls, including before the
+            // saved FlexLayout model has finished restoring its tab nodes.
+            const navigationModel = this.context.layoutModels.root;
+            const navigationTabs = [
+                { id: LayoutModels.PAGES_TAB_ID, label: "Pages" },
+                { id: LayoutModels.USER_WIDGETS_TAB_ID, label: "User Widgets" },
+                { id: LayoutModels.ACTIONS_TAB_ID, label: "User Actions" }
+            ];
+
+            // Reuse the original activity modules in the shared toolbar for
+            // both light and dark themes.
+            const activityButtons =
+                !this.context.runtime &&
+                this.context.context.type === "project-editor"
+                    ? [
+                          {
+                              id: LayoutModels.EMBEDDED_PLATFORM_TAB_ID,
+                              icon: "material:developer_board",
+                              title: "Embedded Platform"
+                          },
+                          {
+                              id: LayoutModels.TEXTS_TAB_ID,
+                              icon: "svg:language",
+                              title: "Texts"
+                          },
+                          {
+                              id: LayoutModels.SCPI_TAB_ID,
+                              icon: "material:navigate_next",
+                              title: "SCPI"
+                          },
+                          {
+                              id: LayoutModels.INSTRUMENT_COMMANDS_TAB_ID,
+                              icon: "material:navigate_next",
+                              title: "Instrument Commands"
+                          },
+                          {
+                              id: LayoutModels.EXTENSION_DEFINITIONS_TAB_ID,
+                              icon: "material:extension",
+                              title: "Extensions"
+                          }
+                      ].filter(
+                          item =>
+                              this.context.layoutModels.rootEditor.getNodeById(
+                                  item.id
+                              ) instanceof FlexLayout.TabNode
+                      )
+                    : [];
+
             if (
                 !showEditorButtons &&
                 !showRunEditSwitchControls &&
@@ -142,22 +476,89 @@ export const Toolbar = observer(
             ) {
                 return null;
             }
+            const activeRightPanel = this.activeRightPanel;
+            this.renderedRightPanelId = activeRightPanel?.id;
+            this.renderedRightPanelTitle = activeRightPanel?.title;
+            this.renderedNavigationTabId = this.activeNavigationTabId;
             return (
                 <nav
                     ref={this.toolbarRef}
                     className="EezStudio_ProjectEditor_ToolbarNav"
                 >
-                    <div className="EezStudio_ProjectEditor_ToolbarNav_LeftGroup">
-                        <WorkspaceSwitcher />
+                    <HomeButton />
+                    <WorkspaceSwitcher />
+                    <div
+                        className="DigiStudio_ProjectEditor_TopPageNavigation"
+                        role="group"
+                        aria-label="Page navigation"
+                    >
+                        {navigationTabs.map(({ id, label }) => {
+                            const node = navigationModel.getNodeById(id);
+                            const available = node instanceof FlexLayout.TabNode;
+                            const selected = available && id === this.activeNavigationTabId;
+                            return (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    className={
+                                        "DigiStudio_ProjectEditor_TopPageNavigationTab" +
+                                        (selected ? " is-active" : "")
+                                    }
+                                    aria-pressed={selected}
+                                    title={label}
+                                    disabled={!available}
+                                    onClick={() =>
+                                        this.context.layoutModels.selectTab(
+                                            this.context.layoutModels.root,
+                                            id
+                                        )
+                                    }
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {activeRightPanel && (
+                        <div
+                            className="DigiStudio_ProjectEditor_ToolbarNav_ActivePanelTitle"
+                            aria-label={`Active panel: ${activeRightPanel.title}`}
+                        >
+                            {activeRightPanel.title}
+                        </div>
+                    )}
+
+                    <div className="EezStudio_ProjectEditor_ToolbarNav_RightGroup">
+                        {activityButtons.map(activity => (
+                            <button
+                                key={activity.id}
+                                className={
+                                    "DigiStudio_ProjectEditor_ActivityTool" +
+                                    (this.context.layoutModels.activeActivityTool ===
+                                    activity.id
+                                        ? " is-active"
+                                        : "")
+                                }
+                                type="button"
+                                title={activity.title}
+                                aria-label={activity.title}
+                                aria-pressed={
+                                    this.context.layoutModels.activeActivityTool ===
+                                    activity.id
+                                }
+                                onClick={() =>
+                                    this.context.layoutModels.toggleActivityTool(
+                                        activity.id
+                                    )
+                                }
+                            >
+                                <Icon icon={activity.icon} size={18} />
+                            </button>
+                        ))}
                         {showEditorButtons && !this.context.runtime && (
                             <PrimaryEditActions />
                         )}
                         {showEditorButtons && <EditorButtons />}
-                    </div>
-
-                    <ToolbarProjectContext />
-
-                    <div className="EezStudio_ProjectEditor_ToolbarNav_RightGroup">
                         {!this.context.runtime &&
                             this.context.context.type === "project-editor" &&
                             this.context.project.changes && (
@@ -538,35 +939,24 @@ class ToolbarTooltip extends React.Component<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const ToolbarProjectContext = observer(
-    class ToolbarProjectContext extends React.Component {
-        static contextType = ProjectContext;
-        declare context: React.ContextType<typeof ProjectContext>;
+const HomeButton = () => {
+    const { tabs } = require("home/tabs-store") as typeof import("home/tabs-store");
+    const homeTab = tabs?.findTab("home");
 
-        render() {
-            const bspName =
-                this.context.project.embeddedPlatform?.bsp?.name ||
-                "No target configured";
+    return (
+        <button
+            type="button"
+            className="DigiStudio_ProjectEditor_HomeButton"
+            title="Home"
+            aria-label="Home"
+            onClick={() => homeTab?.makeActive()}
+        >
+            <Icon icon="material:home" size={18} />
+        </button>
+    );
+};
 
-            return (
-                <div
-                    className="EezStudio_ProjectEditor_ToolbarNav_ProjectContext"
-                    title={`${this.context.title} - ${bspName}`}
-                >
-                    <span className="ProjectContext_ProjectName">
-                        {this.context.title}
-                    </span>
-                    <span className="ProjectContext_Separator" aria-hidden="true">
-                        ·
-                    </span>
-                    <span className="ProjectContext_TargetName">{bspName}</span>
-                </div>
-            );
-        }
-    }
-);
-
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 
 const WorkspaceSwitcher = observer(
     class WorkspaceSwitcher extends React.Component {
@@ -576,6 +966,11 @@ const WorkspaceSwitcher = observer(
             const { tabs } = require("home/tabs-store") as typeof import("home/tabs-store");
 
             if (!tabs) {
+                return null;
+            }
+
+            const workspaces = tabs.tabs.filter(tab => tab.id !== "home");
+            if (workspaces.length <= 1) {
                 return null;
             }
 
@@ -590,7 +985,7 @@ const WorkspaceSwitcher = observer(
                         <div className="EezStudio_ProjectEditor_WorkspaceMenuHeader">
                             Open workspaces
                         </div>
-                        {tabs.tabs.map(tab => (
+                        {workspaces.map(tab => (
                             <div
                                 className="EezStudio_ProjectEditor_WorkspaceMenuRow"
                                 key={tab.id}
@@ -655,7 +1050,7 @@ const PrimaryEditActions = observer(() => {
         >
             <IconAction
                 title="Save"
-                icon="material:save"
+                icon="guider:save"
                 onClick={() => store.save()}
                 enabled={store.isModified}
             />
@@ -665,7 +1060,7 @@ const PrimaryEditActions = observer(() => {
                         ? "Undo \"" + (history.undoDescription || "change") + "\""
                         : "Undo"
                 }
-                icon="material:undo"
+                icon="guider:undo"
                 onClick={() => history.undo()}
                 enabled={history.canUndo}
             />
@@ -675,7 +1070,7 @@ const PrimaryEditActions = observer(() => {
                         ? "Redo \"" + (history.redoDescription || "change") + "\""
                         : "Redo"
                 }
-                icon="material:redo"
+                icon="guider:redo"
                 onClick={() => history.redo()}
                 enabled={history.canRedo}
             />
@@ -799,7 +1194,10 @@ const EditorButtons = observer(
                 <div className="EezStudio_ProjectEditor_ToolbarNav_EditorButtons">
                     {!this.context.runtime && (
                         <>
-                            <div className="btn-group" role="group">
+                            <div
+                                className="btn-group DigiStudio_GuiderTools_CopyPaste"
+                                role="group"
+                            >
                                 {false && (
                                     <IconAction
                                         title="Cut"
@@ -811,20 +1209,23 @@ const EditorButtons = observer(
                                 )}
                                 <IconAction
                                     title="Copy"
-                                    icon="material:content_copy"
+                                    icon="fa:copy"
                                     iconSize={22}
                                     onClick={this.context.copy}
                                     enabled={this.context.canCopy}
                                 />
                                 <IconAction
                                     title="Paste"
-                                    icon="material:content_paste"
+                                    icon="fa:paste"
                                     iconSize={22}
                                     onClick={this.context.paste}
                                     enabled={this.context.canPaste}
                                 />
                             </div>
-                            <div className="btn-group" role="group">
+                            <div
+                                className="btn-group DigiStudio_GuiderTools_Scrapbook"
+                                role="group"
+                            >
                                 <IconAction
                                     title="Scrapbook"
                                     icon={PROJECT_EDITOR_SCRAPBOOK}
@@ -857,11 +1258,14 @@ const EditorButtons = observer(
                         )}
 
                     {!this.context.runtime && (
-                        <div className="btn-group" role="group">
+                        <div
+                            className="btn-group DigiStudio_GuiderTools_CheckBuild"
+                            role="group"
+                        >
                             {!this.context.projectTypeTraits.isDashboard && (
                                 <IconAction
                                     title="Check"
-                                    icon="material:check"
+                                    icon="fa:check"
                                     onClick={() => this.context.check()}
                                     enabled={this.context.project._fullyLoaded}
                                 />
@@ -872,7 +1276,7 @@ const EditorButtons = observer(
                             ) && (
                                 <IconAction
                                     title="Build"
-                                    icon="material:build"
+                                    icon="fa:hammer"
                                     onClick={() => this.context.build()}
                                     enabled={this.context.project._fullyLoaded}
                                 />
@@ -885,7 +1289,7 @@ const EditorButtons = observer(
                             <div className="btn-group" role="group">
                                 <IconAction
                                     title="Run MicroPython Script"
-                                    icon={RUN_ICON}
+                                    icon="guider:python"
                                     iconSize={28}
                                     onClick={() =>
                                         this.context.project.micropython.runScript()
@@ -899,7 +1303,10 @@ const EditorButtons = observer(
                         <>
                             {this.pageTabState && (
                                 <>
-                                    <div className="btn-group" role="group">
+                                    <div
+                                        className="btn-group DigiStudio_GuiderTools_ViewMode"
+                                        role="group"
+                                    >
                                         <IconAction
                                             title="Show front face"
                                             icon="material:flip_to_front"
@@ -1020,7 +1427,10 @@ const EditorButtons = observer(
                     {this.pageTabState &&
                         this.context.projectTypeTraits.isLVGL &&
                         !this.context.runtime && (
-                            <div className="btn-group" role="group">
+                            <div
+                                className="btn-group DigiStudio_GuiderTools_CanvasView"
+                                role="group"
+                            >
                                 <IconAction
                                     title="Full editing view: expand the original LVGL screen to show all widgets"
                                     icon="material:view_module"
@@ -1032,19 +1442,6 @@ const EditorButtons = observer(
                                     onClick={action(() => {
                                         this.pageTabState!.lvglEditorViewMode =
                                             "expanded";
-                                    })}
-                                />
-                                <IconAction
-                                    title="Device view: show actual clipped LVGL screen"
-                                    icon="material:crop_original"
-                                    iconSize={20}
-                                    selected={
-                                        this.pageTabState.lvglEditorViewMode ===
-                                        "device"
-                                    }
-                                    onClick={action(() => {
-                                        this.pageTabState!.lvglEditorViewMode =
-                                            "device";
                                     })}
                                 />
                                 {this.pageTabState.lvglEditorViewMode ===
@@ -1298,6 +1695,20 @@ const PageZoomButton = observer(
             });
         }
 
+        // GUI Guider-style stepped zoom, using the editor's existing zoom
+        // setter so per-page/global zoom behavior remains unchanged.
+        changeZoom = (direction: -1 | 1) => {
+            const stops = [5, 10, 25, 50, 75, 100, 125, 150, 200, 400, 800, 1600];
+            const current = this.zoom * 100;
+            const next =
+                direction > 0
+                    ? stops.find(value => value > current + 0.01)
+                    : stops.slice().reverse().find(value => value < current - 0.01);
+            if (next !== undefined) {
+                this.zoom = next / 100;
+            }
+        };
+
         setDropDownOpen = action((open: boolean) => {
             if (this.dropDownOpen === false) {
                 document.removeEventListener(
@@ -1337,7 +1748,9 @@ const PageZoomButton = observer(
 
                 this.dropDownLeft = rectInputGroup.left;
                 this.dropDownTop = rectInputGroup.bottom;
-                this.dropDownWidth = rectInputGroup.width;
+                // The dropdown still needs room for presets and Global zoom
+                // when the compact toolbar control is only a few icons wide.
+                this.dropDownWidth = Math.max(172, rectInputGroup.width);
 
                 if (
                     this.dropDownLeft + this.dropDownWidth >
@@ -1416,7 +1829,7 @@ const PageZoomButton = observer(
                             />
                         </div>
                         <hr className="dropdown-divider" />
-                        {[10, 25, 50, 75, 100, 150, 200, 400, 800, 1600].map(
+                        {[10, 25, 50, 75, 100, 125, 150, 200, 400, 800, 1600].map(
                             zoom => (
                                 <li
                                     key={zoom}
@@ -1454,16 +1867,41 @@ const PageZoomButton = observer(
             );
 
             return (
-                <div className="btn-group" role="group">
+                <div
+                    className="DigiStudio_GuiderZoomControl"
+                    role="group"
+                    aria-label="Canvas zoom"
+                >
+                    <button
+                        type="button"
+                        className="DigiStudio_GuiderZoomStep"
+                        title="Zoom out"
+                        aria-label="Zoom out"
+                        disabled={this.zoom <= 0.05}
+                        onClick={() => this.changeZoom(-1)}
+                    >
+                        <Icon icon="material:zoom_out" size={18} />
+                    </button>
                     <button
                         ref={this.buttonRef}
-                        className="btn btn-primary dropdown-toggle EezStudio_PageZoomButton"
+                        className="btn dropdown-toggle EezStudio_PageZoomButton"
                         type="button"
                         title="Change zoom level"
                         aria-label="Change zoom level"
+                        aria-expanded={!!this.dropDownOpen}
                         onClick={this.openDropdown}
                     >
                         {Math.round(this.zoom * 100)}%
+                    </button>
+                    <button
+                        type="button"
+                        className="DigiStudio_GuiderZoomStep"
+                        title="Zoom in"
+                        aria-label="Zoom in"
+                        disabled={this.zoom >= 16}
+                        onClick={() => this.changeZoom(1)}
+                    >
+                        <Icon icon="material:zoom_in" size={18} />
                     </button>
                     {portal}
                 </div>
@@ -1513,7 +1951,7 @@ const RunEditSwitchControls = observer(
                             className="DigiStudio_StopExecution"
                             text="Stop"
                             title="Stop and return to editor (Shift+F5)"
-                            icon="material:stop"
+                            icon="fa:square"
                             iconSize={iconSize}
                             onClick={this.context.onSetEditorMode}
                         />
@@ -1522,20 +1960,20 @@ const RunEditSwitchControls = observer(
                             {showEmbeddedFirmwareActions && (
                                 <div className="EezStudio_ProjectEditor_ToolbarNav_FirmwareControls">
                                     <ButtonAction
-                                        className="DigiStudio_FirmwareAction"
+                                        className="DigiStudio_FirmwareAction DigiStudio_FirmwareBuildAction"
                                         text="Build"
                                         title="Build firmware through the configured middleware"
-                                        icon="material:build"
+                                        icon="fa:hammer"
                                         iconSize={iconSize}
                                         onClick={() =>
                                             showEmbeddedBuildWindow(this.context)
                                         }
                                     />
                                     <ButtonAction
-                                        className="DigiStudio_FirmwareAction"
+                                        className="DigiStudio_FirmwareAction DigiStudio_FirmwareDownloadAction"
                                         text="Download"
                                         title="Download firmware through the configured middleware"
-                                        icon="material:system_update_alt"
+                                        icon="fa:download"
                                         iconSize={iconSize}
                                         onClick={() =>
                                             showEmbeddedDownloadWindow(this.context)
@@ -1547,7 +1985,7 @@ const RunEditSwitchControls = observer(
                                 className="DigiStudio_RunAction"
                                 text="Run"
                                 title="Enter run mode (F5)"
-                                icon={RUN_ICON}
+                                icon="fa:registered"
                                 iconSize={iconSize}
                                 onClick={this.context.onSetRuntimeMode}
                             />
@@ -1555,16 +1993,17 @@ const RunEditSwitchControls = observer(
                             <ButtonAction
                                 text="Debug"
                                 title="Enter debug mode (Ctrl+F5)"
-                                icon="material:bug_report"
+                                icon="guider:debug"
                                 iconSize={iconSize}
                                 onClick={this.context.onSetDebuggerMode}
                             />
 
                             {this.showFullSimulatorButton && (
                                 <ButtonAction
+                                    className="DigiStudio_FullSimulatorAction"
                                     text="Full Sim"
                                     title="Run in Full Simulator (F7)"
-                                    icon="material:computer"
+                                    icon="fa:play"
                                     iconSize={iconSize}
                                     onClick={
                                         this.context.onSetFullSimulatorMode

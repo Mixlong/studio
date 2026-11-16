@@ -51,8 +51,8 @@ import {
     extensionsManagerStore
 } from "home/extensions-manager/extensions-manager";
 import { LVGLGroupsTab } from "project-editor/lvgl/groups";
-import { settingsController } from "home/settings";
 import { PageStructure } from "project-editor/features/page/PagesNavigation";
+import { settingsController } from "home/settings";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,6 +62,56 @@ export const ProjectEditorView = observer(
     }> {
         static contextType = ProjectContext;
         declare context: React.ContextType<typeof ProjectContext>;
+
+        // Use one editor layout in light and dark modes. The legacy
+        // activity rail stays hidden; its panels open from the shared toolbar.
+        syncActivityRail = () => {
+            for (const model of [
+                this.context.layoutModels.rootEditor,
+                this.context.layoutModels.rootEditorForIEXT
+            ]) {
+                const left = model?.getNodeById("border_left");
+                if (left instanceof FlexLayout.BorderNode) {
+                    const targetShow = false;
+                    // Read the persisted 'show' attribute, not isShowing():
+                    // an auto-hidden empty border reports not showing even
+                    // when its 'show' attribute is already true.
+                    const currentlyShown = left.toJson().show !== false;
+                    if (currentlyShown !== targetShow) {
+                        model.doAction(
+                            FlexLayout.Actions.updateNodeAttributes(
+                                left.getId(),
+                                { show: targetShow } as FlexLayout.IJsonTabNode
+                            )
+                        );
+                    }
+                }
+
+                // Preserve the saved right resource dock and its sizing
+                // when restoring workspaces into the shared layout.
+                const right = model?.getNodeById("border_right");
+                if (
+                    right instanceof FlexLayout.BorderNode &&
+                    right.getChildren().length > 0 &&
+                    right.toJson().show === false
+                ) {
+                    model.doAction(
+                        FlexLayout.Actions.updateNodeAttributes(
+                            right.getId(),
+                            { show: true } as FlexLayout.IJsonTabNode
+                        )
+                    );
+                }
+            }
+        };
+
+        componentDidMount() {
+            this.syncActivityRail();
+        }
+
+        componentDidUpdate() {
+            this.syncActivityRail();
+        }
 
         render() {
             if (!this.context.project || !this.context.project._fullyLoaded) {
@@ -82,10 +132,63 @@ export const ProjectEditorView = observer(
                 return <div className="EezStudio_ProjectEditorWrapper" />;
             }
 
+            const activityId = this.context.layoutModels.activeActivityTool;
+            const activityNode = activityId
+                ? this.context.layoutModels.rootEditor.getNodeById(activityId)
+                : undefined;
+            const activityName =
+                activityNode instanceof FlexLayout.TabNode
+                    ? activityNode.getName()
+                    : "Workspace tool";
+            let activityContent: React.ReactNode;
+            if (activityNode instanceof FlexLayout.TabNode) {
+                switch (activityId) {
+                    case LayoutModels.EMBEDDED_PLATFORM_TAB_ID:
+                        activityContent = <EmbeddedPlatformTab />;
+                        break;
+                    case LayoutModels.TEXTS_TAB_ID:
+                        activityContent = <TextsTab />;
+                        break;
+                    case LayoutModels.SCPI_TAB_ID:
+                        activityContent = <ScpiTab />;
+                        break;
+                    case LayoutModels.INSTRUMENT_COMMANDS_TAB_ID:
+                        activityContent = <InstrumentCommandsList />;
+                        break;
+                    case LayoutModels.EXTENSION_DEFINITIONS_TAB_ID:
+                        activityContent = <ExtensionDefinitionsTab />;
+                        break;
+                }
+            }
+
             return (
                 <div className="EezStudio_ProjectEditorWrapper">
                     <div className="EezStudio_ProjectEditor_MainContentWrapper">
                         {this.props.showToolbar && <Toolbar />}
+                        {activityContent && (
+                            <section
+                                className="DigiStudio_ProjectEditor_ActivityPopover"
+                                role="dialog"
+                                aria-label={activityName}
+                            >
+                                <header className="DigiStudio_ProjectEditor_ActivityPopoverHeader">
+                                    <span>{activityName}</span>
+                                    <button
+                                        type="button"
+                                        title="Close workspace panel"
+                                        aria-label="Close workspace panel"
+                                        onClick={() =>
+                                            this.context.layoutModels.closeActivityTool()
+                                        }
+                                    >
+                                        <Icon icon="material:close" size={18} />
+                                    </button>
+                                </header>
+                                <div className="DigiStudio_ProjectEditor_ActivityPopoverContent">
+                                    {activityContent}
+                                </div>
+                            </section>
+                        )}
                         <Content
                             key={
                                 this.context.layoutModels.isDockerSimulatorMode

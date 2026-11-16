@@ -9,10 +9,10 @@ const { stripTypeScriptTypes } = require("module");
 const root = path.resolve(__dirname, "..");
 const src = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/page-runtime.ts"), "utf8"
-);
+).replace(/\r\n/g, "\n");
 const buildSrc = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/widgets/Base.tsx"), "utf8"
-);
+).replace(/\r\n/g, "\n");
 const constants = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/lvgl-constants.ts"), "utf8"
 );

@@ -10,6 +10,7 @@ const {
 } = require("../../build/project-editor/features/embedded-platform/embedded-websocket");
 const {
     parseEmbeddedMessage,
+    formatEmbeddedIncomingMessage,
     serializeEmbeddedMessage,
     validateEmbeddedMessage
 } = require("../../build/project-editor/features/embedded-platform/embedded-protocol");
@@ -78,6 +79,23 @@ assert.throws(
     () => parseEmbeddedMessage("not-json"),
     /Invalid embedded protocol JSON/
 );
+
+// The remote console must retain structured metadata as well as multiline
+// command output; only the protocol's log.data is used for stage detection.
+const enrichedLog = {
+    command: "log",
+    data: "line one\nline two",
+    progress: 64,
+    phase: "build",
+    diagnostics: { source: "middleware", code: 12 }
+};
+const displayed = formatEmbeddedIncomingMessage(enrichedLog);
+assert(displayed.includes("line one\nline two"));
+assert(displayed.includes('"progress": 64'));
+assert(displayed.includes('"phase": "build"'));
+assert(displayed.includes('"code": 12'));
+assert.equal(formatEmbeddedIncomingMessage({ command: "log", data: "plain" }), "plain");
+assert(formatEmbeddedIncomingMessage({ command: "result", state: "failed" }).includes('"state": "failed"'));
 
 class FakeWebSocket {
     static OPEN = 1;

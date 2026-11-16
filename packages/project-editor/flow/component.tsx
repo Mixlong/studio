@@ -1722,6 +1722,7 @@ export class Component extends EezObject {
                     {icon && (
                         <Icon
                             icon={icon as any}
+                            size={16}
                             style={{
                                 opacity: 0.66,
                                 marginRight: 5,

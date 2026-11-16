@@ -1,5 +1,31 @@
 # OSS 自动更新发布
 
+## 不可覆盖 OSS 发布协议（当前方案）
+
+整个 OSS Bucket 保持禁止覆盖，不再发布或更新固定的 stable/dist-win-x64/latest.yml、dev/dist-win-x64/latest.yml。
+
+每个渠道使用独立的单调递增构建编号。构建编号优先从 RELEASE_BUILD_NUMBER 读取，其次是云效日志中已有的 BUILD_NUMBER，GitHub Actions 使用 GITHUB_RUN_NUMBER。缺少编号或编号非法时，发布脚本会失败关闭。
+
+目录结构：
+
+d-space/DigiwiseStudio/
+├── stable/
+│   ├── versions/<semver>/build-<number>/dist-win-x64/
+│   │   ├── latest.yml
+│   │   ├── DigiStudio-<version>-x64-setup.exe
+│   │   └── *.blockmap
+│   └── builds/<number>/win32-x64/release.json
+└── dev/
+    ├── versions/<semver>/build-<number>/dist-win-x64/
+    └── builds/<number>/win32-x64/release.json
+
+release.json 是不可变发布标记，包含渠道、平台、SemVer、构建编号、feed 相对路径，以及产物大小和 SHA512。客户端不依赖 OSS 目录列举权限，而是从当前构建编号开始，向后探测最多 10 个编号（可配置为 5–20），只把 HTTP 404 当作不存在；403、网络错误或不完整 feed 都会终止本轮检查，避免误判为“没有更新”。客户端在探测窗口内选择 SemVer 最高的完整发布。
+
+云效 OSSUpload 的源目录仍为 release-oss/DigiwiseStudio/，目标目录必须是对应渠道根目录：正式版 d-space/DigiwiseStudio/stable/，测试版 d-space/DigiwiseStudio/dev/。不要再把目标路径指向旧的 dist-win-x64 子目录。
+
+旧安装包没有嵌入渠道和构建编号，仍走旧固定 feed 兼容逻辑。因为 OSS 禁止覆盖，旧客户端不能靠旧的固定 latest.yml 自动迁移到新协议；首次迁移需要通过一次人工安装新客户端完成。
+
+
 DigiStudio 使用 `electron-updater` 从 OSS 的公开 HTTPS 目录检查更新。当前工作区的
 默认更新根目录是：
 
@@ -49,9 +75,7 @@ EEZ_UPDATE_ROOT=https://<your-public-domain>/d-space/DigiwiseStudio
 | DigiStudio-Dev | 开发分支 Push | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/dev/` |
 | DigiStudio-Stable | Tag 或手动审批 | `release-oss/DigiwiseStudio/` | `d-space/DigiwiseStudio/stable/` |
 
-开发流水线会更新同名的 `latest*.yml` 最新版本指针，但安装包和 `blockmap` 文件名带版本号，
-历史版本会在 OSS 中叠加保留；正式流水线只在测试通过后上传。
-`latest*.yml`、安装包和 `blockmap` 都必须允许客户端匿名读取。
+以上是旧固定路径方案说明，已被本文开头的“不可覆盖 OSS 发布协议”取代。新流程不更新固定 latest*.yml；每个版本目录内的 latest*.yml、安装包和 blockmap 都是独立且不可变的对象，均需客户端匿名读取。
 
 旧的 `release:patch*` 命令仍保留兼容，继续使用原来的根目录；采用双通道后，云效流水线
 应改用 `release:dev*` 或 `release:stable*`，不要混用。
@@ -104,38 +128,18 @@ dist-win-x64/
 dist-win-ia32/
 ```
 
-同时会生成可直接上传的目录：
+新协议构建会生成以下上传目录（以 Windows x64 为例）：
 
-```text
 release-oss/DigiwiseStudio/
-├── dist-mac/
-│   ├── latest-mac.yml
-│   ├── DigiStudio-0.0.14-dev.10-arm64.dmg
-│   ├── DigiStudio-0.0.14-dev.10-arm64.zip
-│   └── DigiStudio-0.0.14-dev.10-arm64.zip.blockmap
-├── dist-win-x64/
+├── versions/<semver>/build-<number>/dist-win-x64/
 │   ├── latest.yml
-│   ├── DigiStudio-0.0.14-dev.10-x64-setup.exe
-│   └── DigiStudio-0.0.14-dev.10-x64-setup.exe.blockmap
-└── win-ia32/
-    ├── latest.yml
-    ├── DigiStudio-0.0.14-dev.10-ia32-setup.exe
-    └── DigiStudio-0.0.14-dev.10-ia32-setup.exe.blockmap
-```
+│   ├── DigiStudio-<version>-x64-setup.exe
+│   └── *.blockmap
+└── builds/<number>/win32-x64/release.json
 
-在 OSS 控制台进入 `d-space/`，把本地的整个 `release-oss/DigiwiseStudio/`
-目录上传进去。最终远程路径应是：
+把整个 release-oss/DigiwiseStudio/ 目录上传到对应渠道根目录（stable/ 或 dev/）。不要再把它上传到固定 dist-win-x64/ 目录；OSS Bucket 全局禁止覆盖，任何版本目录和 release.json 都必须是新对象。
 
-```text
-d-space/DigiwiseStudio/dist-mac/latest-mac.yml
-d-space/DigiwiseStudio/dist-win-x64/latest.yml
-d-space/DigiwiseStudio/win-ia32/latest.yml
-```
-
-这三个平台目录需要保留，不能把文件混到 `DigiwiseStudio/` 根目录，也不要把目录改名为
-`DigiStudio`；应用配置访问的是精确的 `d-space/DigiwiseStudio/`。
-
-## 客户端如何判断更新
+## 客户端如何判断更新（旧版固定 feed 兼容说明）
 
 客户端不会读取 OSS 的网页目录，也不会比较安装包文件名。打包时把
 `EEZ_UPDATE_URL` 写入应用的更新配置；应用启动后会请求对应目录下的平台元数据：

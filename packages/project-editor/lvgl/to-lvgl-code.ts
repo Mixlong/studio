@@ -766,6 +766,7 @@ export class SimulatorLVGLCode implements LVGLCode {
         callback: (color: string, params: T) => void,
         updateCallback: (color: any, params: T) => void
     ) {
+        this.buildColorParams = undefined;
         callback(color, undefined as any);
 
         const widget = this.widget;
@@ -788,6 +789,7 @@ export class SimulatorLVGLCode implements LVGLCode {
         callback: (color1: string, color2: string, params: T) => void,
         updateCallback: (color1: any, color2: any, params: T) => void
     ) {
+        this.buildColorParams = undefined;
         callback(color1, color2, undefined as T);
 
         const widget = this.widget;

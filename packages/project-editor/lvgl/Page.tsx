@@ -247,6 +247,8 @@ const LVGLPageCanvas = observer(
             return (
                 <canvas
                     ref={ref}
+                    data-digi-mcp-page-id={page?.objID}
+                    data-digi-mcp-project-id={props.flowContext.projectStore.project.objID}
                     width={props.width}
                     height={props.height}
                     style={style}

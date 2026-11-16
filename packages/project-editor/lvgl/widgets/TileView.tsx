@@ -54,5 +54,17 @@ export class LVGLTileViewWidget extends LVGLWidget {
 
     override toLVGLCode(code: LVGLCode) {
         code.createObject("lv_tileview_create");
+        if (!this.scrollSnapX) {
+            code.callObjectFunction(
+                "lv_obj_set_scroll_snap_x",
+                code.constant("LV_SCROLL_SNAP_NONE")
+            );
+        }
+        if (!this.scrollSnapY) {
+            code.callObjectFunction(
+                "lv_obj_set_scroll_snap_y",
+                code.constant("LV_SCROLL_SNAP_NONE")
+            );
+        }
     }
 }

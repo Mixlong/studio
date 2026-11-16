@@ -18,6 +18,12 @@ export type NativeStyleSampleWasm = {
     _lv_obj_set_size: (obj: number, width: number, height: number) => void;
     _lv_obj_set_pos: (obj: number, left: number, top: number) => void;
     _lv_obj_center?: (obj: number) => void;
+    _lvglObjSetLocalStylePropNum?: (
+        obj: number,
+        prop: number,
+        value: number,
+        selector: number
+    ) => void;
     _lv_label_set_text: (obj: number, textPtr: number) => void;
     stringToNewUTF8: (text: string) => number;
     _free: (ptr: number) => void;
@@ -26,6 +32,40 @@ export type NativeStyleSampleWasm = {
 export interface NativeStyleSample {
     screenObj: number;
     widgetObj: number;
+}
+
+const LV_ALIGN_CENTER = 9;
+
+function getAlignStylePropCode(lvglVersion: string): number {
+    if (lvglVersion.startsWith("9.5")) {
+        return 18;
+    }
+    if (lvglVersion.startsWith("9.")) {
+        return 10;
+    }
+    return 9;
+}
+
+function centerObject(
+    wasm: NativeStyleSampleWasm,
+    obj: number,
+    lvglVersion: string,
+    fallbackLeft: number,
+    fallbackTop: number
+) {
+    if (wasm._lv_obj_center) {
+        wasm._lv_obj_center(obj);
+    } else if (wasm._lvglObjSetLocalStylePropNum) {
+        wasm._lvglObjSetLocalStylePropNum(
+            obj,
+            getAlignStylePropCode(lvglVersion),
+            LV_ALIGN_CENTER,
+            0
+        );
+        wasm._lv_obj_set_pos(obj, 0, 0);
+    } else {
+        wasm._lv_obj_set_pos(obj, fallbackLeft, fallbackTop);
+    }
 }
 
 /**
@@ -69,7 +109,7 @@ export function createNativeStyleSample(
             Math.round((width - 160) / 2),
             Math.round((height - 56) / 2)
         );
-        addText(wasm, widgetObj, "Button", 54, 18);
+        addText(wasm, widgetObj, "Button", 54, 18, lvglVersion);
     } else {
         widgetObj = wasm._lv_label_create(screenObj);
         if (!widgetObj) {
@@ -77,7 +117,13 @@ export function createNativeStyleSample(
         }
         addLabelText(wasm, widgetObj, "Aa Sample");
         // The label keeps its natural width so the font style is visible.
-        wasm._lv_obj_set_pos(widgetObj, 57, Math.round((height - 28) / 2));
+        centerObject(
+            wasm,
+            widgetObj,
+            lvglVersion,
+            57,
+            Math.round((height - 28) / 2)
+        );
     }
 
     return { screenObj, widgetObj };
@@ -101,16 +147,13 @@ function addText(
     parent: number,
     text: string,
     left: number,
-    top: number
+    top: number,
+    lvglVersion: string
 ) {
     const label = wasm._lv_label_create(parent);
     if (!label) {
         throw new Error("LVGL did not create the sample caption.");
     }
     addLabelText(wasm, label, text);
-    if (wasm._lv_obj_center) {
-        wasm._lv_obj_center(label);
-    } else {
-        wasm._lv_obj_set_pos(label, left, top);
-    }
+    centerObject(wasm, label, lvglVersion, left, top);
 }

@@ -30,6 +30,20 @@ if (!updateRoot.startsWith("https://")) {
 }
 
 const updateUrl = `${updateRoot}/${channel}/`;
+
+const buildNumberText =
+    process.env.RELEASE_BUILD_NUMBER?.trim() ||
+    process.env.BUILD_NUMBER?.trim() ||
+    process.env.GITHUB_RUN_NUMBER?.trim();
+if (!buildNumberText || !/^[0-9]+$/.test(buildNumberText) || Number(buildNumberText) < 1) {
+    throw new Error(
+        "A positive monotonically increasing build number is required. Set RELEASE_BUILD_NUMBER (preferred), BUILD_NUMBER (Yunxiao), or GITHUB_RUN_NUMBER."
+    );
+}
+const buildNumber = Number(buildNumberText);
+if (!Number.isSafeInteger(buildNumber)) {
+    throw new Error(`Invalid release build number: ${buildNumberText}`);
+}
 const releaseArgs = [releaseScript, mode];
 if (extraArgs.includes("--dry-run")) {
     releaseArgs.push("--dry-run");
@@ -37,12 +51,15 @@ if (extraArgs.includes("--dry-run")) {
 
 console.log(`[release] channel: ${channel}`);
 console.log(`[release] update URL: ${updateUrl}`);
+console.log(`[release] build number: ${buildNumber}`);
 
 const result = spawnSync(process.execPath, releaseArgs, {
     cwd: projectRoot,
     env: {
         ...process.env,
-        EEZ_UPDATE_URL: updateUrl
+        EEZ_UPDATE_URL: updateUrl,
+        RELEASE_CHANNEL: channel,
+        RELEASE_BUILD_NUMBER: String(buildNumber)
     },
     stdio: "inherit"
 });

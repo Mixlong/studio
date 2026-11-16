@@ -38,6 +38,13 @@ export class FlexLayoutContainer extends React.Component<{
         node: FlexLayout.TabNode,
         renderValues: FlexLayout.ITabRenderValues
     ) => {
+        if (
+            node.getParent() instanceof FlexLayout.BorderNode &&
+            !node.getHelpText() &&
+            node.getName()
+        ) {
+            (node as any).attributes.helpText = node.getName();
+        }
         if (this.props.iconFactory) {
             renderValues.leading = this.props.iconFactory(node);
         }

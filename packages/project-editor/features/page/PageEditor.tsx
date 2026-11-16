@@ -98,7 +98,7 @@ export class PageTabState extends FlowTabState {
     previewBackgroundColor: string | undefined = undefined;
 
     // Editor-only presentation. Never written to the actual LVGL project.
-    lvglEditorViewMode: "expanded" | "device" = "expanded";
+    lvglEditorViewMode: "expanded" = "expanded";
 
     constructor(object: IEezObject, transform?: Transform) {
         super(object as Flow);
@@ -237,10 +237,10 @@ export class PageTabState extends FlowTabState {
             this.timeline.loadState(state.timeline);
         }
 
-        if (state.lvglEditorViewMode === "device" ||
-            state.lvglEditorViewMode === "expanded") {
-            this.lvglEditorViewMode = state.lvglEditorViewMode;
-        }
+        // Always use the full editing view. Older saved UI state may still
+        // contain "device" from the retired Device View toggle; migrate it
+        // to expanded instead of restoring the obsolete clipped mode.
+        this.lvglEditorViewMode = "expanded";
     }
 
     saveState() {

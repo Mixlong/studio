@@ -70,9 +70,15 @@ export const List = observer(
     class List extends React.Component<
         {
             nodes: IListNode[];
-            selectNode?: (node: IListNode) => void;
+            selectNode?: (
+                node: IListNode,
+                event: React.MouseEvent<HTMLDivElement>
+            ) => void;
             renderNode?: (node: IListNode) => React.ReactNode;
-            onContextMenu?: (node: IListNode) => void;
+            onContextMenu?: (
+                node: IListNode,
+                event: React.MouseEvent<HTMLDivElement>
+            ) => void;
             onDoubleClick?: (node: IListNode) => void;
             tabIndex?: any;
             className?: string;
@@ -98,7 +104,7 @@ export const List = observer(
                                       e.preventDefault();
                                       e.stopPropagation();
                                       if (this.props.selectNode) {
-                                          this.props.selectNode(node);
+                                          this.props.selectNode(node, e);
                                       }
                                   }
                                 : undefined
@@ -119,7 +125,7 @@ export const List = observer(
                                 ? (event: React.MouseEvent<HTMLDivElement>) => {
                                       event.preventDefault();
                                       event.stopPropagation();
-                                      this.props.onContextMenu!(node);
+                                      this.props.onContextMenu!(node, event);
                                   }
                                 : undefined
                         }

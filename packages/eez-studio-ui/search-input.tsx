@@ -4,6 +4,7 @@ import { IconAction } from "./action";
 
 export class SearchInput extends React.Component<{
     searchText: string;
+    placeholder?: string;
     onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
     onKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
     onClear: () => void;
@@ -13,7 +14,7 @@ export class SearchInput extends React.Component<{
             <div className="EezStudio_SearchInput_Container">
                 <input
                     type="text"
-                    placeholder="&#xe8b6;"
+                    placeholder={this.props.placeholder || "\ue8b6"}
                     className={classNames("EezStudio_SearchInput", {
                         empty: !this.props.searchText
                     })}

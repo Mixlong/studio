@@ -1,15 +1,250 @@
+// Main-window menu uses the existing Electron submenus with a centered project title.
+.DigiStudio_WorkspaceMenuBar {
+    position: relative;
+    display: flex;
+    flex: 0 0 29px;
+    align-items: center;
+    min-width: 0;
+    height: 29px;
+    padding: 0 5px;
+    // Menu color is supplied by the selected workspace skin.
+    color: var(--dw-menu-text);
+    background: var(--dw-menu-bg);
+    border-bottom: 1px solid var(--dw-menu-border);
+    font-family: var(--dw-ui-font-family);
+    font-size: 13px;
+
+    .DigiStudio_WorkspaceMenuBar_Items {
+        display: flex;
+        align-items: center;
+        height: 100%;
+        gap: 2px;
+        z-index: 1;
+    }
+
+    .DigiStudio_WorkspaceMenuBar_Item {
+        height: 25px;
+        padding: 0 9px;
+        border: 0;
+        border-radius: 3px;
+        background: transparent;
+        color: var(--dw-menu-text);
+        font: inherit;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--dw-menu-hover-bg);
+            color: var(--dw-menu-hover-text);
+            outline: none;
+        }
+    }
+
+    .DigiStudio_WorkspaceMenuBar_Title {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 44%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+        pointer-events: none;
+        color: var(--dw-menu-title);
+        font-size: 13px;
+        font-weight: 500;
+    }
+}
+
+// Renderer-owned workspace menus keep the Windows popup aligned with the
+// DigiStudio skin and use the same compact, near-square geometry as the IDE.
+.DigiStudio_WorkspaceMenuPopup {
+    position: fixed;
+    z-index: 3000;
+    min-width: 210px;
+    max-width: min(360px, calc(100vw - 16px));
+    padding: 4px;
+    color: var(--dw-menu-text);
+    background: var(--dw-menu-bg);
+    border: 1px solid var(--dw-menu-border);
+    border-radius: 2px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+    font-family: var(--dw-ui-font-family);
+    font-size: 13px;
+    line-height: 18px;
+
+    .DigiStudio_WorkspaceMenuPopup_ItemContainer {
+        position: relative;
+
+        &.has-submenu:hover > .DigiStudio_WorkspaceMenuPopup_Submenu,
+        &.has-submenu:focus-within > .DigiStudio_WorkspaceMenuPopup_Submenu {
+            display: flex;
+        }
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        min-height: 28px;
+        padding: 4px 9px;
+        color: var(--dw-menu-text);
+        background: transparent;
+        border: 0;
+        border-radius: 2px;
+        font: inherit;
+        text-align: left;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            color: var(--dw-menu-hover-text);
+            background: var(--dw-menu-hover-bg);
+            outline: none;
+        }
+
+        &:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Check {
+        flex: 0 0 12px;
+        width: 12px;
+        text-align: center;
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Label {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Accelerator {
+        flex: 0 0 auto;
+        margin-left: 20px;
+        color: var(--dw-text-muted);
+        font-size: 12px;
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_SubmenuArrow {
+        flex: 0 0 auto;
+        margin-left: 10px;
+        color: var(--dw-text-muted);
+        font-size: 16px;
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Separator {
+        height: 1px;
+        margin: 4px 3px;
+        background: var(--dw-menu-border);
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Submenu {
+        position: absolute;
+        top: -4px;
+        left: calc(100% + 2px);
+        display: none;
+        flex-direction: column;
+        min-width: 210px;
+        max-width: min(360px, calc(100vw - 16px));
+        padding: 4px;
+        color: var(--dw-menu-text);
+        background: var(--dw-menu-bg);
+        border: 1px solid var(--dw-menu-border);
+        border-radius: 2px;
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+    }
+}
+
 .EezStudio_HomeTab {
     display: flex;
     flex: 1;
-    flex-direction: row;
+    flex-direction: column;
+    width: 100%;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
 
+    .EezStudio_HomeTab_Header {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        display: flex;
+        flex: 0 0 52px;
+        width: 100%;
+        align-items: center;
+        justify-content: space-between;
+        min-width: 0;
+        padding: 0 20px;
+        color: @textColor;
+        background-color: @panelHeaderColor;
+        border-bottom: 1px solid @borderColor;
+    }
+
+    .EezStudio_HomeTab_HeaderBrand {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        gap: 10px;
+    }
+
+    .EezStudio_HomeTab_HeaderLogo {
+        display: flex;
+        flex: 0 0 34px;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        color: @selectionBackgroundColor;
+        background-color: fade(@selectionBackgroundColor, 12%);
+        border: 1px solid fade(@selectionBackgroundColor, 22%);
+        border-radius: 7px;
+    }
+
+    .EezStudio_HomeTab_HeaderBrandText {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        line-height: 1.2;
+
+        strong {
+            color: @textColor;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        span {
+            margin-top: 3px;
+            color: var(--bs-secondary-color);
+            font-size: 10px;
+        }
+    }
+
+    .EezStudio_HomeTab_HeaderMeta {
+        color: var(--bs-secondary-color);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1px;
+    }
+
+    .EezStudio_HomeTab_Workspace {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+    }
+
     .EezStudio_HomeTab_Navigation {
-        flex: 0 0 196px;
-        width: 196px;
-        padding: 14px 8px;
+        flex: 0 0 118px;
+        width: 118px;
+        padding: 12px 4px;
         overflow-y: auto;
         overflow-x: hidden;
         background-color: @panelHeaderColor;
@@ -37,10 +272,10 @@
             display: flex;
             align-items: center;
             width: 100%;
-            min-height: 30px;
+            min-height: 29px;
             margin: 1px 0;
-            padding: 5px 8px;
-            gap: 8px;
+            padding: 5px 4px;
+            gap: 5px;
             overflow: hidden;
             color: @textColor;
             background: transparent;
@@ -103,6 +338,123 @@
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+.EezStudio_HomeTab_Dashboard {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+
+    .EezStudio_HomeTab_Projects {
+        min-width: 0;
+    }
+}
+
+.EezStudio_HomeTab_Updates {
+    display: flex;
+    flex: 0 0 280px;
+    flex-direction: column;
+    width: 280px;
+    min-width: 0;
+    padding: 16px 16px 16px 0;
+    gap: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    .EezStudio_HomeTab_UpdatesCard {
+        padding: 16px;
+        color: @textColor;
+        background-color: @panelHeaderColor;
+        border: 1px solid @borderColor;
+        border-radius: 8px;
+
+        h2 {
+            margin: 8px 0;
+            font-size: 16px;
+            font-weight: 650;
+        }
+
+        p {
+            margin: 8px 0 0;
+            color: var(--bs-secondary-color);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        ul {
+            margin: 10px 0 0;
+            padding-left: 18px;
+            color: var(--bs-secondary-color);
+            font-size: 11px;
+            line-height: 1.8;
+        }
+
+        button {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            min-height: 36px;
+            padding: 7px 0;
+            gap: 9px;
+            color: @textColor;
+            background: transparent;
+            border: 0;
+            border-bottom: 1px solid @borderColor;
+            cursor: pointer;
+            font-size: 12px;
+            text-align: left;
+
+            &:last-child {
+                border-bottom: 0;
+            }
+
+            span {
+                flex: 1;
+            }
+
+            &:hover {
+                color: @selectionBackgroundColor;
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_UpdatesCard_Highlight {
+        border-top: 3px solid @selectionBackgroundColor;
+    }
+
+    .EezStudio_HomeTab_UpdatesEyebrow,
+    .EezStudio_HomeTab_UpdatesCardTitle {
+        color: var(--bs-secondary-color);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+}
+
+.EezStudio_HomeTab_Projects_EmptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+    padding: 24px;
+    gap: 10px;
+    color: var(--bs-secondary-color);
+    font-size: 12px;
+    text-align: center;
+
+    strong {
+        color: @textColor;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 1120px) {
+    .EezStudio_HomeTab_Updates {
+        display: none;
+    }
+}
+
 // OPEN PROJECT
 
 .EezStudio_HomeTab_Projects {
@@ -118,11 +470,32 @@
     .EezStudio_HomeTab_Projects_Header {
         display: flex;
         align-items: center;
-        width: 720px;
-        margin: 0 auto;
+        min-width: 0;
+        padding: 18px 20px 12px;
+        gap: 16px;
+
+        .EezStudio_HomeTab_Projects_Title {
+            display: flex;
+            flex: 0 0 210px;
+            flex-direction: column;
+            min-width: 0;
+
+            strong {
+                color: @textColor;
+                font-size: 17px;
+                font-weight: 650;
+            }
+
+            span {
+                margin-top: 3px;
+                color: var(--bs-secondary-color);
+                font-size: 11px;
+            }
+        }
 
         .EezStudio_SearchInput_Container {
-            margin: 10px auto;
+            flex: 1;
+            margin: 0 auto;
             max-width: 360px;
             border: 1px solid @borderColor;
             border-radius: 18px;
@@ -137,20 +510,20 @@
     }
 
     .EezStudio_HomeTab_Projects_Body {
-        flex: 1;
-        justify-content: center;
-        align-items: start;
         display: flex;
-        overflow: hidden;
+        flex: 1;
+        min-height: 0;
+        align-items: stretch;
+        justify-content: stretch;
         position: relative;
-
-        margin-bottom: 10px;
+        padding: 0 20px 20px;
+        gap: 12px;
+        overflow: hidden;
 
         & > div {
-            margin: 0 10px;
             box-sizing: border-box;
             border: 1px solid @borderColor;
-            border-radius: 10px;
+            border-radius: 8px;
             padding: 10px;
             overflow-y: auto;
             overflow-x: hidden;
@@ -158,24 +531,25 @@
         }
 
         .EezStudio_HomeTab_Projects_Space {
-            flex: 1;
-            max-width: 240px;
-            margin: 0;
-            border: none;
+            display: none;
         }
 
         .EezStudio_HomeTab_Projects_Actions {
-            flex: 1;
-            max-width: 240px;
-
+            flex: 0 0 176px;
+            max-width: 176px;
+            padding: 0;
             border: none;
-
             height: fit-content !important;
+
+            & > button {
+                width: 100%;
+            }
         }
 
         .EezStudio_ListContainer {
-            flex: 3;
-            max-width: 720px;
+            flex: 1;
+            min-width: 220px;
+            max-width: none;
 
             padding: 0;
 
@@ -218,40 +592,1044 @@
             }
         }
 
-        .EezStudio_HomeTab_Projects_ProjectInfo {
-            flex: 2;
-            max-width: 480px;
-            min-height: 200px;
 
-            overflow-y: auto;
-            overflow-x: hidden;
-
-            border: none;
-
-            .EezStudio_HomeTab_Projects_ProjectInfo_Actions {
-                display: flex;
-                flex-direction: column;
-                align-items: flex-start;
-                margin-left: 80px;
-
-                & > button {
-                    min-width: 160px;
-                    margin-bottom: 10px;
-                }
-            }
-        }
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+.EezStudio_HomeTab_Projects_ProjectInfo_Popup {
+    position: fixed;
+    z-index: 10000;
+    box-sizing: border-box;
+    width: 260px;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    min-width: 0;
+    min-height: 0;
+    padding: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    color: @textColor;
+    background: @panelHeaderColor;
+    border: 1px solid @borderColor;
+    border-radius: 6px;
+    box-shadow: @shadowElevation2;
+
+    .EezStudio_HomeTab_Projects_ProjectInfo_Actions {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin: 0;
+
+        & > button {
+            width: 100%;
+            min-width: 0;
+            margin: 0;
+        }
+    }
+}
+
+// GUI Guider-inspired proportions; every color uses the current DigiStudio theme.
+.EezStudio_HomeTab_ProjectWorkspace {
+    display: flex;
+    flex: 1 1 50%;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.EezStudio_HomeTab_ProjectTabs {
+    display: flex;
+    flex: 0 0 44px;
+    align-items: stretch;
+    padding: 0 14px;
+    gap: 14px;
+    border-bottom: 1px solid @borderColor;
+
+    button {
+        padding: 0 2px;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: @textColor;
+        background: transparent;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover { color: @hoverColor; }
+        &.selected {
+            border-bottom-color: @selectionBackgroundColor;
+            color: @selectionBackgroundColor;
+        }
+        &:focus-visible { outline: 1px solid @selectionBackgroundColor; }
+    }
+}
+
+.EezStudio_HomeTab_Dashboard {
+    .EezStudio_HomeTab_ProjectWorkspace .EezStudio_HomeTab_Projects {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .EezStudio_HomeTab_Projects_Header {
+        justify-content: flex-end;
+        min-height: 54px;
+        padding: 8px 14px;
+
+        .EezStudio_HomeTab_Projects_Title { display: none; }
+        .EezStudio_SearchInput_Container {
+            max-width: 270px;
+            margin: 0;
+            border-radius: 3px;
+            box-shadow: none;
+            font-size: 12px;
+        }
+    }
+
+    .EezStudio_HomeTab_Projects_Body {
+        padding: 0 14px 14px;
+        gap: 8px;
+        .EezStudio_HomeTab_Projects_Actions { display: none; }
+        .EezStudio_ListContainer {
+            min-width: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+        .EezStudio_HomeTab_Projects_ProjectInfo:empty { display: none; }
+    }
+}
+
+// Latest changes panel follows the GUI Guider release-notes structure while
+// presenting DigiStudio's own version and product changes.
+.EezStudio_HomeTab_Updates {
+    display: flex;
+    flex: 1 1 50%;
+    flex-direction: column;
+    width: auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 16px;
+    gap: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-left: 1px solid @borderColor;
+
+    .EezStudio_HomeTab_UpdatesHeading {
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0 0 2px;
+        color: @textColor;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .EezStudio_HomeTab_UpdatesBanner {
+        display: flex;
+        flex: 0 0 64px;
+        align-items: center;
+        min-width: 0;
+        padding: 0 16px;
+        gap: 20px;
+        color: #1c1c1c;
+        background: @selectionBackgroundColor;
+
+        strong {
+            flex: 0 0 auto;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        span {
+            min-width: 0;
+            overflow: hidden;
+            font-size: 14px;
+            font-weight: 500;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+    }
+
+    .EezStudio_HomeTab_UpdatesFeature {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 220px;
+        padding: 16px;
+        color: @textColor;
+        background: @panelHeaderColor;
+        border: 1px solid @borderColor;
+
+        h3 {
+            margin: 0 0 16px;
+            color: @textColor;
+            font-size: 17px;
+            font-weight: 700;
+        }
+    }
+
+    .EezStudio_HomeTab_UpdatesTabs {
+        display: flex;
+        align-items: stretch;
+        min-width: 0;
+        gap: 22px;
+        border-bottom: 1px solid @borderColor;
+
+        button {
+            flex: 0 0 auto;
+            min-height: 42px;
+            padding: 0 2px;
+            color: var(--digi-secondary-text, @textColor);
+            background: transparent;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+
+            &:hover {
+                color: @hoverColor;
+            }
+
+            &.selected {
+                color: @selectionBackgroundColor;
+                border-bottom-color: @selectionBackgroundColor;
+            }
+
+            &:focus-visible {
+                outline: 1px solid @selectionBackgroundColor;
+                outline-offset: -2px;
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_UpdatesDetails {
+        padding: 16px 0 8px;
+
+        h4 {
+            margin: 0 0 12px;
+            color: @textColor;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 28px;
+            color: var(--digi-secondary-text, @textColor);
+            font-size: 14px;
+            line-height: 1.9;
+        }
+
+        li {
+            padding-left: 2px;
+        }
+    }
+}
+
+@media (max-width: 1000px) {
+    .EezStudio_HomeTab_Updates { display: none; }
+}
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// DigiStudio home: GUI Guider proportions with existing theme variables.
+// Bundled SIL Open Font License 1.1 (OFL-1.1) fonts: Inter (Latin/UI) + Noto Sans SC (Simplified Chinese).
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url(Inter-Regular.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url(Inter-Medium.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url(Inter-SemiBold.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url(Inter-Bold.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Noto Sans SC";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url(NotoSansSC-Regular.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Noto Sans SC";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url(NotoSansSC-Medium.woff2) format("woff2");
+}
+
+@font-face {
+    font-family: "Noto Sans SC";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url(NotoSansSC-Bold.woff2) format("woff2");
+}
+
+@digiStudioFontFamily: var(--dw-ui-font-family);
+
+:root {
+    --bs-font-sans-serif: @digiStudioFontFamily;
+    --digi-accent: #1677ff;
+    --digi-accent-bg: rgba(22, 119, 255, 0.1);
+    --digi-accent-border: rgba(22, 119, 255, 0.24);
+    --digi-nav-selected-bg: rgba(22, 119, 255, 0.15);
+    --digi-nav-selected-text: #1677ff;
+    --digi-primary-text: var(--dw-text-primary);
+    --digi-secondary-text: var(--dw-text-secondary);
+    --digi-muted-text: var(--dw-text-muted);
+    --digi-border: rgba(0, 0, 0, 0.09);
+    --digi-subtle-border: rgba(0, 0, 0, 0.06);
+    --digi-badge-bg: rgba(0, 0, 0, 0.04);
+}
+
+[data-bs-theme="dark"] {
+    --digi-accent: #4da3ff;
+    --digi-accent-bg: rgba(77, 163, 255, 0.14);
+    --digi-accent-border: rgba(77, 163, 255, 0.28);
+    --digi-nav-selected-bg: rgba(77, 163, 255, 0.28);
+    --digi-nav-selected-text: #ffffff;
+    --digi-primary-text: var(--dw-text-primary);
+    --digi-secondary-text: var(--dw-text-secondary);
+    --digi-muted-text: var(--dw-text-muted);
+    --digi-border: rgba(255, 255, 255, 0.08);
+    --digi-subtle-border: rgba(255, 255, 255, 0.05);
+    --digi-badge-bg: rgba(255, 255, 255, 0.04);
+}
+
+body {
+    font-family: @digiStudioFontFamily;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+.EezStudio_TabsView > div.EezStudio_Tab.active {
+    font-weight: 500;
+}
+
+.EezStudio_HomeTab {
+    font-family: @digiStudioFontFamily;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    font-feature-settings: "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    color: var(--digi-primary-text);
+    background: @panelHeaderColor;
+
+    .EezStudio_HomeTab_Header {
+        flex: 0 0 64px;
+        height: 64px;
+        padding: 0 18px 0 0;
+        background: @backgroundColor;
+        border-bottom: 1px solid var(--digi-border);
+    }
+
+    .EezStudio_HomeTab_HeaderBrand {
+        flex: 0 0 150px;
+        min-width: 150px;
+        height: 100%;
+        padding: 0 20px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        border-right: 1px solid var(--digi-border);
+
+        strong {
+            color: var(--digi-primary-text);
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            line-height: 1.2;
+        }
+    }
+
+    .EezStudio_HomeTab_HeaderPageTitle {
+        margin: 0 0 0 20px;
+        color: var(--digi-primary-text);
+        font-size: 25px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        line-height: 1;
+    }
+
+    .EezStudio_HomeTab_HeaderMeta {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+
+        span {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border: 1.5px solid var(--digi-secondary-text);
+            border-radius: 5px;
+            color: var(--digi-primary-text);
+            font-size: 18px;
+            font-weight: 600;
+            opacity: 0.9;
+        }
+    }
+
+    .EezStudio_HomeTab_Navigation {
+        flex: 0 0 150px;
+        width: 150px;
+        padding: 0;
+        background: @backgroundColor;
+        border-right: 1px solid var(--digi-border);
+
+        .EezStudio_HomeTab_NavigationPrimary {
+            padding: 8px 0 8px;
+            border-bottom: 1px solid var(--digi-border);
+        }
+
+        .EezStudio_HomeTab_NavigationGroup {
+            margin: 0;
+            padding: 6px 0 8px;
+            border-bottom: 1px solid var(--digi-border);
+        }
+
+        .EezStudio_HomeTab_NavigationGroupTitle {
+            padding: 12px 16px 6px 20px;
+            color: var(--digi-muted-text);
+            font-size: 13px;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            line-height: 18px;
+            text-transform: none;
+        }
+
+        .EezStudio_HomeTab_NavigationItem {
+            height: 42px;
+            min-height: 42px;
+            padding: 0 16px 0 20px;
+            margin: 0;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 400;
+            line-height: 20px;
+            color: var(--dw-text-secondary);
+            border: 0;
+            border-right: 4px solid transparent;
+            border-radius: 0;
+            transition: color 0.12s ease, background-color 0.12s ease;
+
+            .EezStudio_Icon,
+            .EezStudio_AttentionContainer,
+            .material-symbols-outlined {
+                flex: 0 0 17px;
+                width: 17px !important;
+                height: 17px !important;
+                font-size: 17px !important;
+                font-variation-settings: "FILL" 1, "wght" 200, "GRAD" 0, "opsz" 20;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                color: inherit;
+                opacity: 0.95;
+            }
+
+            svg {
+                width: 17px !important;
+                height: 17px !important;
+            }
+
+            &:hover {
+                color: var(--dw-text-primary);
+                background: rgba(255, 255, 255, 0.05);
+
+                .EezStudio_Icon {
+                    opacity: 1;
+                }
+            }
+
+            &.selected {
+                background: rgba(217, 148, 26, 0.22);
+                color: #f3ba3a;
+                border-right-color: #f59e0b;
+                font-weight: 500;
+
+                .EezStudio_Icon,
+                .material-symbols-outlined {
+                    color: #f3ba3a;
+                    opacity: 1;
+                }
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Body {
+        background: @panelHeaderColor;
+        min-height: 0;
+    }
+}
+
+.EezStudio_HomeTab_Dashboard {
+    min-height: 0;
+    padding: 0 12px;
+    background: @panelHeaderColor;
+    border: 0;
+
+    .EezStudio_HomeTab_ProjectWorkspace {
+        position: relative;
+        flex: 1 1 50%;
+        border-right: 1px solid var(--digi-border);
+    }
+
+    .EezStudio_HomeTab_ProjectTabs {
+        flex: 0 0 52px;
+        height: 52px;
+        padding: 0 14px;
+        gap: 20px;
+        border-bottom: 1px solid var(--digi-border);
+
+        button {
+            height: 100%;
+            padding: 0 2px;
+            border-bottom: 3px solid transparent;
+            font-size: 15.5px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--digi-secondary-text);
+            white-space: nowrap;
+            transition: color 0.12s ease, border-color 0.12s ease;
+
+            &:first-child {
+                font-size: 21px;
+            }
+
+            &:hover {
+                color: var(--digi-primary-text);
+            }
+
+            &.selected {
+                color: var(--digi-accent);
+                border-bottom-color: var(--digi-accent);
+                font-weight: 600;
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Projects {
+        position: static;
+        min-height: 0;
+    }
+
+    .EezStudio_HomeTab_Projects_Header {
+        position: absolute;
+        z-index: 2;
+        top: 0;
+        right: 0;
+        display: flex;
+        align-items: center;
+        width: 310px;
+        height: 52px;
+        min-height: 52px;
+        padding: 0 12px 0 0;
+        gap: 8px;
+        background: transparent;
+
+        .EezStudio_HomeTab_Projects_Title { display: none; }
+
+        .EezStudio_SearchInput_Container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            width: auto;
+            height: 29px;
+            min-width: 0;
+            margin: 0;
+            padding: 0 9px;
+            border: 1px solid #d0d5dd;
+            border-radius: 2px;
+            box-shadow: none;
+            background: #ffffff;
+            font-size: 13px;
+
+            &::before {
+                content: "\e8b6";
+                font-family: "Material Symbols Outlined";
+                font-variation-settings: "wght" 200;
+                font-size: 16px;
+                line-height: 1;
+                color: #595959;
+                margin-right: 6px;
+                flex-shrink: 0;
+            }
+
+            &:hover,
+            &:focus-within {
+                box-shadow: none;
+                border-color: var(--digi-accent);
+            }
+
+            input {
+                font-size: 13px;
+                padding: 0;
+                height: 27px;
+                line-height: 27px;
+                color: #1f2329 !important;
+                background-color: #ffffff !important;
+            }
+        }
+
+        .EezStudio_IconAction {
+            color: var(--digi-muted-text);
+            fill: var(--digi-muted-text);
+            padding: 4px;
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+
+            svg {
+                width: 17px;
+                height: 17px;
+            }
+
+            &:hover {
+                color: var(--digi-primary-text);
+                fill: var(--digi-primary-text);
+                background: var(--digi-badge-bg);
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Projects_Body {
+        min-width: 0;
+        padding: 8px 14px 14px;
+        gap: 0;
+
+        & > div {
+            margin: 0;
+            padding: 0;
+            border: 0;
+            border-radius: 0;
+            box-shadow: none;
+            background: transparent;
+        }
+
+        .EezStudio_HomeTab_Projects_Space,
+        .EezStudio_HomeTab_Projects_Actions { display: none; }
+
+        .EezStudio_ListContainer {
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+            max-width: none;
+            padding: 0;
+            border: 0;
+            box-shadow: none;
+            background: transparent;
+
+            .EezStudio_List {
+                padding: 0;
+
+                .EezStudio_ListItem {
+                    display: flex;
+                    align-items: center;
+                    min-height: 58px;
+                    margin: 0;
+                    padding: 8px 10px;
+                    border-bottom: 1px solid var(--digi-subtle-border);
+                    border-radius: 2px;
+                    background: transparent;
+
+                    & > div:nth-child(1) {
+                        padding-right: 14px;
+                    }
+
+                    img { border-radius: 2px; }
+
+                    .EezStudio_HomeTab_ProjectItem {
+                        gap: 4px;
+
+                        .project-name {
+                            font-size: 15px;
+                            font-weight: 400;
+                            line-height: 20px;
+                            color: var(--digi-primary-text);
+
+                            .fw-bolder {
+                                font-weight: 400 !important;
+                            }
+
+                            & > span:nth-child(2) {
+                                display: none;
+                            }
+                        }
+
+                        .project-folder {
+                            color: var(--digi-muted-text);
+                            font-size: 12px;
+                            line-height: 16px;
+                            letter-spacing: 0.01em;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        .EezStudio_HomeTab_Projects_ProjectInfo:empty { display: none; }
+    }
+
+    .EezStudio_HomeTab_Projects_EmptyState {
+        min-height: 0;
+        align-items: flex-start;
+        text-align: left;
+        padding: 28px 10px;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--digi-muted-text);
+        strong {
+            color: var(--digi-primary-text);
+            font-size: 15px;
+            font-weight: 500;
+        }
+    }
+
+    .EezStudio_HomeTab_Updates {
+        display: flex;
+        flex: 1 1 50%;
+        flex-direction: column;
+        min-width: 0;
+        width: auto;
+        padding: 0 4px 14px 14px;
+        border-left: 0;
+        gap: 0;
+        color: var(--digi-primary-text);
+        background: transparent;
+
+        .EezStudio_HomeTab_UpdatesHeading {
+            display: flex;
+            align-items: center;
+            flex: 0 0 52px;
+            height: 52px;
+            margin: 0;
+            border-bottom: 0;
+            color: var(--digi-primary-text);
+            font-size: 21px;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        .EezStudio_HomeTab_UpdatesBanner {
+            display: flex;
+            align-items: center;
+            flex: 0 0 36px;
+            margin-top: 2px;
+            padding: 0 14px;
+            gap: 20px;
+            min-width: 0;
+            background: var(--digi-accent-bg);
+            border: 1px solid var(--digi-accent-border);
+            border-radius: 2px;
+            font-size: 13px;
+
+            strong {
+                font-weight: 500;
+                color: var(--digi-primary-text);
+            }
+            span {
+                color: var(--digi-secondary-text);
+            }
+            button {
+                padding: 0;
+                border: 0;
+                background: transparent;
+                color: var(--digi-accent);
+                font-size: 13px;
+                font-style: normal;
+                font-weight: 400;
+                text-decoration: underline;
+                text-underline-offset: 3px;
+                cursor: pointer;
+
+                &:hover {
+                    opacity: 0.85;
+                }
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesFeature {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-top: 10px;
+            min-height: 200px;
+            border: 1px solid var(--digi-border);
+            border-radius: 2px;
+            padding: 14px 16px 18px;
+
+            h3 {
+                margin: 0 0 8px;
+                color: var(--digi-primary-text);
+                font-size: 13.5px;
+                font-weight: 500;
+                letter-spacing: 0.03em;
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesTabs {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            min-height: 32px;
+            margin: 0 4px;
+            border-bottom: 1px solid var(--digi-border);
+
+            button {
+                padding: 6px 2px 6px;
+                border: 0;
+                border-bottom: 2px solid transparent;
+                color: var(--digi-secondary-text);
+                background: transparent;
+                font-size: 13px;
+                font-weight: 500;
+                letter-spacing: 0.02em;
+                white-space: nowrap;
+                cursor: pointer;
+                transition: color 0.12s ease, border-color 0.12s ease;
+
+                &:hover { color: var(--digi-primary-text); }
+                &.selected {
+                    color: var(--digi-accent);
+                    border-bottom-color: var(--digi-accent);
+                    font-weight: 600;
+                }
+                &:focus-visible { outline: 1px solid var(--digi-accent); }
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesDetails {
+            padding: 12px 4px 0;
+
+            h4 {
+                margin: 0 0 8px;
+                color: var(--digi-secondary-text);
+                font-size: 13.5px;
+                font-weight: 400;
+            }
+
+            ul {
+                margin: 0;
+                padding: 0 0 0 20px;
+                color: var(--digi-secondary-text);
+                font-size: 13px;
+                line-height: 1.85;
+
+                li::marker {
+                    color: var(--digi-muted-text);
+                    font-size: 10px;
+                }
+            }
+        }
+    }
+}
+
+@media (max-width: 1230px) {
+    .EezStudio_HomeTab_Dashboard {
+        .EezStudio_HomeTab_Projects_Header { width: 250px; }
+        .EezStudio_HomeTab_Updates {
+            .EezStudio_HomeTab_UpdatesTabs { gap: 10px; }
+        }
+    }
+}
+
+@media (max-width: 1080px) {
+    .EezStudio_HomeTab_Dashboard .EezStudio_HomeTab_Updates { display: none; }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+.EezStudio_HomeTab_Dashboard {
+    .EezStudio_HomeTab_ProjectVersionBadge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        flex: 0 0 28px;
+        border: 1px solid var(--digi-subtle-border);
+        border-radius: 2px;
+        color: var(--digi-muted-text);
+        background: var(--digi-badge-bg);
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0;
+    }
+
+    .EezStudio_HomeTab_Projects_Header {
+        .EezStudio_SearchInput.empty {
+            font-family: @digiStudioFontFamily;
+        }
+        .EezStudio_SearchInput::placeholder {
+            color: #8c929e;
+            opacity: 1;
+        }
+    }
+}
+
+
+// Enforce equal-weight project/news columns regardless of child min-content widths.
+.EezStudio_HomeTab_Dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+
+    .EezStudio_HomeTab_ProjectWorkspace,
+    .EezStudio_HomeTab_Updates {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+}
+
+@media (max-width: 1080px) {
+    .EezStudio_HomeTab_Dashboard {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+
+// The New Project dialog uses jsPanel, which applies its primary blue
+// background inline. Keep its title bar and controls, but use the shared
+// GUI Guider surfaces in both light and dark themes.
+#new-project-wizard.jsPanel {
+    background: var(--dw-panel-header-bg) !important;
+    border: 1px solid var(--dw-panel-border) !important;
+
+    .jsPanel-hdr {
+        background: var(--dw-panel-header-bg) !important;
+        color: var(--dw-text-primary) !important;
+        border-bottom: 1px solid var(--dw-panel-border);
+    }
+
+    .jsPanel-title,
+    .jsPanel-controlbar .jsPanel-btn {
+        color: var(--dw-text-primary) !important;
+    }
+
+    // Match the compact project-editor toolbar controls instead of the
+    // oversized default jsPanel window glyphs.
+    .jsPanel-title {
+        font-family: var(--dw-ui-font-family);
+        font-variant: normal;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .jsPanel-controlbar {
+        align-items: center;
+        align-self: center;
+        gap: 2px;
+        margin: 0 6px;
+    }
+
+    .jsPanel-controlbar .jsPanel-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        margin: 0;
+        border-radius: 2px;
+        color: var(--dw-text-secondary) !important;
+
+        svg.jsPanel-icon {
+            display: block;
+            width: 14px !important;
+            height: 14px !important;
+            margin: 0 !important;
+            color: currentColor !important;
+        }
+    }
+
+    // jsPanel normally hides Restore until the dialog is maximized.
+    // The generic display:inline-flex above must not reveal it early.
+    // Do not use !important: jsPanel toggles inline display on maximize/restore.
+    .jsPanel-controlbar .jsPanel-btn-normalize {
+        display: none;
+    }
+
+    .jsPanel-controlbar .jsPanel-btn {
+        &:hover,
+        &:focus-visible {
+            background-color: var(--dw-menu-hover-bg);
+            color: var(--dw-text-primary) !important;
+        }
+
+        &:focus-visible {
+            outline: 1px solid var(--digi-accent);
+            outline-offset: -1px;
+        }
+    }
+}
+
 // CREATE PROJECT AND EXAMPLES
 
 .EezStudio_NewProjectWizard {
     flex: 1;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    position: relative;
+    width: 100%;
+    background-color: #1c1c1c;
+    color: #b9b9b9;
+    overflow: hidden;
+
+    &.create-project {
+        background-color: #38383866;
+        border: 1px solid #55555566;
+        padding: 10px;
+        margin: 0 10px 10px 10px;
+        width: calc(100% - 20px);
+        height: calc(100% - 10px);
+        box-sizing: border-box;
+    }
 
     a {
         color: @textColor;
@@ -266,29 +1644,761 @@
         pointer-events: none;
     }
 
-    .EezStudio_NewProjectWizard_StaticField {
-        border: var(--bs-border-width) solid var(--bs-border-color);
-        border-radius: var(--bs-border-radius);
-        padding: 0.375rem 0.75rem;
-        background-color: @panelHeaderColor;
-        overflow: auto;
-    }
+    // Top tab list (LVGL version switcher + selection info + create button) - EXACT GUI Guider REA
+    .tab-list {
+        align-items: center;
+        border-bottom: 1px solid #5555554d;
+        display: flex;
+        font-size: 18px;
+        font-weight: 700;
+        justify-content: space-between;
+        height: 44px;
+        min-height: 44px;
+        max-height: 44px;
+        line-height: 40px;
+        margin: 0;
+        padding: 0 !important;
+        width: 100%;
+        box-sizing: border-box;
+        color: #b9b9b9;
 
-    .EezStudio_SearchInput_Container {
-        flex: 0;
-        margin: 10px auto;
-        width: 360px;
-        border: 1px solid @borderColor;
-        border-radius: 18px;
-        padding: 5px 10px;
-        font-size: 120%;
-        box-shadow: @shadowElevation1;
-        transition: box-shadow 0.15s ease-out;
-        &:hover {
-            box-shadow: @shadowElevation2;
+        > div {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .version-tabs {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            height: 44px;
+            min-width: 190px;
+
+            span {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 86px;
+                height: 44px;
+                box-sizing: border-box;
+                white-space: nowrap;
+                cursor: pointer;
+                color: #b9b9b9;
+                font-size: 18px;
+                font-weight: 700;
+                line-height: 1;
+                border-bottom: 3px solid transparent;
+                user-select: none;
+
+                &:hover {
+                    color: #e0e0e0;
+                }
+
+                &.active {
+                    border-bottom: 3px solid #ffb500;
+                    color: #ffb500;
+                    font-size: 24px;
+                    font-weight: 700;
+                }
+
+                &.static-title {
+                    width: auto;
+                    justify-content: flex-start;
+                    cursor: default;
+                    border-bottom: none !important;
+                    color: #ffb500;
+                    font-size: 24px;
+                    font-weight: 700;
+                    padding: 0;
+
+                    &:hover {
+                        color: #ffb500;
+                    }
+                }
+            }
+        }
+
+        .select-info {
+            font-size: 13px;
+            width: 500px;
+            color: #b9b9b9;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+
+            span {
+                width: 240px;
+                white-space: nowrap;
+                color: #b9b9b9;
+                font-weight: 700;
+
+                strong {
+                    font-size: 15px;
+                    color: #b9b9b9;
+                    font-weight: 700;
+                }
+            }
+        }
+
+        .create-btn-box {
+            min-width: 1px;
+            width: max-content;
+
+            .create-btn {
+                background-color: #383838cc;
+                border: 1px solid #55555580;
+                padding: 0 12px;
+                height: 32px;
+                line-height: 30px;
+                box-sizing: border-box;
+                color: #b9b9b9;
+                cursor: pointer;
+                border-radius: 2px;
+                font-size: 14px;
+                font-weight: 600;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                white-space: nowrap;
+                user-select: none;
+
+                .create-btn-arrow {
+                    display: inline-flex;
+                    flex: 0 0 auto;
+                    align-items: center;
+                    justify-content: center;
+                    width: 18px;
+                    height: 18px;
+                    line-height: 1;
+                }
+
+                &:hover {
+                    background-color: #ffb500;
+                    color: #000000;
+                }
+
+                &.disabled {
+                    opacity: 0.5;
+                    pointer-events: none;
+                }
+            }
         }
     }
 
+    // Step 1: Template selection box
+    .template-box {
+        display: flex;
+        flex-grow: 1;
+        height: calc(100% - 44px);
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+
+        &.hide {
+            display: none !important;
+        }
+
+        .board-template, .template-gallery {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+            overflow: hidden;
+            padding-top: 10px;
+            box-sizing: border-box;
+
+            .search-bar {
+                display: flex;
+                flex-direction: column;
+                font-size: 13px;
+                gap: 8px;
+                padding: 5px 20px 10px 20px;
+                width: 100%;
+                box-sizing: border-box;
+
+                .search-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+
+                    strong {
+                        font-size: 15px;
+                        font-weight: 700;
+                        color: #b9b9b9;
+                        white-space: nowrap;
+                    }
+
+                    .search-input-wrapper {
+                        position: relative;
+                        width: 300px;
+                        height: 30px;
+                        display: flex;
+                        align-items: center;
+                        background-color: #ffffff;
+                        border: 1px solid #d9d9d9;
+                        border-radius: 2px;
+                        padding: 0 11px 0 8px;
+                        box-sizing: border-box;
+
+                        .search-svg-icon {
+                            color: #000000d9;
+                            margin-right: 6px;
+                            flex-shrink: 0;
+                        }
+
+                        input {
+                            width: 100%;
+                            height: 100%;
+                            background: transparent;
+                            border: none;
+                            color: #000000d9;
+                            padding: 0;
+                            font-size: 13px;
+                            box-sizing: border-box;
+                            outline: none;
+
+                            &::placeholder {
+                                color: #bfbfbf;
+                            }
+                        }
+                    }
+
+                    &.category-filters {
+                        padding: 6px 0 2px 0;
+                        display: flex;
+                        gap: 10px;
+                        flex-wrap: wrap;
+
+                        label {
+                            margin: 0;
+                            cursor: pointer;
+
+                            span {
+                                display: inline-flex;
+                                align-items: center;
+                                justify-content: center;
+                                background-color: #2b2b2b;
+                                border: 1px solid #3d3d3d;
+                                border-radius: 3px;
+                                padding: 5px 14px;
+                                font-size: 13px;
+                                font-weight: 600;
+                                line-height: 1.2;
+                                color: #cccccc;
+                                user-select: none;
+                                box-sizing: border-box;
+
+                                &:hover {
+                                    background-color: #383838;
+                                    color: #ffffff;
+                                }
+                            }
+
+                            input[type="radio"]:checked + span {
+                                background-color: #ffb500;
+                                border-color: #ffb500;
+                                color: #000000;
+                                font-weight: 600;
+                            }
+                        }
+                    }
+                }
+            }
+
+            .temp-box {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+                gap: 16px;
+                overflow-x: hidden !important;
+                overflow-y: auto;
+                padding: 10px 20px 20px 20px;
+                flex: 1;
+                align-content: flex-start;
+
+                .template-gallery-state {
+                    grid-column: 1 / -1;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 14px;
+                    min-height: 220px;
+                    color: #a9aaad;
+                    font-size: 14px;
+                    text-align: center;
+
+                    &.template-gallery-state--error {
+                        color: #d4aa55;
+                    }
+                }
+
+                .template-retry-button {
+                    min-height: 34px;
+                    padding: 0 18px;
+                    background: #ffb500;
+                    border: 1px solid #ffb500;
+                    border-radius: 4px;
+                    color: #171717;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+
+                    &:hover {
+                        background: #ffc43d;
+                        border-color: #ffc43d;
+                    }
+                }
+
+                .temp-item {
+                    height: 220px;
+                    background-color: #222222;
+                    border: 2px solid #383838;
+                    border-radius: 4px;
+                    display: flex;
+                    flex-direction: column;
+                    text-align: center;
+                    position: relative;
+                    cursor: pointer;
+                    user-select: none;
+                    box-sizing: border-box;
+                    overflow: hidden;
+                    transition: border-color 0.15s ease, background-color 0.15s ease;
+
+                    &:hover:not(.selected) {
+                        border-color: #555555;
+                        background-color: #2a2a2a;
+                    }
+
+                    label {
+                        height: 100%;
+                        width: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        cursor: pointer;
+                        margin: 0;
+                    }
+
+                    .temp-item-card {
+                        height: 100%;
+                        width: 100%;
+                        display: flex;
+                        flex-direction: column;
+                        box-sizing: border-box;
+                        overflow: hidden;
+                    }
+
+                    .temp-item-img-box {
+                        flex: 1;
+                        min-height: 0;
+                        width: 100%;
+                        background-color: #1e1e1e;
+                        background-image: linear-gradient(45deg, #252525 25%, transparent 25%),
+                                          linear-gradient(-45deg, #252525 25%, transparent 25%),
+                                          linear-gradient(45deg, transparent 75%, #252525 75%),
+                                          linear-gradient(-45deg, transparent 75%, #252525 75%);
+                        background-size: 16px 16px;
+                        background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        overflow: hidden;
+
+                        img, svg {
+                            max-height: 145px;
+                            max-width: 90%;
+                            object-fit: contain;
+                        }
+                    }
+
+                    h4 {
+                        flex: 0 0 42px;
+                        height: 42px;
+                        line-height: 42px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        margin: 0;
+                        padding: 0 8px;
+                        color: #ffffff;
+                        background-color: #222222;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                    }
+
+                    .template-card-meta {
+                        display: flex;
+                        flex: 0 0 22px;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 8px;
+                        padding: 0 9px;
+                        color: #a9aaad;
+                        background-color: #222222;
+                        font-size: 11px;
+
+                        span {
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        }
+                    }
+
+                    &.selected {
+                        border: 2px solid #ffb500;
+                        background-color: #ffb500;
+
+                        .temp-item-img-box {
+                            background-color: #2b2b2b;
+                        }
+
+                        h4 {
+                            background-color: #ffb500 !important;
+                            color: #000000 !important;
+                            font-weight: 700;
+                        }
+
+                        .template-card-meta {
+                            color: #393000;
+                            background-color: #ffb500;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 2: Parameter configuration form - EXACT GUI Guider REA
+    .create-form {
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        height: calc(100% - 40px);
+        overflow: hidden;
+        padding: 10px 20px;
+        box-sizing: border-box;
+        background-color: #1c1c1c;
+
+        &.hide {
+            display: none !important;
+        }
+
+        .form-tit {
+            border-bottom: 1px solid #5555554d;
+            font-size: 24px;
+            font-weight: 700;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+            color: #ffb500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            strong {
+                font-size: 24px;
+                color: #ffb500;
+            }
+        }
+
+        .form-content-split {
+            display: flex;
+            flex: 1;
+            gap: 20px;
+            overflow: hidden;
+            min-height: 0;
+
+            .template-form-part {
+                width: 50%;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                overflow-y: auto;
+
+                .view-item {
+                    flex: 1;
+                    height: 100%;
+                    box-sizing: border-box;
+                    background-color: #383838b3;
+                    border: 1px solid #55555560;
+                    border-radius: 4px;
+                    padding: 20px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                    align-items: stretch;
+
+                    &.template-hero-card {
+                        .view-item-preview {
+                            width: 100%;
+                            height: 220px;
+                            background-color: #1e1e1e;
+                            background-image: linear-gradient(45deg, #252525 25%, transparent 25%),
+                                              linear-gradient(-45deg, #252525 25%, transparent 25%),
+                                              linear-gradient(45deg, transparent 75%, #252525 75%),
+                                              linear-gradient(-45deg, transparent 75%, #252525 75%);
+                            background-size: 16px 16px;
+                            background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+                            border-radius: 4px;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            overflow: hidden;
+
+                            img, svg {
+                                max-width: 90%;
+                                max-height: 90%;
+                                object-fit: contain;
+                            }
+                        }
+
+                        .view-item-info {
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+
+                            h1 {
+                                font-size: 20px;
+                                color: #ffffff;
+                                margin: 0;
+                                font-weight: 700;
+                            }
+
+                            .template-meta-badge {
+                                display: flex;
+                                gap: 8px;
+                                align-items: center;
+
+                                span {
+                                    padding: 3px 10px;
+                                    border-radius: 3px;
+                                    font-size: 13px;
+                                    font-weight: 600;
+                                }
+
+                                .badge-type {
+                                    background-color: #2b2b2b;
+                                    color: #ffb500;
+                                    border: 1px solid #ffb500;
+                                }
+
+                                .badge-res {
+                                    background-color: #262626;
+                                    color: #cccccc;
+                                    border: 1px solid #444444;
+                                }
+                            }
+
+                            .template-desc {
+                                color: #aaaaaa;
+                                font-size: 13px;
+                                line-height: 1.5;
+                                margin: 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            .info-form-part {
+                width: 50%;
+                display: flex;
+                flex-direction: column;
+                gap: 14px;
+                overflow-y: auto;
+                background-color: #242424;
+                border: 1px solid #383838;
+                border-radius: 4px;
+                padding: 20px;
+                box-sizing: border-box;
+
+                .input-box {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+
+                    h5 {
+                        font-size: 14px;
+                        color: #cccccc;
+                        margin: 0;
+                        font-weight: 600;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    }
+
+                    input[type="text"], input[type="number"], select {
+                        height: 32px;
+                        background-color: #1a1a1a;
+                        border: 1px solid #444444;
+                        border-radius: 4px;
+                        color: #ffffff;
+                        padding: 0 10px;
+                        font-size: 13px;
+                        box-sizing: border-box;
+
+                        &:focus {
+                            border-color: #ffb500;
+                            outline: none;
+                        }
+                    }
+
+                    .resolution-presets {
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                        margin-top: 4px;
+
+                        .preset-btn {
+                            background-color: #2b2b2b;
+                            border: 1px solid #444444;
+                            border-radius: 4px;
+                            padding: 4px 10px;
+                            font-size: 12px;
+                            color: #cccccc;
+                            cursor: pointer;
+                            user-select: none;
+                            transition: all 0.15s ease;
+
+                            &:hover {
+                                background-color: #383838;
+                                color: #ffffff;
+                                border-color: #666666;
+                            }
+
+                            &.active {
+                                background-color: #ffb500;
+                                color: #000000;
+                                font-weight: 700;
+                                border-color: #ffb500;
+                            }
+                        }
+                    }
+
+                    .input-with-button {
+                        display: flex;
+                        gap: 8px;
+
+                        input {
+                            flex: 1;
+                        }
+
+                        button {
+                            background-color: #383838;
+                            border: 1px solid #484848;
+                            color: #ffffff;
+                            border-radius: 4px;
+                            padding: 0 16px;
+                            height: 32px;
+                            font-size: 13px;
+                            cursor: pointer;
+
+                            &:hover {
+                                background-color: #484848;
+                            }
+                        }
+                    }
+
+                    .form-check {
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        margin-top: 4px;
+
+                        input[type="checkbox"] {
+                            accent-color: #ffb500;
+                        }
+
+                        label {
+                            font-size: 13px;
+                            color: #cccccc;
+                            margin: 0;
+                            cursor: pointer;
+                        }
+                    }
+
+                    .form-error {
+                        color: #ff4d4f;
+                        font-size: 12px;
+                    }
+                }
+
+                .board-size {
+                    display: flex;
+                    gap: 16px;
+
+                    .input-box {
+                        flex: 1;
+                    }
+                }
+            }
+        }
+
+        .create-bottom {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            padding-top: 14px;
+            border-top: 1px solid #5555554d;
+            margin-top: 10px;
+
+            div {
+                background-color: #383838cc;
+                border: 1px solid #55555580;
+                border-radius: 4px;
+                padding: 8px 24px;
+                color: #ffffff;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: 600;
+                user-select: none;
+                transition: all 0.2s ease;
+
+                &:hover {
+                    background-color: #ffb500;
+                    color: #000000;
+                    border-color: #ffb500;
+                }
+
+                &#_finish {
+                    background-color: #ffb500;
+                    color: #000000;
+                    font-weight: 700;
+                    border-color: #ffb500;
+
+                    &:hover {
+                        background-color: #e09f00;
+                    }
+                }
+            }
+        }
+    }
+
+    // Progress overlay
+    .progress-box {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.85);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        gap: 16px;
+
+        p {
+            color: #ffb500;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 0;
+        }
+    }
+
+    // Legacy container support if needed for examples
     .EezStudio_NewProjectWizard_Body {
         flex: 1;
         justify-content: center;
@@ -296,7 +2406,6 @@
         display: flex;
         overflow: hidden;
         position: relative;
-
         margin-bottom: 10px;
 
         .EezStudio_NewProjectWizard_NoProjects {
@@ -311,7 +2420,7 @@
             margin: 0 10px;
             box-sizing: border-box;
             border: 1px solid @borderColor;
-            border-radius: 10px;
+            border-radius: 4px;
             overflow-y: auto;
             overflow-x: hidden;
             max-height: 100%;
@@ -327,7 +2436,6 @@
         .EezStudio_SimpleTree {
             flex: 1;
             max-width: 240px;
-
             height: fit-content !important;
 
             .EezStudio_TreeRow {
@@ -339,9 +2447,6 @@
                     width: 100%;
                     display: inline-flex;
                     align-items: center;
-
-                    width: 100%;
-
                     justify-content: space-between;
 
                     .badge {
@@ -360,7 +2465,6 @@
         .EezStudio_NewProjectWizard_ProjectTypes {
             flex: 3;
             max-width: 720px;
-
             display: flex;
             flex-direction: column;
 
@@ -380,12 +2484,6 @@
                     color: @selectionColor;
                     background-color: @selectionBackgroundColor;
                     border-bottom: 1px solid transparent;
-                    .EezStudio_NewProjectWizard_ProjectType_Image.imageZoomEnabled {
-                        > img,
-                        & > svg {
-                            cursor: zoom-in;
-                        }
-                    }
                 }
 
                 &:hover:not(.selected) {
@@ -403,7 +2501,6 @@
 
                     > img,
                     & > svg {
-                        /*object-fit: cover !important;*/
                         width: 160px !important;
                         height: 90px !important;
                     }
@@ -452,7 +2549,6 @@
             flex: 2;
             max-width: 480px;
             min-height: 200px;
-
             overflow-y: auto;
             overflow-x: hidden;
 
@@ -492,9 +2588,7 @@
         top: 0;
         width: 100%;
         height: 100%;
-
         background-color: @backgroundColor;
-
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -1075,8 +3169,9 @@
 
 .EezStudio_Settings_Databases {
     position: relative;
-    width: 640px;
-    height: 480px;
+    width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
     border: 1px solid @borderColor;
 
     .EezStudio_Settings_Databases_List {
@@ -1228,3 +3323,598 @@
         }
     }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// GUI Guider theme 4 fidelity pass.
+// Keep DigiStudio data and actions native; only the home-page visual language
+// follows the captured reference: 140px navigation, charcoal surfaces, yellow
+// selection states, thin dividers, and the 50/50 project / information split.
+
+:root {
+    --digi-accent: #ffb500;
+    --digi-accent-dark: #d48806;
+    --digi-accent-bg: rgba(255, 181, 0, 0.12);
+    --digi-accent-border: rgba(255, 181, 0, 0.42);
+    --digi-nav-text: #262626;
+    --digi-nav-hover-bg: rgba(0, 0, 0, 0.05);
+    --digi-nav-selected-bg: #ffeaa7;
+    --digi-nav-selected-text: #1a1a1a;
+    --digi-tab-active-text: #b37400;
+    --digi-primary-text: #1f2329;
+    --digi-secondary-text: #4e5969;
+    --digi-muted-text: #767e8a;
+    --digi-border: rgba(0, 0, 0, 0.12);
+    --digi-subtle-border: rgba(0, 0, 0, 0.07);
+    --digi-badge-bg: rgba(0, 0, 0, 0.05);
+    --digi-canvas: #ffffff;
+    --digi-surface: #ffffff;
+    --digi-banner: #ffe899;
+}
+
+[data-bs-theme="dark"] {
+    --digi-accent: #ffb500;
+    --digi-accent-dark: #d49b05;
+    --digi-accent-bg: rgba(255, 181, 0, 0.18);
+    --digi-accent-border: rgba(85, 85, 85, 0.42);
+    --digi-nav-text: #d0d0d0;
+    --digi-nav-hover-bg: rgba(255, 181, 0, 0.14);
+    --digi-nav-selected-bg: rgba(255, 181, 0, 0.3);
+    --digi-nav-selected-text: #ffffff;
+    --digi-tab-active-text: #ffb500;
+    --digi-primary-text: #e6e8ec;
+    --digi-secondary-text: #b0b0b0;
+    --digi-muted-text: rgba(185, 185, 185, 0.68);
+    --digi-border: rgba(85, 85, 85, 0.52);
+    --digi-subtle-border: rgba(85, 85, 85, 0.38);
+    --digi-badge-bg: rgba(255, 255, 255, 0.05);
+    --digi-canvas: #1f1e1e;
+    --digi-surface: rgba(56, 56, 56, 0.4);
+    --digi-banner: #c9d200;
+}
+
+.EezStudio_HomeTab {
+    // Keep the home shell dimensions identical to GUI Guider 1.10.1-GA (Theme 4):
+    // 70px top header, 140px left sidebar, 42px nav items, 10px group vertical padding.
+    --digi-home-header-height: 70px;
+    --digi-home-sidebar-width: 140px;
+    --digi-home-nav-item-height: 42px;
+
+    // Home uses the same system font stack as the GUI Guider reference.
+    font-family: var(--dw-ui-font-family);
+    font-size: 14px;
+    line-height: 1.5715;
+    letter-spacing: normal;
+    font-feature-settings: normal;
+    color: var(--digi-primary-text);
+    background: var(--digi-canvas);
+
+    button,
+    input {
+        font-family: inherit;
+        letter-spacing: normal;
+    }
+
+    .EezStudio_HomeTab_Header {
+        flex-basis: var(--digi-home-header-height);
+        height: var(--digi-home-header-height);
+        padding-right: 20px;
+        background: var(--digi-canvas);
+        border-bottom: 1px solid var(--digi-border);
+    }
+
+    .EezStudio_HomeTab_HeaderBrand {
+        flex-basis: var(--digi-home-sidebar-width);
+        width: var(--digi-home-sidebar-width);
+        min-width: var(--digi-home-sidebar-width);
+        padding: 10px !important;
+        gap: 10px;
+        justify-content: center;
+        border-right: 1px solid var(--digi-border);
+
+        .EezStudio_HomeTab_HeaderLogo {
+            display: block;
+            flex: 0 0 auto;
+            width: 120px;
+            max-width: 100%;
+            height: auto;
+            object-fit: contain;
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+        }
+
+        .EezStudio_HomeTab_ReturnToProject {
+            display: inline-flex;
+            flex: 0 0 16px;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 28px;
+            padding: 0;
+            color: var(--digi-secondary-text);
+            background: transparent;
+            border: 0;
+            cursor: pointer;
+
+            .font-awesome-icons {
+                font-size: 15px;
+                line-height: 1;
+            }
+
+            &:hover {
+                color: var(--digi-accent);
+            }
+
+            &:focus-visible {
+                outline: 1px solid var(--digi-accent);
+                outline-offset: 2px;
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_HeaderPageTitle {
+        margin-left: 20px;
+        color: var(--digi-primary-text);
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 70px;
+    }
+
+    .EezStudio_HomeTab_HeaderMeta {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+
+        strong {
+            color: var(--digi-primary-text);
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            line-height: 1;
+        }
+    }
+
+    .EezStudio_HomeTab_Workspace {
+        padding: 0;
+    }
+
+    .EezStudio_HomeTab_Navigation {
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        flex-basis: var(--digi-home-sidebar-width);
+        width: var(--digi-home-sidebar-width);
+        padding: 0;
+        overflow: visible;
+        background: var(--digi-canvas);
+        border-right: 1px solid var(--digi-border);
+
+        .EezStudio_HomeTab_NavigationPrimary,
+        .EezStudio_HomeTab_NavigationGroup {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            width: 100%;
+            margin: 0;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--digi-subtle-border);
+        }
+
+        .EezStudio_HomeTab_NavigationGroupTitle {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 0 5px 0 20px;
+            margin: 0 0 8px 0;
+            color: var(--digi-secondary-text);
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.5;
+            text-transform: none;
+        }
+
+        .EezStudio_HomeTab_NavigationItem {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            width: 100%;
+            height: 42px;
+            min-height: 42px;
+            margin: 0;
+            padding: 10px 0 10px 20px;
+            gap: 10px;
+            color: var(--digi-nav-text, var(--digi-primary-text));
+            background: transparent;
+            border: 0;
+            border-right: 4px solid transparent;
+            border-radius: 0;
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 22px;
+            box-sizing: border-box;
+            transition: all 0.15s ease;
+
+            .EezStudio_HomeTab_NavigationIcon {
+                display: inline-flex;
+                flex: 0 0 18px;
+                align-items: center;
+                justify-content: center;
+                width: 18px;
+                height: 18px;
+                overflow: visible;
+                line-height: 1;
+                text-align: center;
+
+                .EezStudio_Icon,
+                .font-awesome-icons,
+                svg {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 18px !important;
+                    height: 18px !important;
+                    margin: 0;
+                    font-size: 15px !important;
+                    line-height: 1;
+                    text-align: center;
+                }
+            }
+
+            .EezStudio_Icon,
+            .EezStudio_AttentionContainer,
+            .font-awesome-icons {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex: 0 0 18px;
+                width: 18px !important;
+                height: 18px !important;
+                font-size: 15px !important;
+                line-height: 1;
+                text-align: center;
+                color: inherit;
+            }
+
+            &:hover {
+                color: var(--digi-primary-text);
+                background: var(--digi-nav-hover-bg, var(--digi-accent-bg));
+            }
+
+            &.selected {
+                color: var(--digi-nav-selected-text, #141414);
+                background-color: var(--digi-nav-selected-bg, #ffeaa7);
+                border-right: 4px solid var(--digi-accent, #ffb500);
+                font-weight: 600;
+
+                .EezStudio_Icon,
+                .material-symbols-outlined,
+                .font-awesome-icons {
+                    color: inherit;
+                }
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Body {
+        background: var(--digi-canvas);
+    }
+}
+
+.EezStudio_HomeTab_Dashboard {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    margin: 0 10px 10px;
+    padding: 10px;
+    background: var(--digi-surface);
+    border: 1px solid var(--digi-border);
+
+    .EezStudio_HomeTab_ProjectWorkspace {
+        flex: 1 1 50%;
+        border-right-color: var(--digi-border);
+    }
+
+    .EezStudio_HomeTab_ProjectTabs {
+        flex-basis: 40px;
+        height: 40px;
+        padding: 0 10px;
+        gap: 20px;
+        border-bottom-color: var(--digi-border);
+
+        button {
+            height: 40px;
+            color: var(--digi-secondary-text);
+            border-bottom: 3px solid transparent;
+            font-size: 18px;
+            font-weight: 700;
+            background: transparent;
+            cursor: pointer;
+
+            &:first-child {
+                font-size: 18px;
+            }
+
+            &:hover {
+                color: var(--digi-primary-text);
+            }
+
+            &.selected {
+                font-size: 24px;
+                color: var(--digi-tab-active-text, var(--digi-accent));
+                border-bottom-color: var(--digi-accent);
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Projects_Header {
+        width: calc(100% - 250px);
+        max-width: 310px;
+        height: 40px;
+        min-height: 40px;
+        padding-right: 0;
+
+        .EezStudio_SearchInput_Container {
+            height: 30px;
+            border-color: var(--digi-border);
+            border-radius: 2px;
+
+            &::before {
+                content: "\f002";
+                font-family: "Font Awesome Icons";
+                font-size: 13px;
+            }
+
+            .EezStudio_SearchInput.empty {
+                font-family: inherit;
+            }
+
+            &:hover,
+            &:focus-within {
+                border-color: var(--digi-accent);
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_Projects_Body {
+        padding: 8px 10px 10px;
+
+        .EezStudio_ListContainer {
+            .EezStudio_List {
+                .EezStudio_ListItem {
+                    min-height: 65px;
+                    padding: 10px;
+                    border-bottom-color: var(--digi-subtle-border);
+
+                    & > div:nth-child(1) {
+                        padding-right: 10px;
+                    }
+
+                    & > div:nth-child(2) {
+                        min-width: 0;
+                        overflow: hidden;
+                    }
+
+                    &:hover {
+                        background: var(--digi-accent-bg);
+                    }
+
+                    .EezStudio_HomeTab_ProjectItem {
+                        div.project-name {
+                            color: var(--digi-primary-text);
+                            font-size: 16px;
+                            font-weight: 500;
+
+                            .fw-bolder {
+                                font-weight: 500 !important;
+                            }
+                        }
+
+                        div.project-folder {
+                            color: var(--digi-primary-text);
+                            font-size: 14px;
+                            line-height: 22px;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    .EezStudio_HomeTab_ProjectVersionBadge {
+        width: 46px;
+        height: 44px;
+        flex-basis: 46px;
+        color: var(--digi-primary-text);
+        background: transparent;
+        border: 1px solid var(--digi-subtle-border);
+        font-size: 14px;
+        font-weight: 400;
+    }
+
+    .EezStudio_HomeTab_Updates {
+        flex: 1 1 50%;
+        padding: 0 0 0 10px;
+        border-left: 0;
+        color: var(--digi-primary-text);
+        background: transparent;
+
+        .EezStudio_HomeTab_UpdatesHeading {
+            flex-basis: 40px;
+            height: 40px;
+            color: var(--digi-primary-text);
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .EezStudio_HomeTab_UpdatesBanner {
+            flex-basis: 42px;
+            height: 42px;
+            margin-top: 0;
+            padding: 0 12px;
+            gap: 16px;
+            color: #2b2b2b;
+            background: var(--digi-banner);
+            border: 0;
+            border-radius: 0;
+            font-size: 13px;
+
+            strong,
+            span {
+                color: #2b2b2b;
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesFeature {
+            margin-top: 10px;
+            padding: 10px 12px 14px;
+            background: transparent;
+            border-color: var(--digi-border);
+            border-radius: 0;
+
+            h3 {
+                margin-bottom: 8px;
+                color: var(--digi-primary-text);
+                font-size: 15px;
+                font-weight: 700;
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesTabs {
+            gap: 18px;
+            min-height: 32px;
+            border-bottom-color: var(--digi-border);
+
+            button {
+                color: var(--digi-secondary-text);
+                font-size: 14px;
+                background: transparent;
+                cursor: pointer;
+
+                &:hover {
+                    color: var(--digi-primary-text);
+                }
+
+                &.selected {
+                    color: var(--digi-tab-active-text, var(--digi-accent));
+                    border-bottom-color: var(--digi-accent);
+                    font-weight: 600;
+                }
+            }
+        }
+
+        .EezStudio_HomeTab_UpdatesDetails {
+            padding: 12px 4px 0;
+            color: var(--digi-primary-text);
+
+            h4 {
+                color: var(--digi-primary-text);
+                font-size: 15px;
+                font-weight: 600;
+            }
+
+            p,
+            span,
+            li {
+                color: var(--digi-secondary-text);
+                font-size: 13px;
+                line-height: 1.7;
+            }
+        }
+    }
+}
+
+.EezStudio_HomeTab_WorkspaceStats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 4px 0 12px;
+
+    div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 10px;
+        border: 1px solid var(--digi-border);
+        background: var(--digi-accent-bg);
+    }
+
+    strong {
+        color: var(--digi-primary-text);
+        font-size: 22px;
+        font-weight: 700;
+    }
+}
+
+.EezStudio_HomeTab_WorkspaceActions {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+
+    button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 36px;
+        padding: 0 8px;
+        color: var(--digi-primary-text);
+        background: transparent;
+        border: 0;
+        border-bottom: 1px solid var(--digi-subtle-border);
+        cursor: pointer;
+        font-size: 13px;
+        text-align: left;
+
+        .font-awesome-icons {
+            width: 16px;
+            flex: 0 0 16px;
+            font-size: 15px;
+            line-height: 16px;
+            text-align: center;
+        }
+
+        &:hover {
+            color: var(--digi-accent);
+            background: var(--digi-accent-bg);
+        }
+    }
+}
+
+@import "home-guider-settings";
+
+// [WORKSPACE-MENU-POPUP-WHITE:START]
+.DigiStudio_WorkspaceMenuPopup,
+.DigiStudio_WorkspaceMenuPopup .DigiStudio_WorkspaceMenuPopup_Submenu {
+    background: #ffffff !important;
+    color: #1f2328 !important;
+    border: 1px solid #d0d7de !important;
+    border-radius: var(--bs-border-radius, 2px) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.42), 0 2px 6px rgba(0, 0, 0, 0.18) !important;
+    padding: 5px !important;
+
+    .DigiStudio_WorkspaceMenuPopup_Item {
+        color: #1f2328 !important;
+        border-radius: var(--bs-border-radius, 2px) !important;
+
+        &:hover,
+        &:focus-visible {
+            background: rgba(255, 181, 0, 0.24) !important;
+            color: #111111 !important;
+        }
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Accelerator,
+    .DigiStudio_WorkspaceMenuPopup_SubmenuArrow {
+        color: #6b7280 !important;
+    }
+
+    .DigiStudio_WorkspaceMenuPopup_Separator {
+        background: #e5e7eb !important;
+        margin: 4px 4px !important;
+    }
+}
+// [WORKSPACE-MENU-POPUP-WHITE:END]

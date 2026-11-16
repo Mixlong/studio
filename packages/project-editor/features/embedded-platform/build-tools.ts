@@ -24,10 +24,11 @@ import {
     EmbeddedWebSocketClient,
     type EmbeddedWebSocketState
 } from "project-editor/features/embedded-platform/embedded-websocket";
-import type {
-    EmbeddedOutgoingMessage,
-    EmbeddedTransformModel,
-    EmbeddedTransformType
+import {
+    formatEmbeddedIncomingMessage,
+    type EmbeddedOutgoingMessage,
+    type EmbeddedTransformModel,
+    type EmbeddedTransformType
 } from "project-editor/features/embedded-platform/embedded-protocol";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,8 +284,11 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
                         typeof message.data === "string"
                             ? message.data
                             : JSON.stringify(message.data ?? null, null, 2);
-                    output(projectStore, MessageType.INFO, data);
-                    websocketOperationOptions.get(projectStore)?.onLog?.(data);
+                    const displayMessage = formatEmbeddedIncomingMessage(message);
+                    output(projectStore, MessageType.INFO, displayMessage);
+                    websocketOperationOptions.get(projectStore)?.onLog?.(displayMessage);
+                    // Stage completion detection must continue parsing the
+                    // original log data, not the display-only metadata.
                     notifyRemoteLogWaiters(projectStore, data);
                     const progress = parseProgress(data);
                     if (progress !== undefined) {
@@ -297,11 +301,7 @@ function getEmbeddedWebSocketClient(projectStore: ProjectStore) {
 
                 // Non-log protocol responses must also be visible in the
                 // remote log panel, not only in the global output console.
-                const data = `WebSocket ${message.command}: ${JSON.stringify(
-                    message,
-                    null,
-                    2
-                )}`;
+                const data = formatEmbeddedIncomingMessage(message);
                 output(projectStore, MessageType.INFO, data);
                 websocketOperationOptions.get(projectStore)?.onLog?.(data);
             },

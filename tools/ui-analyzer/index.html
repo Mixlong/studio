@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; img-src 'self' data: file:; style-src 'self'; script-src 'self';">
+  <title>Digiwise UI Analyzer</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">DW</div><div><div class="brand-name">Digiwise <span>UI Analyzer</span></div><div class="brand-subtitle">READ-ONLY VISUAL RESEARCH TOOL</div></div></div>
+      <div class="topbar-right"><span class="engine-dot"></span><span>REA ENGINE</span><span class="version" id="app-version">v0.1.0</span></div>
+    </header>
+    <main class="main">
+      <section class="intro">
+        <div class="eyebrow">UI REVERSE ANALYSIS / WINDOWS</div>
+        <h1>把界面拆解成可执行的设计规范。</h1>
+        <p>采集目标程序的界面资源、字体、颜色、尺寸和运行窗口证据，为 DigiwiseStudio 的 UI 改造提供参考。</p>
+        <div class="scope-tags"><span><i class="tag-check">✓</i> 仅分析 UI</span><span><i class="tag-check">✓</i> 原程序只读</span><span><i class="tag-check">✓</i> 不移植业务逻辑</span></div>
+      </section>
+      <div class="workspace">
+        <section class="panel source-panel">
+          <div class="panel-heading"><div><div class="panel-kicker">01 / SOURCE</div><h2>目标程序</h2></div><span class="step-index">01</span></div>
+          <label for="target-dir">安装目录</label>
+          <div class="path-row"><input id="target-dir" type="text" spellcheck="false" placeholder="选择 GUI Guider 安装目录"><button class="secondary-button" id="browse-target">浏览</button></div>
+          <div class="hint">例如：C:\NXP\GUI-Guider-1.10.1-GA</div>
+          <label for="output-dir" class="label-gap">报告输出目录</label>
+          <div class="path-row"><input id="output-dir" type="text" spellcheck="false" placeholder="Digiwise UI Analyzer Reports"><button class="secondary-button" id="browse-output">浏览</button></div>
+          <div class="hint">报告、截图及 UI 样式副本只写入此目录。</div>
+          <div class="option-row"><label class="toggle"><input id="use-rea" type="checkbox" checked><span class="toggle-track"></span></label><div><div class="option-title">启用 REA 目录证据扫描</div><div class="option-desc">读取安装包元数据与资源清单，不执行目标程序。</div></div><span class="rea-chip">REA 6.8.0</span></div>
+          <button class="primary-button" id="analyze-button"><span class="button-icon">⌕</span>开始 UI 资源分析<span class="button-arrow">→</span></button>
+          <div class="status-line" id="analysis-status"><span class="status-dot idle"></span><span>等待分析</span></div>
+        </section>
+        <section class="panel capture-panel">
+          <div class="panel-heading"><div><div class="panel-kicker">02 / LIVE WINDOW</div><h2>运行窗口采集</h2></div><span class="step-index">02</span></div>
+          <div class="window-toolbar"><label for="window-select">当前可见窗口</label><button class="text-button" id="refresh-windows">↻ 刷新窗口</button></div>
+          <select id="window-select"><option value="">点击“刷新窗口”查找应用</option></select>
+          <div class="window-meta" id="window-meta">尚未选择运行窗口</div>
+          <button class="outline-button" id="capture-button"><span>▣</span> 截图并读取控件树</button>
+          <div class="capture-preview" id="capture-preview"><div class="preview-placeholder"><div class="preview-frame">▣</div><span>运行窗口截图将在这里显示</span></div><img id="capture-image" alt="目标程序窗口截图" hidden></div>
+          <div class="capture-note" id="capture-note">Windows UI Automation 会尽可能读取控件树；若目标使用 Chromium/Direct3D 且未暴露内部节点，会明确标记覆盖限制。</div>
+        </section>
+      </div>
+      <section class="panel results-panel">
+        <div class="panel-heading results-heading"><div><div class="panel-kicker">03 / ANALYSIS OUTPUT</div><h2>分析结果</h2></div><button class="secondary-button" id="open-output" disabled>打开输出目录 ↗</button></div>
+        <div class="metric-grid">
+          <div class="metric"><span class="metric-value" id="metric-css">—</span><span class="metric-label">样式表</span></div>
+          <div class="metric"><span class="metric-value" id="metric-font">—</span><span class="metric-label">字体资源</span></div>
+          <div class="metric"><span class="metric-value" id="metric-icon">—</span><span class="metric-label">SVG 图标</span></div>
+          <div class="metric"><span class="metric-value" id="metric-color">—</span><span class="metric-label">颜色候选</span></div>
+        </div>
+        <div class="result-bottom"><div class="color-block"><div class="subheading">主要颜色候选</div><div class="swatches" id="color-swatches"><span class="empty-inline">分析后显示颜色样本</span></div></div><div class="report-block"><div class="subheading">报告文件</div><div class="report-path" id="report-path">尚未生成报告</div><button class="text-button" id="open-report" disabled>打开 Markdown 报告 ↗</button></div></div>
+      </section>
+      <section class="activity-panel"><div class="activity-header"><div><div class="panel-kicker">ACTIVITY</div><strong>分析日志</strong></div><span id="progress-label">0%</span></div><div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div><div class="log-list" id="log-list"><div class="log-entry muted"><span class="log-time">--:--:--</span><span>工具已就绪。请选择目标程序。</span></div></div></section>
+      <footer class="footer"><span>DIGIWISESTUDIO · UI RESEARCH</span><span>目标安装目录只读 · 不分析业务流程 · 不执行目标代码</span></footer>
+    </main>
+  </div>
+  <script src="./renderer.js"></script>
+</body>
+</html>

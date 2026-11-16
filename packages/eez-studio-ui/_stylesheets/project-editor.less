@@ -2,6 +2,21 @@
     margin-top: 4px;
 }
 
+.EezStudio_ProjectEditorPanelTitle {
+    color: var(--dw-text-primary, @textColor);
+
+    // Panel heading icons must not inherit the focused/unfocused panel state.
+    // Keep their foreground stable while the panel container changes state.
+    > .EezStudio_Icon,
+    > svg,
+    > i {
+        color: var(--dw-text-primary, @textColor);
+        fill: currentColor;
+        opacity: 1;
+        filter: none;
+    }
+}
+
 .EezStudio_ProjectEditorPanelTitleText {
     font-weight: 600;
     color: @darkTextColor;
@@ -15,8 +30,8 @@
     display: flex;
     flex-direction: column;
     > div:nth-child(1) {
-        background-color: @panelHeaderColor;
-        border-bottom: 1px solid @borderColor;
+        background-color: @workspaceToolbarBackgroundColor;
+        border-bottom: 1px solid @workspacePanelBorderColor;
     }
     > div:nth-child(2) {
         flex-grow: 1;
@@ -66,14 +81,15 @@
     flex-direction: column;
 
     > .EezStudio_ProjectEditor_ToolbarNav {
+        position: relative;
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         align-items: center;
         column-gap: 12px;
         min-height: 38px;
         padding: 3px 8px;
-        background-color: @panelHeaderColor;
-        border-bottom: 1px solid @borderColor;
+        background-color: var(--dw-toolbar-bg);
+        border-bottom: 1px solid var(--dw-toolbar-border);
 
         .btn {
             min-height: 30px;
@@ -91,8 +107,49 @@
             min-width: 0;
         }
 
-        .EezStudio_ProjectEditor_ToolbarNav_LeftGroup {
+        .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+        .EezStudio_ProjectEditor_BackToHome {
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
             justify-content: flex-start;
+            gap: 8px;
+            min-width: 118px;
+            height: 30px;
+            padding: 0 10px 0 4px;
+            color: @textColor;
+            background: transparent;
+            border: 1px solid transparent;
+            border-right-color: @borderColor;
+            border-radius: 0;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.1px;
+            cursor: pointer;
+
+            .EezStudio_Icon {
+                flex: 0 0 auto;
+                color: var(--bs-secondary-color);
+            }
+
+            &:hover,
+            &:focus-visible {
+                color: @hoverColor;
+                background-color: @hoverBackgroundColor;
+                outline: none;
+            }
+
+            &:hover .EezStudio_Icon,
+            &:focus-visible .EezStudio_Icon {
+                color: @hoverColor;
+            }
+
+            &:focus-visible {
+                box-shadow: 0 0 0 1px @selectionBackgroundColor;
+            }
+        }
+
+            justify-content: flex-end;
             gap: 6px;
 
             .EezStudio_ProjectEditor_WorkspaceSwitcher {
@@ -131,8 +188,8 @@
                     margin-top: 4px;
                     padding: 4px;
                     color: @textColor;
-                    background-color: @backgroundColor;
-                    border-color: @borderColor;
+                    background-color: @workspaceOperationPopupBackgroundColor;
+                    border-color: @workspacePanelBorderColor;
                     border-radius: 4px;
                     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
                 }
@@ -148,6 +205,7 @@
             }
 
             .EezStudio_ProjectEditor_WorkspaceMenuItem {
+                font-family: var(--dw-ui-font-family);
                 display: flex;
                 align-items: center;
                 gap: 8px;
@@ -157,7 +215,7 @@
                 padding: 5px 8px;
                 color: @textColor;
                 border-radius: 3px;
-                font-size: 12px;
+                font-size: 14px;
                 font-style: normal;
                 line-height: 18px;
                 text-align: left;
@@ -231,7 +289,37 @@
             }
         }
 
+        .DigiStudio_ProjectEditor_ToolbarNav_ActivePanelTitle {
+            position: absolute;
+            top: 0;
+            // Positioned using the live FlexLayout panel bounds; avoid
+            // hard-coded right offsets and BorderNode's stale resize size.
+            left: 0;
+            width: 0;
+            bottom: 0;
+            visibility: hidden;
+            z-index: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            min-width: 0;
+            padding: 0 12px;
+            overflow: hidden;
+            color: @textColor;
+            background-color: var(--dw-toolbar-bg);
+            border-left: 1px solid var(--dw-toolbar-border);
+            font-family: var(--dw-ui-font-family);
+            font-size: 13px;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
         .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+            flex: 1 1 auto;
+            width: auto;
             justify-content: flex-end;
             gap: 8px;
 
@@ -315,43 +403,6 @@
             }
         }
 
-        .EezStudio_ProjectEditor_ToolbarNav_ProjectContext {
-            display: flex;
-            align-items: center;
-            max-width: 40vw;
-            min-width: 0;
-            height: 26px;
-            padding: 0 9px;
-            color: @textColor;
-            font-size: 12px;
-            line-height: 26px;
-            background-color: fade(@borderColor, 22%);
-            border: 1px solid fade(@borderColor, 70%);
-            border-radius: 5px;
-
-            > span {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
-            .ProjectContext_ProjectName {
-                font-weight: 600;
-            }
-
-            .ProjectContext_Separator {
-                flex: 0 0 auto;
-                margin: 0 7px;
-                color: @textColor;
-                opacity: 0.62;
-            }
-
-            .ProjectContext_TargetName {
-                color: @textColor;
-                opacity: 0.62;
-            }
-        }
-
         .EezStudio_ProjectEditor_PreviewBackgroundColor {
             display: flex;
             align-items: center;
@@ -388,7 +439,15 @@
         }
 
         .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
+            position: absolute;
+            top: 50%;
+            // The default editor layout reserves roughly the rightmost third
+            // for Properties and Components Palette. JS replaces this with
+            // the measured central-pane offset after FlexLayout mounts.
+            right: var(--editor-toolbar-right, 32%);
+            z-index: 2;
             gap: 2px;
+            transform: translateY(-50%);
 
             .EezStudio_ProjectEditor_ToolbarNav_FirmwareControls {
                 display: flex;
@@ -400,11 +459,22 @@
             }
 
             .EezStudio_ButtonAction {
+                min-width: 34px;
+                min-height: 30px;
+                padding: 0 8px;
+                font-size: 0;
+                line-height: 30px;
                 color: @textColor;
                 background: transparent;
                 border-color: transparent;
                 box-shadow: none;
                 transition: color 120ms ease, background-color 120ms ease;
+
+                > .EezStudio_Icon {
+                    margin-right: 0 !important;
+                    font-size: 18px !important;
+                    line-height: 30px;
+                }
 
                 &:hover,
                 &:focus-visible {
@@ -424,23 +494,51 @@
                 }
             }
 
-            .DigiStudio_RunAction {
-                color: #17844c;
+            .DigiStudio_FirmwareBuildAction {
+                color: #da44da;
 
                 &:hover,
                 &:focus-visible {
-                    color: #126b3d;
-                    background-color: fade(#17844c, 13%);
+                    color: #da44da;
+                }
+            }
+
+            .DigiStudio_FirmwareDownloadAction {
+                color: #bbe1fa;
+
+                &:hover,
+                &:focus-visible {
+                    color: #f5dd90;
+                }
+            }
+
+            .DigiStudio_RunAction {
+                color: #02ae6f;
+
+                &:hover,
+                &:focus-visible {
+                    color: #5fc19d;
+                    background-color: fade(#02ae6f, 13%);
+                }
+            }
+
+            .DigiStudio_FullSimulatorAction {
+                color: #02ae6f;
+
+                &:hover,
+                &:focus-visible {
+                    color: #5fc19d;
+                    background-color: fade(#02ae6f, 13%);
                 }
             }
 
             .DigiStudio_StopExecution {
-                color: #b93831;
+                color: #cc0606;
 
                 &:hover,
                 &:focus-visible {
-                    color: #942d28;
-                    background-color: fade(#b93831, 12%);
+                    color: #d49b05;
+                    background-color: fade(#cc0606, 12%);
                 }
             }
         }
@@ -449,14 +547,336 @@
             gap: 4px;
         }
 
-        // Prioritize working editor controls over the decorative project
-        // heading as soon as horizontal room becomes limited.
-        @media (max-width: 1300px) {
-            grid-template-columns: minmax(0, 1fr) auto;
+    }
+}
 
-            .EezStudio_ProjectEditor_ToolbarNav_ProjectContext {
-                display: none;
-            }
+
+// GUI Guider keeps the active right-panel title in the top toolbar row. The
+// panel body remains in the same FlexLayout slot; only its tab strip is lifted
+// into the reserved header row.
+.DigiStudio_ProjectEditor_PropertiesTabStrip,
+.DigiStudio_ProjectEditor_GroupsTabStrip {
+    position: absolute;
+    top: -30px;
+    right: 0;
+    left: 0;
+    z-index: 30;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 2px;
+    background-color: @workspacePanelBackgroundColor;
+    border-bottom: 1px solid @workspacePanelBorderColor;
+}
+
+// FlexLayout clips tab strips by default. These tabsets paint their strip
+// into the reserved 30px toolbar row; their content keeps its own overflow
+// boundary below the toolbar.
+.flexlayout__tabset:has(
+        > .DigiStudio_ProjectEditor_PropertiesTabStrip,
+        > .DigiStudio_ProjectEditor_GroupsTabStrip
+    ) {
+    background-color: @workspacePanelBackgroundColor;
+    overflow: visible;
+
+    > .flexlayout__tabset_content {
+        background-color: @workspacePanelBackgroundColor;
+        overflow: hidden;
+    }
+
+    > .flexlayout__tabset_tabbar_outer
+        .flexlayout__tab_button--selected {
+        background-color: @workspacePanelActiveBackgroundColor;
+        color: @textColor;
+    }
+}
+
+// Keep every FlexLayout surface on the same semantic Guider palette. The
+// editor content is the canvas surface; tab strips and inspector chrome use
+// the panel surface. Theme-specific values live in vars.less / vars-dark.less.
+.EezStudio_ProjectEditor_MainContentWrapper {
+    > div {
+        background-color: @workspaceCanvasBackgroundColor;
+
+        > .flexlayout__layout {
+            background-color: @workspaceCanvasBackgroundColor;
+        }
+    }
+
+    .flexlayout__tabset {
+        background-color: @workspaceToolbarBackgroundColor;
+
+        > .flexlayout__tabset_content {
+            background-color: @workspaceCanvasBackgroundColor;
+        }
+    }
+}
+
+// GUI Guider keeps navigation and inspector surfaces on the black panel
+// layer, while the editor canvas remains the theme4 #1f1e1e surface. These
+// classes are assigned to the corresponding FlexLayout tabsets in the layout
+// model, so saved and freshly-created workspaces use the same palette.
+.EezStudio_ProjectEditor_MainContentWrapper
+    .flexlayout__tabset:has(
+        > .DigiStudio_ProjectEditor_NavigationTabStrip,
+        > .DigiStudio_ProjectEditor_TopNavigationTabStrip,
+        > .DigiStudio_ProjectEditor_InspectorTabStrip
+    ) {
+    background-color: @workspacePanelBackgroundColor;
+
+    > .flexlayout__tabset_content {
+        background-color: @workspacePanelBackgroundColor;
+    }
+
+    > .flexlayout__tabset_tabbar_outer
+        .flexlayout__tab_button--selected {
+        background-color: @workspacePanelActiveBackgroundColor;
+        color: @textColor;
+    }
+}
+
+// DigiStudio toolbar visual pass: consistent icon rhythm and aligned action groups.
+// This layer only changes presentation; all Toolbar action handlers stay intact.
+.EezStudio_ProjectEditor_MainContentWrapper > .EezStudio_ProjectEditor_ToolbarNav {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 8px;
+    // Keep the right action column inside the central editor pane. The
+    // measurement is the distance from this full-width toolbar to the pane's
+    // right edge; reserving it in the grid prevents the actions from covering
+    // the right-side inspector panels.
+    padding-right: calc(8px + var(--editor-toolbar-right, 32%));
+    column-gap: 10px;
+
+    // Render the original Pages / User Widgets / User Actions selections
+    // directly in the toolbar. FlexLayout's old tab strip was clipped when
+    // moved above its parent with a negative top offset.
+    .DigiStudio_ProjectEditor_HomeButton {
+        display: inline-flex;
+        flex: 0 0 34px;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        min-width: 34px;
+        max-width: 34px;
+        height: 30px;
+        min-height: 30px;
+        max-height: 30px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-right: 1px solid var(--dw-tab-border);
+        border-radius: 0;
+        color: var(--dw-tab-text);
+        background: var(--dw-tab-bg);
+        cursor: pointer;
+
+        > .EezStudio_Icon {
+            width: 18px !important;
+            height: 18px !important;
+            font-size: 18px !important;
+        }
+
+        &:hover,
+        &:focus-visible {
+            color: var(--dw-tab-hover-text);
+            background-color: var(--dw-tab-hover-bg);
+            outline: none;
+        }
+    }
+
+    .DigiStudio_ProjectEditor_TopPageNavigation {
+        display: flex;
+        align-items: center;
+        align-self: stretch;
+        // Keep the navigation compact and independent of panel resizing.
+        flex: 0 0 330px;
+        width: 330px;
+        min-width: 330px;
+        max-width: 330px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border-right: 1px solid var(--dw-tab-border);
+        background-color: var(--dw-tab-bg);
+    }
+
+    .DigiStudio_ProjectEditor_TopPageNavigationTab {
+        display: flex;
+        flex: 0 0 auto;
+        box-sizing: border-box;
+        width: 110px;
+        min-width: 110px;
+        max-width: 110px;
+        height: 30px;
+        min-height: 30px;
+        max-height: 30px;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        height: 30px;
+        padding: 0 7px;
+        overflow: hidden;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        color: var(--dw-tab-text);
+        background: transparent;
+        font-family: var(--dw-ui-font-family);
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &.is-active {
+            color: var(--dw-tab-active-text);
+            background-color: var(--dw-tab-active-bg);
+            border-bottom-color: var(--dw-tab-indicator);
+        }
+
+        &:hover,
+        &:focus-visible {
+            color: var(--dw-tab-hover-text);
+            background-color: var(--dw-tab-hover-bg);
+            outline: none;
+        }
+
+        &:focus-visible {
+            box-shadow: inset 0 0 0 1px @selectionBackgroundColor;
+        }
+    }
+
+    .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .EezStudio_ProjectEditor_WorkspaceSwitcher {
+        display: inline-flex;
+        flex: 0 0 44px;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 28px;
+        margin-right: 2px;
+        padding: 0 8px 0 0;
+        color: @textColor;
+        border: 1px solid transparent;
+        border-right-color: @borderColor;
+        border-radius: 0;
+
+        > .EezStudio_Icon {
+            width: 18px !important;
+            height: 18px !important;
+            font-size: 18px !important;
+        }
+
+        &:hover,
+        &:focus-visible {
+            color: @hoverColor;
+            background-color: @hoverBackgroundColor;
+            outline: none;
+        }
+    }
+
+    .EezStudio_ProjectEditor_ToolbarNav_PrimaryEditActions {
+        gap: 4px;
+        padding-right: 10px;
+
+        .EezStudio_IconAction {
+            width: 28px;
+            height: 28px;
+        }
+    }
+
+    .EezStudio_ProjectEditor_ToolbarNav_EditorButtons {
+        flex: 0 0 auto;
+        gap: 3px;
+
+        > .btn-group {
+            gap: 3px;
+        }
+
+        > .btn-group:not(:last-child)::after {
+            height: 20px;
+            margin: 0 8px;
+        }
+    }
+
+    .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+        min-width: 0;
+        gap: 10px;
+    }
+
+    .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
+        position: static;
+        top: auto;
+        right: auto;
+        z-index: auto;
+        gap: 6px;
+        flex: 0 0 auto;
+        transform: none;
+
+        .EezStudio_ProjectEditor_ToolbarNav_FirmwareControls {
+            gap: 4px;
+            margin-right: 6px;
+            padding-right: 10px;
+        }
+    }
+
+    .EezStudio_IconAction:not(.EezStudio_ProjectEditor_WorkspaceSwitcher) {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        color: @textColor;
+        fill: @textColor;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+
+        > .EezStudio_Icon {
+            width: 16px !important;
+            height: 16px !important;
+            font-size: 16px !important;
+        }
+
+        &:hover,
+        &:focus-visible {
+            color: @hoverColor;
+            fill: @hoverColor;
+            background-color: @hoverBackgroundColor;
+            outline: none;
+        }
+
+        &:focus-visible {
+            box-shadow: 0 0 0 1px @selectionBackgroundColor;
+        }
+
+        &.selected {
+            color: @selectionBackgroundColor;
+            fill: @selectionBackgroundColor;
+            background-color: fade(@selectionBackgroundColor, 12%);
+        }
+
+        &:disabled {
+            color: @actionDisabledColor;
+            fill: @actionDisabledColor;
+        }
+    }
+
+    .EezStudio_ButtonAction {
+        min-height: 28px;
+        padding: 0 8px;
+        border-radius: 4px;
+        font-size: 13px;
+
+        > .EezStudio_Icon {
+            margin-right: 7px !important;
         }
     }
 }
@@ -732,16 +1152,17 @@
         }
 
         .eez-component-palette-body {
-            display: flex;
-            flex-wrap: wrap;
-            align-content: flex-start;
-            align-items: flex-start;
-            padding: 2px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 4px;
+            padding: 4px;
+            width: 100%;
+            box-sizing: border-box;
         }
 
         .eez-component-palette-item {
-            margin: 2px;
-            padding: 4px;
+            margin: 0;
+            padding: 4px 6px;
             cursor: grab;
             &[draggable="false"] {
                 cursor: pointer;
@@ -749,19 +1170,30 @@
             display: flex;
             flex-direction: row;
             align-items: center;
-            width: 120px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
             border-radius: 3px;
 
             & > img,
             & > svg,
             & > i.material-symbols-outlined {
                 flex-shrink: 0;
-                height: 20px;
+                width: 18px;
+                height: 18px;
+                font-size: 17px !important;
+                line-height: 1 !important;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
                 object-fit: contain;
-                margin-right: 4px;
+                margin-right: 5px;
             }
 
             & > span {
+                display: inline-flex;
+                align-items: center;
+                line-height: 1.2;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -831,6 +1263,7 @@
 
                 & > input.search-input.empty {
                     font-family: "Material Symbols Outlined";
+                    font-variation-settings: "wght" 200;
                 }
             }
 
@@ -1475,8 +1908,8 @@
                 .title {
                     flex-grow: 1;
                     padding: 4px 0;
-                    background-color: #3fadb5;
-                    color: #333;
+                    background-color: @seqConnectionLineColor;
+                    color: #171717;
                     display: flex;
                     flex-direction: row;
                     align-items: center;
@@ -2099,6 +2532,90 @@
         height: 100%;
         background-color: @backgroundColor;
 
+        // GUI Guider-style inward-facing ticks, overlaid on the viewport
+        // rather than occupying a separate top/left ruler gutter.
+        .DigiStudio_CanvasRulers {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            pointer-events: none !important;
+            user-select: none;
+            font-family: var(--dw-ui-font-family);
+
+            .DigiStudio_CanvasRulerX,
+            .DigiStudio_CanvasRulerY {
+                position: absolute;
+                top: 0;
+                left: 0;
+                display: block;
+                box-sizing: border-box;
+                color: @textColor;
+                background: transparent;
+                pointer-events: none;
+            }
+
+            .DigiStudio_CanvasRulerTick {
+                stroke: currentColor;
+                stroke-opacity: 0.55;
+                shape-rendering: crispEdges;
+            }
+
+            .DigiStudio_CanvasRulerLabel {
+                fill: currentColor;
+                fill-opacity: 0.8;
+                font-size: 9px;
+            }
+
+            .DigiStudio_CanvasRulerScreenSpan {
+                stroke: #f7cc00;
+                stroke-width: 1;
+                stroke-dasharray: 4 3;
+                shape-rendering: crispEdges;
+            }
+
+            .DigiStudio_CanvasRulerDimension {
+                fill: #ffd000;
+                font-size: 10px;
+                font-weight: 600;
+            }
+
+            .DigiStudio_CanvasScreenHeight {
+                position: absolute;
+                left: 8px;
+                width: max-content;
+                transform: translateY(-50%);
+                color: #ffd000;
+                font-size: 10px;
+                font-weight: 600;
+                line-height: 14px;
+                text-shadow: 0 1px 2px @workspacePanelBackgroundColor;
+                pointer-events: none;
+            }
+
+            .is-origin .DigiStudio_CanvasRulerTick {
+                stroke: @selectionBackgroundColor;
+                stroke-opacity: 0.95;
+            }
+
+            .is-origin .DigiStudio_CanvasRulerLabel {
+                fill: @selectionBackgroundColor;
+            }
+        }
+
+        // Follow the editable layer under the pointer automatically.
+        .EezStudio_FlowCanvasContainer_AutoPan,
+        .EezStudio_FlowCanvasContainer_AutoPan * {
+            cursor: grab !important;
+        }
+
+        .EezStudio_FlowCanvasContainer_Panning,
+        .EezStudio_FlowCanvasContainer_Panning * {
+            cursor: grabbing !important;
+        }
+
         cursor: default;
 
         & > * {
@@ -2114,23 +2631,30 @@
 
         .EezStudio_FlowEditorSelection_SelectedObject {
             pointer-events: none;
-            border: 1px solid @selectionBackgroundColor;
+            border: 1px solid
+                var(--dw-canvas-selection-primary, @selectionBackgroundColor);
         }
 
         .EezStudio_FlowEditorSelection_BoundingRect {
-            border: 2px solid @selectionBackgroundColor;
+            border: 2px solid
+                var(--dw-canvas-selection-primary, @selectionBackgroundColor);
             box-shadow: 2px 2px 4px rgba(128, 128, 128, 0.4);
         }
 
         .EezStudio_FlowEditorSelection_ResizeHandle {
             position: absolute;
-            background-color: white;
-            border: 1px solid @selectionBackgroundColor;
+            background-color: var(--dw-canvas-selection-handle-fill, #ffffff);
+            border: 1px solid
+                var(
+                    --dw-canvas-selection-handle-border,
+                    var(--dw-canvas-selection-primary, @selectionBackgroundColor)
+                );
         }
 
         .EezStudio_FlowEditorSelection_SelectedObjectsParent {
             pointer-events: none;
-            border: 2px dotted magenta;
+            border: 2px dotted
+                var(--dw-canvas-selection-parent, @selectionBackgroundColor);
         }
 
         .connection-line-path {
@@ -2573,20 +3097,151 @@
     margin: 10px;
 }
 
+// Keep the active page, widget, style, and UI controls on GUI Guider theme4 yellow (#ffb500).
+.EezStudio_ProjectEditor {
+    --bs-primary: #ffb500;
+    --bs-primary-rgb: 255, 181, 0;
+
+    .form-check-input {
+        border-color: #646b7a;
+        background-color: rgba(0, 0, 0, 0.25);
+
+        &:hover:not(:checked) {
+            border-color: var(--digi-accent, #ffb500);
+        }
+    }
+
+    .form-check-input:checked {
+        background-color: var(--digi-accent, #ffb500);
+        border-color: var(--digi-accent, #ffb500);
+    }
+
+    .form-check-input:focus {
+        border-color: var(--digi-accent, #ffb500);
+        box-shadow: 0 0 0 0.15rem rgba(255, 181, 0, 0.25);
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+        border-color: var(--digi-accent, #ffb500);
+        box-shadow: 0 0 0 0.12rem rgba(255, 181, 0, 0.22);
+    }
+
+    .nav-pills .nav-link {
+        font-weight: 500;
+    }
+
+    .nav-pills .nav-link.active,
+    .nav-pills .show > .nav-link {
+        color: #171717;
+        background-color: var(--digi-accent, #ffb500);
+        font-weight: 500;
+    }
+
+    .EezStudio_TabsView > div.EezStudio_Tab.active {
+        background-color: var(--digi-accent, #ffb500);
+        color: #171717;
+        border-bottom-color: #d49b05;
+
+        .EezStudio_Tab_CloseButton,
+        .EezStudio_Icon {
+            color: #171717;
+            fill: #171717;
+        }
+    }
+
+    #seqLineEnd path,
+    #selectedLineEndInViewer path,
+    #timelineAnimationCurveEndMarker path {
+        stroke: var(--digi-accent, #ffb500) !important;
+        fill: var(--digi-accent, #ffb500) !important;
+    }
+}
+
+.EezStudio_ProjectEditor,
+#flexlayout-tab-PAGES,
+#flexlayout-tab-FLOW_STRUCTURE,
+#flexlayout-tab-LVGL_STYLES_EDITOR {
+    .EezStudio_Tree:not(.drag-source) {
+        // GUI Guider theme4 uses 50%-opaque yellow for the hovered tree row.
+        .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover {
+            color: @textColor;
+            background-color: #ffb50080;
+            border-radius: 0;
+            box-shadow: -5px 0 #ffb50080, 5px 0 #ffb50080;
+
+            .tree-row-triangle,
+            .EezStudio_IconAction {
+                color: inherit;
+            }
+
+            .EezStudio_WidgetTreeTrow .EezStudio_IconAction .EezStudio_Icon {
+                fill: currentColor;
+            }
+        }
+
+        .tree-row.selected:not(.drag-source):not(.drop-target) {
+            color: #171717;
+            background-color: var(--digi-accent, #ffb500);
+            border-radius: 0;
+            // Extend the selection through the tree's horizontal padding.
+            box-shadow: -5px 0 var(--digi-accent, #ffb500),
+                5px 0 var(--digi-accent, #ffb500);
+
+            .tree-row-triangle,
+            > .EditIcon,
+            .EezStudio_IconAction {
+                color: inherit;
+            }
+
+            .EezStudio_WidgetTreeTrow .EezStudio_IconAction .EezStudio_Icon {
+                fill: currentColor;
+            }
+        }
+    }
+}
+
 .EezStudio_PageStructure {
     height: 100%;
+    background-color: @workspacePanelBackgroundColor;
 
     .EezStudio_ToolbarHeader {
         min-height: 28px;
+        background-color: @workspacePanelBackgroundColor;
+
+        > .EezStudio_Toolbar {
+            min-height: 28px !important;
+        }
     }
 
     .EezStudio_Tree {
         overflow-x: hidden;
         overflow-y: auto;
+        background-color: @workspacePanelBackgroundColor;
+        color: @workspaceTreeTextColor;
+        font-size: 12px;
     }
 
     .tree-row {
         width: 100%;
+        align-items: center;
+
+        > .tree-row-triangle {
+            flex: 0 0 18px;
+            padding-top: 0;
+            color: @workspaceTreeIconColor;
+        }
+
+        &.selected {
+            > .tree-row-triangle {
+                color: inherit;
+            }
+
+            .EezStudio_WidgetTreeTrow > span > .EezStudio_Icon {
+                color: inherit;
+                fill: currentColor;
+            }
+        }
 
         &:hover {
             .EezStudio_Toolbar {
@@ -2600,6 +3255,35 @@
 
     .EezStudio_WidgetTreeTrow {
         width: 100%;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+
+        > span {
+            min-width: 0;
+            display: inline-flex;
+            align-items: center;
+            line-height: 1.2;
+        }
+
+        // Center 16px symbols inside the existing 18px component icon slot.
+        > span > .material-symbols-outlined,
+        > span > svg.EezStudio_Icon {
+            flex: 0 0 18px;
+            width: 18px !important;
+            height: 18px !important;
+            line-height: 1 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px !important;
+        }
+
+        // Keep component icons brighter than the muted tree labels.
+        > span > .EezStudio_Icon {
+            color: @workspaceTreeIconColor;
+            fill: currentColor;
+        }
 
         &.withIcon {
             .EezStudio_Toolbar {
@@ -2607,6 +3291,87 @@
                 position: static;
                 left: 0;
                 top: 0;
+            }
+        }
+    }
+
+    .tree-hierarchy-guides {
+        .tree-row {
+            min-height: 20px;
+            line-height: 18px;
+
+            > .tree-row-triangle {
+                position: relative;
+                z-index: 1;
+                color: inherit;
+                font-size: 14px !important;
+                line-height: 18px;
+                text-align: center;
+            }
+
+            &.selected .tree-guide {
+                color: #171717;
+            }
+        }
+
+        .tree-guide {
+            position: absolute;
+            z-index: 0;
+            top: 0;
+            bottom: 0;
+            width: 0;
+            color: @workspaceTreeGuideColor;
+            pointer-events: none;
+        }
+
+        .tree-guide-continuation,
+        .tree-guide-children {
+            border-left: 1px solid currentColor;
+        }
+
+        .tree-guide-children {
+            top: calc(50% + 8px);
+        }
+
+        .tree-guide-branch {
+            &::before,
+            &::after {
+                position: absolute;
+                content: "";
+            }
+
+            &::before {
+                top: 0;
+                left: 0;
+                height: 100%;
+                border-left: 1px solid currentColor;
+            }
+
+            &::after {
+                top: 50%;
+                left: 0;
+                width: 9px;
+                border-top: 1px solid currentColor;
+            }
+
+            &.is-last::before {
+                height: 50%;
+            }
+
+            &.is-expandable::before {
+                height: calc(50% - 7px);
+            }
+
+            &.is-expandable::after {
+                top: calc(50% + 7px);
+                bottom: 0;
+                width: 0;
+                border-top: 0;
+                border-left: 1px solid currentColor;
+            }
+
+            &.is-expandable.is-last::after {
+                display: none;
             }
         }
     }
@@ -3259,6 +4024,8 @@
 .EezStudio_LVGLStylesDefinition {
     display: flex;
     width: 100%;
+    margin-top: 4px;
+    border-radius: @borderRadiusSmall;
 
     & > div {
         border: 1px solid @panelBorderColor;
@@ -3266,17 +4033,21 @@
     }
 
     & > div:nth-child(1) {
-        border-top-left-radius: var(--bs-border-radius);
-        border-bottom-left-radius: var(--bs-border-radius);
+        flex: 0 0 132px;
+        min-width: 124px;
+        max-width: 152px;
+        padding: 4px 0;
+        border-top-left-radius: @borderRadiusSmall;
+        border-bottom-left-radius: @borderRadiusSmall;
         overflow-y: auto;
     }
 
     & > div:nth-child(2) {
         border-left: none;
-        border-top-right-radius: var(--bs-border-radius);
-        border-bottom-right-radius: var(--bs-border-radius);
-
-        flex: 1;
+        border-top-right-radius: @borderRadiusSmall;
+        border-bottom-right-radius: @borderRadiusSmall;
+        min-width: 0;
+        flex: 1 1 0;
     }
 
     .EezStudio_SimpleTree {
@@ -3284,25 +4055,41 @@
         padding: 0;
         border: 0;
         .EezStudio_TreeRow {
-            font-size: 85%;
+            display: flex;
+            align-items: center;
+            min-height: 26px;
+            padding: 2px 8px;
+            font-size: 12px;
+            line-height: 20px;
             &.part {
                 cursor: default;
+                font-weight: 600;
                 .EezStudio_TreeRowTriangle {
                     cursor: pointer;
                 }
             }
             &.modified {
-                font-weight: bold;
+                font-weight: 700;
+            }
+            &:not(.part):not(.EezStudio_Selected):hover {
+                background-color: #ffb50080;
+                color: @textColor;
+            }
+            &.EezStudio_Selected {
+                background-color: var(--digi-accent, #ffb500) !important;
+                color: #171717 !important;
             }
         }
 
         .EezStudio_TreeRowEnclosure:not(:first-child) {
             > .EezStudio_TreeRow.part {
-                padding-top: 5px;
+                margin-top: 4px;
+                padding-top: 4px;
+                border-top: 1px solid @panelBorderColor;
             }
 
             .EezStudio_TreeRowLabel {
-                margin-left: 13px;
+                margin-left: 12px;
             }
         }
 
@@ -3314,9 +4101,20 @@
     }
 
     .EezStudio_LVGLStylesDefinition_GroupContainer {
+        border-bottom: 1px solid @panelBorderColor;
+
+        &:last-child {
+            border-bottom: none;
+        }
+
         .EezStudio_LVGLStylesDefinition_GroupName {
             width: 100%;
-            font-size: 85%;
+            min-height: 30px;
+            padding: 4px 10px;
+            gap: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
             text-transform: uppercase;
             &.modified {
                 font-weight: 700;
@@ -3336,32 +4134,55 @@
         }
 
         .EezStudio_LVGLStylesDefinition_GroupProperties {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px 10px 12px;
+            border-top: 1px solid @panelBorderColor;
+
             .EezStudio_LVGLStylesDefinition_Property {
                 &.inError {
                     color: @inErrorTextColor;
                     background-color: @inErrorBackgroundColor;
                 }
-                padding-left: 5px;
-                padding-right: 5px;
+                min-height: 30px;
+                padding: 1px 2px;
                 display: flex;
-                align-items: baseline;
+                align-items: center;
+                column-gap: 10px;
+
                 .EezStudio_LVGLStylesDefinition_Name {
                     white-space: nowrap;
                     overflow: hidden;
                     text-overflow: ellipsis;
-                    width: 33%;
+                    flex: 0 0 34%;
+                    min-width: 106px;
+                    max-width: 144px;
 
                     .form-check-label {
-                        padding: 4px;
+                        padding: 2px 0;
                         width: 100%;
                         overflow: hidden;
                         display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        cursor: pointer;
+
+                        .form-check-input {
+                            margin: 0;
+                            flex-shrink: 0;
+                            width: 14px;
+                            height: 14px;
+                            cursor: pointer;
+                        }
+
                         span {
-                            margin-left: 2px;
-                            font-size: 95%;
+                            margin-left: 0;
+                            font-size: 12px;
+                            line-height: 20px;
                             white-space: nowrap;
-                            //overflow: hidden;
-                            //text-overflow: ellipsis;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
                         }
                     }
                 }
@@ -3369,8 +4190,9 @@
                     input[type="color"] {
                         width: 80px;
                     }
-                    padding-bottom: 2px;
-                    flex: 1;
+                    padding-bottom: 0;
+                    min-width: 0;
+                    flex: 1 1 0;
                 }
             }
         }
@@ -3395,10 +4217,10 @@
     width: 100%;
 
     display: grid;
-    grid-template-columns: auto 1fr auto auto 1fr auto;
+    grid-template-columns: 16px minmax(0, 1fr) auto 16px minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
-    row-gap: 2px;
-    column-gap: 2px;
+    row-gap: 8px;
+    column-gap: 6px;
     align-items: center;
 
     & > div:nth-child(4), & > div:nth-child(10) {
@@ -3406,21 +4228,25 @@
     }
     
     & > div:nth-child(1), & > div:nth-child(4), & > div:nth-child(7), & > div:nth-child(10) {
-        margin-right: 2px;
-        transform: translateY(1px);
+        margin-right: 0;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--bs-secondary-color);
+        text-align: center;
+        transform: none;
     }
 
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .EezStudio_LVGLPageGeometryProperty {
     width: 100%;
 
     display: grid;
-    grid-template-columns: auto 1fr auto 1fr;
+    grid-template-columns: 16px minmax(0, 1fr) 16px minmax(0, 1fr);
     grid-template-rows: auto auto;
-    row-gap: 2px;
-    column-gap: 2px;
+    row-gap: 8px;
+    column-gap: 6px;
     align-items: center;
 
     & > div:nth-child(3), & > div:nth-child(7) {
@@ -3428,25 +4254,33 @@
     }
     
     & > div:nth-child(1), & > div:nth-child(3), & > div:nth-child(5), & > div:nth-child(7) {
-        margin-right: 2px;
-        transform: translateY(1px);
+        margin-right: 0;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--bs-secondary-color);
+        text-align: center;
+        transform: none;
     }
 
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .EezStudio_LVGProperty {
     width: 100%;
     display: flex;
+    align-items: center;
+    gap: 6px;
 
     & > :first-child {
         width: 67%;
+        flex: 1 1 0;
+        min-width: 0;
     }
 
     & > select {
         width: 33%;
-        max-width: 130px;
-        margin-left: 2px;
+        max-width: 120px;
+        margin-left: 0;
     }
 }
 
@@ -3488,14 +4322,22 @@
 
         a {
             color: @textColor;
-            padding: 2px 4px;
+            padding: 2px 6px;
+            border-radius: 2px !important;
+            font-weight: 500;
             &:hover:not(.active) {
-                color: @hoverColor;
-                background-color: @hoverBackgroundColor;
+                color: @textColor;
+                background-color: #ffb50080;
             }
             &.active {
-                color: @selectionColor;
-                background-color: @selectionBackgroundColor;
+                color: #171717;
+                background-color: var(--digi-accent, #ffb500);
+                font-weight: 500;
+
+                .badge {
+                    background-color: rgba(23, 23, 23, 0.78) !important;
+                    color: #ffffff;
+                }
             }
         }
     }
@@ -3970,6 +4812,11 @@
     color: @textColor;
 }
 
+.EezStudio_PropertiesPanel {
+    font-family: var(--dw-ui-font-family);
+    font-size: 12px;
+}
+
 .EezStudio_PropertyGrid {
     flex-grow: 1;
     overflow-x: hidden;
@@ -3978,22 +4825,33 @@
     select,
     input.form-control,
     textarea {
-        padding: 2px 2px 2px 6px;
-        height: 26px;
-        min-height: 31px;
+        padding: 3px 8px;
+        height: 29px;
+        min-height: 29px;
+        font-size: 12.5px;
+        line-height: 21px;
+        border-radius: @borderRadiusSmall;
     }
 
     textarea {
-        padding: 6px 2px 6px 6px;
+        padding: 5px 8px;
+        height: auto;
     }
 
     input[type="color"] {
-        width: 26px;
+        width: 29px;
+        height: 29px;
+        min-height: 29px;
         padding: 2px;
     }
 
     .input-group > button {
-        padding: 2px;
+        padding: 2px 6px;
+        height: 29px;
+        min-height: 29px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     select {
@@ -4003,23 +4861,39 @@
     .form-check {
         margin-bottom: 0;
         min-height: unset;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .form-check-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .form-check-input {
+            margin-top: 0;
+            flex-shrink: 0;
+        }
     }
 
     .form-switch {
         display: inline-flex;
-        align-items: end;
+        align-items: center;
     }
 
     .dropdown-toggle {
-        min-width: 15.39px;
+        min-width: 22px;
     }
 
     & > .EezStudio_PropertyGrid_Group {
         & > .EezStudio_PropertyGrid_Group_Header {
             width: 100%;
+            min-height: 30px;
 
             display: flex;
-            align-items: end;
+            align-items: center;
+            gap: 4px;
 
             background-color: var(--bs-secondary-bg);
             &:hover {
@@ -4032,11 +4906,12 @@
             border-top: 1px solid @borderColor;
             border-bottom: 1px solid @borderColor;
 
-            padding: 3px 0;
+            padding: 4px 10px;
 
-            font-size: 90%;
+            font-size: 11.5px;
+            letter-spacing: 0.02em;
             text-transform: uppercase;
-            font-weight: bold;
+            font-weight: 700;
 
             cursor: pointer;
         }
@@ -4048,7 +4923,7 @@
         }
 
         & > .EezStudio_PropertyGrid_Group_Body {
-            padding: 5px;
+            padding: 10px 10px 12px;
         }
 
         &.collapsed {
@@ -4060,9 +4935,13 @@
 
     & .EezStudio_PropertyGrid_Property {
         display: flex;
-        align-items: baseline;
+        align-items: center;
+        column-gap: 10px;
+        min-height: 30px;
+        width: 100%;
+        box-sizing: border-box;
 
-        margin-bottom: 2px;
+        margin-bottom: 8px;
         &:last-child {
             margin-bottom: 0;
         }
@@ -4072,27 +4951,48 @@
             overflow: hidden;
             text-overflow: ellipsis;
 
-            height: 26px;
-            width: 33%;
+            display: flex;
+            align-items: center;
+            min-height: 28px;
+            line-height: 20px;
+            font-size: 12.5px;
+            flex: 0 0 28%;
+            min-width: 76px;
+            max-width: 132px;
+            width: 28%;
 
             & > .collapsable {
-                transform: translateX(-10px);
+                transform: translateX(-6px);
                 cursor: pointer;
                 &:hover {
-                    background-color: #eee;
+                    background-color: @hoverBackgroundColor;
                 }
             }
         }
 
+        & > .property-name + div {
+            flex: 1 1 0;
+            min-width: 0;
+            width: 100%;
+        }
+
+        & > div:only-child,
         & > .embedded-property-cell {
             width: 100%;
+            min-width: 0;
+            flex: 1 1 100%;
+        }
+
+        & > .embedded-property-cell {
+            width: 100%;
+            min-width: 0;
 
             & > .collapsable > div.collapsable-property-name {
                 margin-top: 4px;
-                transform: translateX(-10px);
+                transform: translateX(-6px);
                 cursor: pointer;
                 &:hover {
-                    background-color: #eee;
+                    background-color: @hoverBackgroundColor;
                 }
             }
         }
@@ -4100,8 +5000,9 @@
         &.inError {
             color: @inErrorTextColor;
             background-color: @inErrorBackgroundColor;
-            padding: 2px;
-            margin: 0;
+            padding: 4px 6px;
+            border-radius: @borderRadiusSmall;
+            margin: 0 0 8px 0;
 
             .form-text {
                 color: @inErrorTextColor;
@@ -4597,26 +5498,56 @@
 }
 
 .EezStudio_ProjectEditor_GroupCheckboxes {
-    display: flex;
-    flex-wrap: wrap;
-    /*
-    margin: 5px 0;
-    */
-    padding: 5px;
-    /*
-    border: 1px solid @borderColor;
-    border-radius: 4px;
-    */
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    width: 100%;
+    box-sizing: border-box;
+    gap: 4px 10px;
+    padding: 8px 10px;
+    margin: 6px 0 10px 0;
+    background-color: @workspaceCanvasBackgroundColor;
+    border: 1px solid @workspacePanelBorderColor;
+    border-radius: 6px;
 
     > .form-check {
-        margin-right: 10px;
-        min-width: 120px;
+        display: flex;
+        align-items: center;
+        margin: 0;
+        padding: 4px 6px;
+        min-width: 0;
+        border-radius: 4px;
+        transition: background-color 0.15s ease, color 0.15s ease;
+
+        &:hover {
+            background-color: rgba(127, 127, 127, 0.1);
+        }
+
+        .form-check-label {
+            display: inline-flex;
+            align-items: center;
+            width: 100%;
+            cursor: pointer;
+            font-size: 11.5px;
+            font-weight: 400;
+            line-height: 1.25;
+            color: @textColor;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            user-select: none;
+        }
+
+        .form-check-input {
+            margin: 0 7px 0 0;
+            flex-shrink: 0;
+            width: 14px;
+            height: 14px;
+            cursor: pointer;
+        }
     }
 
     &.EezStudio_ProjectEditor_GroupCheckboxes_States {
-        > .form-check {
-            min-width: 120px;
-        }
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     }
 }
 
@@ -4659,6 +5590,65 @@
     background-color: @selectionBackgroundColor;
     &:hover {
         background-color: @actionHoverColor;
+    }
+}
+
+// GUI Guider-style stepped zoom: minus | percent dropdown | plus.
+// Overrides only the toolbar presentation; PageZoomButton retains its
+// existing zoom state, preset menu, and global zoom setting.
+.EezStudio_ProjectEditor_ToolbarNav .DigiStudio_GuiderZoomControl {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 2px;
+    height: 28px;
+    padding: 0 4px;
+    border-left: 1px solid @workspacePanelBorderColor;
+    border-right: 1px solid @workspacePanelBorderColor;
+
+    .DigiStudio_GuiderZoomStep,
+    .EezStudio_PageZoomButton {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 26px;
+        min-height: 26px;
+        border: 0;
+        border-radius: 2px;
+        color: @textColor;
+        background-color: transparent;
+        box-shadow: none;
+        line-height: 26px;
+        cursor: pointer;
+
+        &:hover,
+        &:focus-visible {
+            color: @hoverColor;
+            background-color: @hoverBackgroundColor;
+            outline: none;
+        }
+
+        &:disabled {
+            opacity: 0.4;
+            cursor: default;
+            background-color: transparent;
+        }
+    }
+
+    .DigiStudio_GuiderZoomStep {
+        flex: 0 0 27px;
+        width: 27px;
+        padding: 0;
+    }
+
+    .EezStudio_PageZoomButton {
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 64px;
+        padding: 0 5px;
+        font-family: var(--dw-ui-font-family);
+        font-size: 12px;
+        font-weight: 500;
     }
 }
 
@@ -6039,3 +7029,1437 @@
         justify-self: start;
     }
 }
+
+
+// GUIdark only: tool entries live in the upper toolbar and the original
+// left border remains in the FlexLayout model, but is not painted.
+.EezStudio_ProjectEditor_MainContentWrapper {
+    position: relative;
+
+    .DigiStudio_ProjectEditor_ActivityTool {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        border: 0;
+        border-radius: 3px;
+        background: transparent;
+        color: @textColor;
+        cursor: pointer;
+
+        &:hover,
+        &.is-active {
+            background: var(--dw-tab-hover-bg);
+            color: var(--dw-tab-hover-text);
+        }
+    }
+
+    .DigiStudio_ProjectEditor_ActivityPopover {
+        position: absolute;
+        top: 30px;
+        bottom: 0;
+        left: 0;
+        z-index: 130;
+        width: ~"min(560px, 85%)";
+        min-width: 280px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--dw-panel-border);
+        background: var(--dw-panel-bg);
+        box-shadow: 4px 0 16px rgba(0, 0, 0, 0.45);
+    }
+
+    .DigiStudio_ProjectEditor_ActivityPopoverHeader {
+        height: 32px;
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 8px 0 12px;
+        border-bottom: 1px solid var(--dw-panel-border);
+        color: var(--dw-menu-text);
+        background: var(--dw-panel-header-bg);
+
+        button {
+            height: 26px;
+            width: 26px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            color: inherit;
+            background: transparent;
+            cursor: pointer;
+
+            &:hover {
+                background: var(--dw-tab-hover-bg);
+            }
+        }
+    }
+
+    .DigiStudio_ProjectEditor_ActivityPopoverContent {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        background: var(--dw-panel-bg);
+
+        > div {
+            min-height: 100%;
+        }
+    }
+}
+
+// Scoped skin override: sidebars, property inspector and widget lists are
+// black like GUI Guider. Only the actual editor canvas stays charcoal gray.
+// These rules never affect Light, Classic Dark or LVGL widget render colors.
+:root[data-bs-theme="dark"][data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper {
+    background-color: var(--dw-canvas-bg);
+
+    > div:not(.EezStudio_ProjectEditor_ToolbarNav):not(.DigiStudio_ProjectEditor_ActivityPopover),
+    .flexlayout__layout {
+        background-color: var(--dw-canvas-bg);
+    }
+
+    .flexlayout__tabset,
+    .flexlayout__tabset > .flexlayout__tabset_content,
+    .flexlayout__border_tab_contents,
+    .EezStudio_PageStructure,
+    .EezStudio_PageStructure .EezStudio_ToolbarHeader,
+    .EezStudio_PropertiesPanel,
+    .EezStudio_PropertiesPanel_Body {
+        background-color: var(--dw-panel-bg);
+    }
+
+    // Don't apply panel black to the actual editor work area.
+    .flexlayout__tabset:has(.DigiStudio_ProjectEditor_CanvasTabStrip),
+    .flexlayout__tabset:has(.DigiStudio_ProjectEditor_CanvasTabStrip)
+        .flexlayout__tabset_content {
+        background-color: var(--dw-canvas-bg);
+    }
+
+    .flexlayout__border {
+        background-color: var(--dw-panel-header-bg);
+    }
+
+    .DigiStudio_ProjectEditor_ActivityPopover,
+    .DigiStudio_ProjectEditor_ActivityPopoverContent,
+    .DigiStudio_ProjectEditor_ActivityPopover .EezStudio_EmbeddedPlatform {
+        background: var(--dw-panel-bg);
+    }
+
+    .DigiStudio_ProjectEditor_ActivityPopover .EezStudio_EmbeddedPlatform_Header {
+        background: var(--dw-panel-header-bg);
+        border-color: var(--dw-panel-border);
+    }
+
+
+    // Navigation panel headings share the panel surface in the Guider skin;
+    // keep the divider, but remove the separate title-bar background.
+    .EezStudio_ProjectEditor_ListNavigation .EezStudio_Title,
+    .flexlayout__tabset:has(
+            > .DigiStudio_ProjectEditor_NavigationTabStrip
+        ) > .flexlayout__tabset_tabbar_outer {
+        background-color: var(--dw-panel-bg);
+    }
+}
+
+
+// Keep the FlexLayout model inside the real editor viewport. Wide property
+// controls and dock panels must scroll within their columns rather than
+// stretching the whole layout and pushing the right resource tab rail offscreen.
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditorWrapper {
+    min-width: 0;
+    max-width: 100%;
+}
+
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+
+    > div:not(.EezStudio_ProjectEditor_ToolbarNav):not(.DigiStudio_ProjectEditor_ActivityPopover) {
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+
+        > div {
+            min-width: 0;
+            max-width: 100%;
+        }
+    }
+
+    .flexlayout__layout {
+        max-width: 100%;
+    }
+
+    .flexlayout__border_right {
+        // Keep the existing FlexLayout docking/resizing behavior intact.
+        // Only guarantee its tab rail is paintable in the selected skin.
+        visibility: visible;
+    }
+}
+
+// Guider skin: align the existing action group against the start of the
+// actual Styles/Fonts/Bitmaps dock, instead of the central canvas edge.
+// This variable is measured from the rendered FlexLayout panel each resize.
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper
+    > .EezStudio_ProjectEditor_ToolbarNav {
+    padding-right: calc(8px + var(--dw-resource-panel-right, var(--editor-toolbar-right, 32%)));
+}
+
+// GUI Guider workspace: the side panels are genuinely black, not the
+// charcoal canvas surface. Apply this only to the dark project editor;
+// home screens, dialogs, LVGL/WASM rendering and the center canvas keep
+// their existing background colors. The user can still use either dark skin.
+:root[data-bs-theme="dark"] .EezStudio_ProjectEditor_MainContentWrapper {
+    --dw-side-panel-surface: #000000;
+    --dw-side-panel-header: #1c1c1c;
+
+    // FlexLayout wraps each panel in its own painted tab and tabset.
+    // Target only side-panel content; never repaint the editor tabset.
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_ListNavigation),
+    .flexlayout__tabset:has(.EezStudio_PageStructure),
+    .flexlayout__tabset:has(.EezStudio_SubNavigation),
+    .flexlayout__tabset:has(.EezStudio_ComponentsPalette_Enclosure),
+    .flexlayout__tabset:has(.EezStudio_PropertiesPanel),
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_StylesTreeNavigation),
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_LVGLStylesTreeNavigation) {
+        background-color: var(--dw-side-panel-surface);
+
+        > .flexlayout__tabset_content,
+        > .flexlayout__tabset_content > .flexlayout__tab {
+            background-color: var(--dw-side-panel-surface);
+        }
+    }
+
+    // Fonts / Styles / Bitmaps dock can also be hosted in a border tab.
+    .flexlayout__border_left .flexlayout__border_tab_contents,
+    .flexlayout__border_right .flexlayout__border_tab_contents,
+    .flexlayout__border_left .flexlayout__border_tab_contents > .flexlayout__tab,
+    .flexlayout__border_right .flexlayout__border_tab_contents > .flexlayout__tab {
+        background-color: var(--dw-side-panel-surface);
+    }
+
+    // Explicit inner surfaces: these were still inheriting #20252b from
+    // shared panels even when the outer FlexLayout tab was already black.
+    .EezStudio_ProjectEditor_ListNavigation,
+    .EezStudio_ProjectEditor_ListNavigation .EezStudio_Tree,
+    .EezStudio_PageStructure,
+    .EezStudio_PageStructure .EezStudio_Body,
+    .EezStudio_PageStructure .EezStudio_Tree,
+    .EezStudio_PageStructure_NoPageSelected,
+    .EezStudio_SubNavigation,
+    .EezStudio_SubNavigation > div,
+    .EezStudio_ComponentsPalette_Enclosure,
+    .EezStudio_ComponentsPalette,
+    .EezStudio_PropertiesPanel,
+    .EezStudio_PropertiesPanel_Body,
+    .EezStudio_PropertiesPanel_Body .EezStudio_PropertyGrid,
+    .EezStudio_PropertiesPanel_Body .EezStudio_PropertyGrid_NothingSelected,
+    .EezStudio_ProjectEditor_StylesTreeNavigation,
+    .EezStudio_ProjectEditor_LVGLStylesTreeNavigation {
+        background-color: var(--dw-side-panel-surface);
+    }
+
+    // Keep a small hierarchy between section headers and black content.
+    .EezStudio_ProjectEditor_ListNavigation > .EezStudio_Title,
+    .EezStudio_PageStructure .EezStudio_ToolbarHeader,
+    .EezStudio_SubNavigation > .nav,
+    .EezStudio_ComponentsPalette_Enclosure > .EezStudio_Title,
+    .EezStudio_PropertiesPanel > .EezStudio_PropertiesPanel_Header,
+    .EezStudio_PropertyGrid_Group_Header {
+        background-color: #181818;
+        border-color: #2b2b2b;
+    }
+
+    .EezStudio_SearchInput_Container,
+    .EezStudio_PropertyGrid input.form-control,
+    .EezStudio_PropertyGrid select,
+    .EezStudio_PropertyGrid textarea,
+    .EezStudio_PropertyGrid .input-group > button {
+        background-color: #141414;
+        border-color: #333333;
+        color: #d4d4d4;
+    }
+}
+
+// Side-panel tab icons should keep their neutral foreground when another
+// tabset gets focus. Do not force SVG fill: some icons have custom artwork.
+:root[data-bs-theme="dark"] .EezStudio_ProjectEditor_MainContentWrapper {
+    .flexlayout__tabset:has(.EezStudio_PageStructure),
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_ListNavigation),
+    .flexlayout__tabset:has(.EezStudio_SubNavigation),
+    .flexlayout__tabset:has(.EezStudio_ComponentsPalette_Enclosure),
+    .flexlayout__tabset:has(.EezStudio_PropertiesPanel),
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_StylesTreeNavigation),
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_LVGLStylesTreeNavigation) {
+        .flexlayout__tab_button_leading .EezStudio_Icon {
+            color: var(--dw-text-primary) !important;
+            opacity: 1;
+            filter: none;
+        }
+    }
+}
+
+// Panel tab icons always follow their tab label color, in both themes and
+// regardless of which tabset has focus. Status icons (error / warning / info)
+// keep their own semantic color.
+.EezStudio_ProjectEditor_MainContentWrapper .flexlayout__tab_button {
+    .flexlayout__tab_button_leading {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+
+        .EezStudio_Icon:not(.error):not(.warning):not(.info) {
+            color: inherit !important;
+            opacity: 1 !important;
+            filter: none;
+        }
+
+        .material-symbols-outlined.EezStudio_Icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            font-size: 18px !important;
+            line-height: 1 !important;
+        }
+    }
+}
+
+// GUI Guider dark skin: pale-yellow hover states across tool side panels.
+// The active/selected item stays solid gold. Scope these rules to the
+// editor chrome, never to the LVGL/WASM canvas or other application skins.
+:root[data-bs-theme="dark"][data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper {
+
+    // REA theme4 hover: #ffb50080 on the row background only.
+    // Never force fill/color onto nested SVGs or style preview swatches.
+    .EezStudio_ProjectEditor_ListNavigation .EezStudio_Tree .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover,
+    .EezStudio_PageStructure .EezStudio_Tree .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover,
+    .EezStudio_SubNavigation .EezStudio_Tree .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover,
+    .EezStudio_ProjectEditor_StylesTreeNavigation .EezStudio_Tree .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover,
+    .EezStudio_ProjectEditor_LVGLStylesTreeNavigation .EezStudio_Tree .tree-row:not(.selected):not(.drag-source):not(.drop-target):hover,
+    .EezStudio_SimpleTree .EezStudio_TreeRow.selectable:not(.EezStudio_Selected):hover,
+    .EezStudio_List_Selectable > div:not(.EezStudio_Selected):hover {
+        background-color: var(--dw-panel-hover-bg);
+        color: var(--dw-panel-hover-text);
+        border-radius: 0;
+        box-shadow: -5px 0 var(--dw-panel-hover-bg), 5px 0 var(--dw-panel-hover-bg);
+    }
+
+    // Never let the generic nonfocused grey selection override the Guider
+    // gold selection, including after focus moves to another panel.
+    .EezStudio_ProjectEditor_ListNavigation .EezStudio_Tree .tree-row.selected,
+    .EezStudio_PageStructure .EezStudio_Tree .tree-row.selected,
+    .EezStudio_SubNavigation .EezStudio_Tree .tree-row.selected,
+    .EezStudio_ProjectEditor_StylesTreeNavigation .EezStudio_Tree .tree-row.selected,
+    .EezStudio_ProjectEditor_LVGLStylesTreeNavigation .EezStudio_Tree .tree-row.selected,
+    .EezStudio_SimpleTree .EezStudio_TreeRow.EezStudio_Selected,
+    .EezStudio_List_Selectable > div.EezStudio_Selected {
+        background-color: var(--digi-accent, #ffb500);
+        color: #000000;
+        border-radius: 0;
+    }
+
+    // Palette items, category navigation and editable property group headings.
+    .EezStudio_ComponentsPalette_Enclosure .eez-component-palette-item:not(.selected):hover,
+    .EezStudio_SubNavigation > .nav .nav-link:not(.active):hover,
+    .EezStudio_PropertiesPanel .EezStudio_PropertyGrid_Group_Header:hover,
+    .EezStudio_PropertiesPanel .EezStudio_PropertyGrid_Property:not(.inError) > .property-name > .collapsable:hover,
+    .EezStudio_PropertiesPanel .EezStudio_PropertyGrid_Property:not(.inError) .collapsable-property-name:hover {
+        background-color: var(--dw-panel-hover-bg);
+        color: var(--dw-panel-hover-text);
+        filter: none;
+    }
+
+    // Dock tabs within side panels should no longer turn cold grey on hover.
+    .flexlayout__tabset:has(.EezStudio_PageStructure) .flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover,
+    .flexlayout__tabset:has(.EezStudio_ProjectEditor_ListNavigation) .flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover,
+    .flexlayout__tabset:has(.EezStudio_ComponentsPalette_Enclosure) .flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover,
+    .flexlayout__tabset:has(.EezStudio_PropertiesPanel) .flexlayout__tab_button:not(.flexlayout__tab_button--selected):hover {
+        background-color: var(--dw-panel-hover-bg);
+        color: var(--dw-panel-hover-text);
+    }
+}
+// GUI Guider ordering. Only presentation order changes: existing React
+// buttons, handlers, disabled conditions and keyboard shortcuts stay intact.
+// Flatten the EditorButtons layout box so its existing action groups can be
+// interleaved with Save/Undo/Redo and Run without duplicating controls.
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper
+    > .EezStudio_ProjectEditor_ToolbarNav {
+    .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+        gap: 4px;
+
+        > * {
+            order: 85;
+            flex-shrink: 0;
+        }
+
+        > .EezStudio_ProjectEditor_WorkspaceSwitcher {
+            order: 0;
+        }
+
+        > .DigiStudio_ProjectEditor_ActivityTool {
+            order: 5;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_PrimaryEditActions {
+            order: 20;
+        }
+
+        // The component owns no click handlers on its wrapping element.
+        // Its children remain the original enabled/disabled action controls.
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons {
+            display: contents;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons > * {
+            order: 44;
+            flex: 0 0 auto;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderTools_CopyPaste {
+            order: 10;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderTools_Scrapbook {
+            order: 15;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderTools_ViewMode,
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderTools_CanvasView {
+            order: 30;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderZoomControl {
+            order: 35;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_EditorButtons
+            > .DigiStudio_GuiderTools_CheckBuild {
+            order: 50;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
+            order: 60;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_FlowRuntimeControls {
+            order: 90;
+        }
+    }
+}
+
+// Top navigation must read as a single contiguous strip. The toolbar's
+// generic 10px gap used to split Home from Pages; retain breathing room only
+// after the final navigation tab. Keep the active state visible under hover.
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper
+    > .EezStudio_ProjectEditor_ToolbarNav {
+    column-gap: 0;
+    padding-left: 0;
+
+    > .DigiStudio_ProjectEditor_HomeButton {
+        align-self: stretch;
+        border-right: 1px solid var(--dw-tab-border);
+    }
+
+    // DropdownIconAction renders a .dropdown wrapper around the button.
+    // Keep the workspace launcher flush between Home and the page tabs.
+    > .dropdown:has(> .EezStudio_ProjectEditor_WorkspaceSwitcher) {
+        display: flex;
+        flex: 0 0 34px;
+        align-self: stretch;
+        align-items: center;
+        width: 34px;
+        height: 30px;
+        margin: 0;
+        padding: 0;
+        background-color: var(--dw-tab-bg);
+        border-right: 1px solid var(--dw-tab-border);
+
+        > .EezStudio_ProjectEditor_WorkspaceSwitcher {
+            display: inline-flex;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            min-height: 0;
+            margin: 0;
+            padding: 0;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 0;
+            color: var(--dw-tab-text);
+            background: transparent;
+            cursor: pointer;
+
+            &:hover,
+            &:focus-visible,
+            &[aria-expanded="true"] {
+                color: var(--dw-tab-hover-text);
+                background-color: var(--dw-tab-hover-bg);
+                outline: none;
+            }
+        }
+
+        > .dropdown-menu {
+            width: 360px;
+            min-width: 280px;
+            max-width: min(360px, calc(100vw - 24px));
+            margin-top: 0;
+            padding: 5px;
+            color: var(--dw-menu-text);
+            background-color: var(--dw-menu-bg);
+            border: 1px solid var(--dw-menu-border);
+            border-radius: 3px;
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+            z-index: 130;
+
+            .EezStudio_ProjectEditor_WorkspaceMenu {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                width: 100%;
+                min-width: 0;
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuHeader {
+                min-height: 28px;
+                padding: 5px 9px 4px;
+                color: var(--dw-menu-title);
+                font-size: 11px;
+                font-weight: 600;
+                line-height: 18px;
+                letter-spacing: 0.2px;
+                text-transform: uppercase;
+                border-bottom: 1px solid var(--dw-panel-border);
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuRow {
+                display: flex;
+                flex-flow: row nowrap;
+                align-items: center;
+                gap: 2px;
+                width: 100%;
+                min-width: 0;
+                min-height: 34px;
+                border-radius: 2px;
+
+                &:hover {
+                    background-color: var(--dw-panel-hover-bg);
+                }
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuItem,
+            .EezStudio_ProjectEditor_WorkspaceMenuItem.dropdown-item {
+                display: flex;
+                flex: 1 1 0;
+                align-items: center;
+                gap: 8px;
+                width: auto;
+                min-width: 0;
+                min-height: 34px;
+                margin: 0;
+                padding: 0 9px;
+                overflow: hidden;
+                color: var(--dw-menu-text);
+                background: transparent;
+                border: 0;
+                border-radius: 2px;
+                font-size: 13px;
+                line-height: 18px;
+                text-align: left;
+                white-space: nowrap;
+
+                > .EezStudio_Icon {
+                    flex: 0 0 auto;
+                }
+
+                > span {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                > .EezStudio_Icon:last-child {
+                    flex: 0 0 auto;
+                    margin-left: auto;
+                }
+
+                &:hover,
+                &:focus-visible {
+                    color: var(--dw-panel-hover-text);
+                    background-color: var(--dw-panel-hover-bg);
+                    outline: none;
+                }
+
+                &.active,
+                &.active:hover,
+                &:active {
+                    color: #171717;
+                    background-color: var(--digi-accent, #ffb500);
+                }
+            }
+
+            .EezStudio_ProjectEditor_WorkspaceMenuClose {
+                appearance: none;
+                display: inline-flex;
+                flex: 0 0 26px;
+                align-items: center;
+                justify-content: center;
+                width: 26px;
+                min-width: 26px;
+                height: 26px;
+                min-height: 26px;
+                margin: 0 3px 0 0;
+                padding: 0;
+                color: var(--dw-menu-text);
+                background: transparent;
+                border: 0;
+                border-radius: 2px;
+                box-shadow: none;
+                line-height: 1;
+                cursor: pointer;
+
+                &:hover,
+                &:focus-visible {
+                    color: #171717;
+                    background-color: var(--dw-panel-hover-bg);
+                    outline: none;
+                }
+
+                &:focus-visible {
+                    box-shadow: inset 0 0 0 1px var(--dw-tab-indicator);
+                }
+            }
+        }
+    }
+
+    > .DigiStudio_ProjectEditor_TopPageNavigation {
+        align-self: stretch;
+        gap: 0;
+        margin-left: 0;
+        margin-right: 10px;
+    }
+
+    .DigiStudio_ProjectEditor_TopPageNavigationTab {
+        &.is-active,
+        &.is-active:hover,
+        &.is-active:focus-visible {
+            color: var(--dw-tab-active-text);
+            background-color: var(--dw-tab-active-bg);
+            border-bottom-color: var(--dw-tab-indicator);
+        }
+    }
+}
+
+// Align Styles tree SVG and font icons with the actual text center.
+.EezStudio_ProjectEditor_LVGLStylesTreeNavigation {
+    .EezStudio_LVGLStyleTreeRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 24px;
+        padding-right: 10px;
+    }
+
+    .EezStudio_LVGLStyleTreeItemLabel {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        height: 24px;
+        line-height: 1;
+    }
+
+    .EezStudio_LVGLStyleTreeItemIconSlot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 18px;
+        width: 18px;
+        height: 18px;
+        line-height: 1;
+    }
+
+    .EezStudio_LVGLStyleTreeItemIcon,
+    .EezStudio_LVGLStyleTreeItemIconSlot > .EezStudio_Icon,
+    .EezStudio_LVGLStyleTreeItemIconSlot > .material-symbols-outlined,
+    .EezStudio_LVGLStyleTreeItemIconSlot > svg,
+    .EezStudio_LVGLStyleTreeItemIconSlot > img {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 16px;
+        width: 16px !important;
+        height: 16px !important;
+        font-size: 16px !important;
+        line-height: 1 !important;
+        padding: 0;
+        margin: 0 !important;
+        opacity: 0.82;
+        vertical-align: middle;
+    }
+
+    .EezStudio_LVGLStyleTreeItemName {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        height: 18px;
+        line-height: 18px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        transform: translateY(0.5px);
+    }
+
+    .EezStudio_LVGLStyleTreeItemMeta {
+        display: inline-flex;
+        align-items: center;
+        font-size: 11px;
+        line-height: 1;
+        opacity: 0.78;
+        flex-shrink: 0;
+        margin-left: 6px;
+    }
+}
+
+// Keep style/resource tree icons and labels on the same vertical centerline
+// in every workspace skin (not only the Guider density preset).
+.EezStudio_ProjectEditor_StylesTreeNavigation .EezStudio_Tree .tree-row,
+.EezStudio_ProjectEditor_LVGLStylesTreeNavigation .EezStudio_Tree .tree-row {
+    display: flex;
+    align-items: center;
+
+    > span {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        line-height: normal;
+    }
+
+    > .tree-row-triangle,
+    > .EditIcon {
+        display: block;
+        flex: 0 0 auto;
+        align-self: center;
+        vertical-align: middle;
+        margin-top: 0;
+        padding-top: 0;
+    }
+}
+
+// Shared GUI Guider workspace tree density, independent of color theme.
+// .ant-tree-node-content-wrapper: min-height/line-height 24px;
+// .ant-tree-treenode: padding-bottom 4px (28px row pitch).
+// The center canvas, property inputs and component palette stay untouched.
+:root[data-workspace-skin="guider"]
+    .EezStudio_ProjectEditor_MainContentWrapper {
+    --dw-tree-row-height: 24px;
+    --dw-tree-row-gap: 4px;
+
+    .EezStudio_ProjectEditor_ListNavigation .EezStudio_Tree .tree-row,
+    .EezStudio_PageStructure .EezStudio_Tree .tree-row,
+    .EezStudio_SubNavigation .EezStudio_Tree .tree-row,
+    .EezStudio_ProjectEditor_StylesTreeNavigation .EezStudio_Tree .tree-row,
+    .EezStudio_ProjectEditor_LVGLStylesTreeNavigation .EezStudio_Tree .tree-row {
+        box-sizing: border-box;
+        height: var(--dw-tree-row-height);
+        min-height: var(--dw-tree-row-height);
+        line-height: var(--dw-tree-row-height);
+        margin-bottom: var(--dw-tree-row-gap);
+        padding-top: 0;
+        padding-bottom: 0;
+        display: flex;
+        align-items: center;
+        border-radius: 0;
+
+        // Keep label and disclosure icons vertically centered without
+        // recoloring or changing SVG fill; icons can have custom artwork.
+        > span {
+            min-height: var(--dw-tree-row-height);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        > .tree-row-triangle,
+        > .EditIcon {
+            align-self: center;
+            padding-top: 0;
+            margin-top: 0;
+        }
+    }
+
+    // Guide lines must bridge the 4px spacing between 24px rows.
+    // Junctions remain at the 12px row center, aligned with the arrow.
+    .EezStudio_PageStructure .EezStudio_Tree.tree-hierarchy-guides {
+        .tree-row {
+            > .tree-guide-continuation,
+            > .tree-guide-children {
+                bottom: calc(-1 * var(--dw-tree-row-gap));
+            }
+
+            > .tree-guide-branch {
+                // Non-last siblings continue all the way to the next row.
+                &::before {
+                    height: calc(100% + var(--dw-tree-row-gap));
+                }
+
+                // Last sibling terminates at the middle of its own row.
+                &.is-last::before {
+                    height: 50%;
+                }
+
+                // Keep the disclosure icon unobstructed.
+                &.is-expandable::before {
+                    height: calc(50% - 7px);
+                }
+
+                &.is-expandable::after {
+                    bottom: calc(-1 * var(--dw-tree-row-gap));
+                }
+
+                &.is-expandable.is-last::after {
+                    display: none;
+                }
+            }
+        }
+    }
+}
+
+
+// Redesigned LVGL New Style Modal Dialog
+.EezStudio_LVGLNewStyleDialog {
+    max-width: 560px;
+    width: 92vw;
+
+    .modal-content {
+        background-color: var(--bs-body-bg, #181818);
+        border: 1px solid var(--bs-border-color, #2e2e2e);
+        border-radius: 6px;
+        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        background-color: var(--bs-secondary-bg, #202020);
+        border-bottom: 1px solid var(--bs-border-color, #2e2e2e);
+        padding: 12px 18px;
+
+        .modal-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--dw-text-primary, #e3e3e3);
+            letter-spacing: 0.01em;
+        }
+    }
+
+    .modal-body {
+        padding: 16px 18px;
+    }
+
+    .modal-footer {
+        background-color: var(--bs-secondary-bg, #202020);
+        border-top: 1px solid var(--bs-border-color, #2e2e2e);
+        padding: 10px 18px;
+        gap: 8px;
+
+        .btn {
+            min-width: 84px;
+            height: 32px;
+            padding: 0 14px;
+            font-size: 12.5px;
+            font-weight: 600;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_Body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.EezStudio_LVGLNewStyleDialog_Section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.EezStudio_LVGLNewStyleDialog_LabelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 24px;
+}
+
+.EezStudio_LVGLNewStyleDialog_Label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--dw-text-primary, #e3e3e3);
+    margin: 0;
+
+    .required-star {
+        color: var(--digi-accent, #ffb500);
+        margin-left: 4px;
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_NameInput {
+    height: 34px;
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 4px !important;
+    background-color: var(--bs-secondary-bg, #1f1f1f) !important;
+    border: 1px solid var(--bs-border-color, #343434) !important;
+    color: var(--dw-text-primary, #e3e3e3) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+
+    &::placeholder {
+        color: var(--dw-text-muted, #808080);
+    }
+
+    &:focus {
+        border-color: var(--digi-accent, #ffb500) !important;
+        box-shadow: 0 0 0 2px rgba(255, 181, 0, 0.2) !important;
+        outline: none !important;
+    }
+
+    &.is-invalid {
+        border-color: #dc3545 !important;
+        background-image: none !important;
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_Error {
+    font-size: 11.5px;
+    color: #e55353;
+    margin-top: -2px;
+}
+
+.EezStudio_LVGLNewStyleDialog_SelectedBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background-color: rgba(255, 181, 0, 0.15);
+    border: 1px solid rgba(255, 181, 0, 0.45);
+    color: var(--dw-text-primary, #e3e3e3);
+
+    .badge-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        line-height: 1;
+        color: var(--digi-accent, #ffb500);
+
+        .EezStudio_Icon,
+        .material-symbols-outlined,
+        svg,
+        img {
+            width: 15px !important;
+            height: 15px !important;
+            font-size: 15px !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_Toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.EezStudio_LVGLNewStyleDialog_Categories {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background-color: var(--bs-secondary-bg, #1f1f1f);
+    border: 1px solid var(--bs-border-color, #303030);
+    border-radius: 4px;
+    padding: 2px;
+}
+
+.EezStudio_LVGLNewStyleDialog_CategoryBtn {
+    border: none;
+    background: transparent;
+    color: var(--dw-text-secondary, #a8a8a8);
+    font-size: 11.5px;
+    font-weight: 500;
+    padding: 4px 9px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+
+    .cat-count {
+        font-size: 10.5px;
+        opacity: 0.7;
+    }
+
+    &:hover:not(.active) {
+        color: var(--dw-text-primary, #e3e3e3);
+        background-color: rgba(255, 181, 0, 0.12);
+    }
+
+    &.active {
+        background-color: var(--digi-accent, #ffb500);
+        color: #171717;
+        font-weight: 600;
+
+        .cat-count {
+            opacity: 0.85;
+        }
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_SearchBox {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 150px;
+    max-width: 190px;
+
+    .search-icon {
+        position: absolute;
+        left: 8px;
+        color: var(--dw-text-muted, #808080);
+        pointer-events: none;
+    }
+
+    .EezStudio_LVGLNewStyleDialog_SearchInput {
+        width: 100%;
+        height: 28px;
+        padding: 2px 24px 2px 28px;
+        font-size: 12px;
+        border-radius: 4px;
+        background-color: var(--bs-secondary-bg, #1f1f1f);
+        border: 1px solid var(--bs-border-color, #303030);
+        color: var(--dw-text-primary, #e3e3e3);
+
+        &::placeholder {
+            color: var(--dw-text-muted, #808080);
+        }
+
+        &:focus {
+            border-color: var(--digi-accent, #ffb500);
+            outline: none;
+        }
+    }
+
+    .clear-btn {
+        position: absolute;
+        right: 4px;
+        border: none;
+        background: transparent;
+        color: var(--dw-text-secondary, #a0a0a0);
+        font-size: 14px;
+        line-height: 1;
+        padding: 2px 5px;
+        cursor: pointer;
+
+        &:hover {
+            color: var(--dw-text-primary, #ffffff);
+        }
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_WidgetGridContainer {
+    height: 270px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px;
+    border-radius: 5px;
+    background-color: var(--bs-secondary-bg, #1b1b1b);
+    border: 1px solid var(--bs-border-color, #2d2d2d);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    &::-webkit-scrollbar {
+        width: 6px;
+    }
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+        background-color: rgba(128, 128, 128, 0.35);
+        border-radius: 3px;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(128, 128, 128, 0.55);
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_Group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.EezStudio_LVGLNewStyleDialog_GroupHeader {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--dw-text-secondary, #9a9a9a);
+    padding-left: 2px;
+}
+
+.EezStudio_LVGLNewStyleDialog_WidgetGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.EezStudio_LVGLNewStyleDialog_WidgetCard {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 4px;
+    background-color: var(--bs-body-bg, #141414);
+    border: 1px solid var(--bs-border-color, #2c2c2c);
+    color: var(--dw-text-primary, #e3e3e3);
+    font-size: 12px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+
+    .EezStudio_LVGLNewStyleDialog_WidgetIcon {
+        width: 18px;
+        height: 18px;
+        flex: 0 0 18px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        color: var(--dw-text-secondary, #b0b0b0);
+
+        .EezStudio_Icon,
+        .material-symbols-outlined,
+        svg,
+        img {
+            width: 16px !important;
+            height: 16px !important;
+            font-size: 16px !important;
+            line-height: 1 !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+    }
+
+    .EezStudio_LVGLNewStyleDialog_WidgetLabel {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .EezStudio_LVGLNewStyleDialog_SelectedDot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: var(--digi-accent, #ffb500);
+        flex: 0 0 6px;
+    }
+
+    &:hover:not(.selected) {
+        border-color: rgba(255, 181, 0, 0.55);
+        background-color: rgba(255, 181, 0, 0.08);
+
+        .EezStudio_LVGLNewStyleDialog_WidgetIcon {
+            color: var(--dw-text-primary, #ffffff);
+        }
+    }
+
+    &.selected {
+        border-color: var(--digi-accent, #ffb500);
+        background-color: rgba(255, 181, 0, 0.16);
+        font-weight: 600;
+
+        .EezStudio_LVGLNewStyleDialog_WidgetIcon {
+            color: var(--digi-accent, #ffb500);
+        }
+    }
+}
+
+.EezStudio_LVGLNewStyleDialog_Empty {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12.5px;
+    color: var(--dw-text-muted, #888888);
+}
+
+.EezStudio_LVGLNewStyleDialog_LockedNotice {
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    background-color: var(--bs-secondary-bg, #1f1f1f);
+    border: 1px solid var(--bs-border-color, #303030);
+    color: var(--dw-text-secondary, #b0b0b0);
+}
+
+// [SIDE-DOCK-STYLE-A:START]
+// Style A: Upright Icon + Horizontal Label with solid amber active background (no side border)
+.EezStudio_ProjectEditor_MainContentWrapper {
+    .flexlayout__border_left,
+    .flexlayout__border_right {
+        border-color: var(--dw-panel-border, #292929);
+
+        .flexlayout__border_inner {
+            width: 56px !important;
+            overflow-x: hidden !important;
+            overflow-y: auto !important;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .flexlayout__border_inner_tab_container {
+            position: static !important;
+            left: 0 !important;
+            right: auto !important;
+            top: 0 !important;
+            transform: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            width: 100% !important;
+            padding: 6px 0 !important;
+            gap: 4px !important;
+        }
+
+        .flexlayout__border_tab_divider,
+        .flexlayout__border_button_trailing {
+            display: none !important;
+        }
+
+        .flexlayout__border_button {
+            width: 48px !important;
+            min-width: 48px !important;
+            min-height: 44px !important;
+            margin: 0 !important;
+            padding: 6px 2px !important;
+            border-radius: var(--bs-border-radius, 2px) !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 4px !important;
+            position: relative;
+            box-shadow: none !important;
+            transition:
+                background-color 0.14s ease,
+                color 0.14s ease;
+
+            .flexlayout__border_button_leading {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 18px !important;
+                height: 18px !important;
+                flex: 0 0 18px !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                line-height: 1 !important;
+                transform: none !important;
+
+                .EezStudio_Icon,
+                .material-symbols-outlined,
+                svg,
+                img {
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    width: 18px !important;
+                    height: 18px !important;
+                    font-size: 18px !important;
+                    line-height: 1 !important;
+                    margin: 0 !important;
+                    color: inherit !important;
+                    opacity: 1 !important;
+                    filter: none;
+                    font-variation-settings: "FILL" 0, "wght" 500, "GRAD" 25, "opsz" 20 !important;
+                }
+            }
+
+            .flexlayout__border_button_content {
+                display: block !important;
+                max-width: 46px !important;
+                font-size: 10.5px !important;
+                line-height: 1.15 !important;
+                text-align: center !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+                letter-spacing: 0.01em !important;
+            }
+        }
+
+        .flexlayout__border_button--unselected {
+            background-color: transparent !important;
+            color: #9a9a9a !important;
+            box-shadow: none !important;
+
+            &:hover {
+                background-color: rgba(255, 181, 0, 0.16) !important;
+                color: #f0f0f0 !important;
+            }
+        }
+
+        .flexlayout__border_button--selected {
+            background-color: var(--digi-accent, #ffb500) !important;
+            color: #171717 !important;
+            font-weight: 600 !important;
+            box-shadow: none !important;
+
+            .flexlayout__border_button_leading {
+                color: #171717 !important;
+
+                .EezStudio_Icon,
+                .material-symbols-outlined {
+                    font-variation-settings: "FILL" 0, "wght" 650, "GRAD" 50, "opsz" 20 !important;
+                }
+            }
+        }
+    }
+}
+
+:root[data-bs-theme="light"] .EezStudio_ProjectEditor_MainContentWrapper {
+    .flexlayout__border_left,
+    .flexlayout__border_right {
+        .flexlayout__border_button--unselected {
+            color: #5f6670 !important;
+
+            &:hover {
+                background-color: rgba(255, 181, 0, 0.18) !important;
+                color: #1d2127 !important;
+            }
+        }
+
+        .flexlayout__border_button--selected {
+            background-color: var(--digi-accent, #ffb500) !important;
+            color: #171717 !important;
+            box-shadow: none !important;
+
+            .flexlayout__border_button_leading {
+                color: #171717 !important;
+            }
+        }
+    }
+}
+
+// Prevent toolbar right group icons from overlapping left page navigation tabs on narrow windows
+.EezStudio_ProjectEditor_MainContentWrapper > .EezStudio_ProjectEditor_ToolbarNav {
+    > .DigiStudio_ProjectEditor_TopPageNavigation {
+        flex: 0 1 330px !important;
+        width: 330px !important;
+        min-width: 186px !important;
+        max-width: 330px !important;
+        position: relative;
+        z-index: 2;
+
+        .DigiStudio_ProjectEditor_TopPageNavigationTab {
+            flex: 1 1 110px !important;
+            width: auto !important;
+            min-width: 62px !important;
+            max-width: 110px !important;
+        }
+    }
+
+    > .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        justify-content: safe flex-end !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+    }
+}
+
+@media (max-width: 1360px) {
+    .EezStudio_ProjectEditor_MainContentWrapper > .EezStudio_ProjectEditor_ToolbarNav {
+        > .DigiStudio_ProjectEditor_TopPageNavigation {
+            margin-right: 4px !important;
+        }
+
+        > .EezStudio_ProjectEditor_ToolbarNav_RightGroup {
+            gap: 2px !important;
+
+            .EezStudio_ProjectEditor_ToolbarNav_PrimaryEditActions {
+                padding-right: 4px !important;
+                gap: 2px !important;
+            }
+
+            .EezStudio_ProjectEditor_ToolbarNav_EditorButtons > .btn-group:not(:last-child)::after {
+                margin: 0 3px !important;
+            }
+
+            .EezStudio_ProjectEditor_ToolbarNav_RunEditSwitchControls {
+                gap: 3px !important;
+
+                .EezStudio_ProjectEditor_ToolbarNav_FirmwareControls {
+                    margin-right: 2px !important;
+                    padding-right: 4px !important;
+                    gap: 2px !important;
+                }
+            }
+        }
+    }
+}
+// [SIDE-DOCK-STYLE-A:END]

@@ -14,6 +14,22 @@ const bundleRoot = path.join(projectRoot, "resources/project-templates");
 const manifest = JSON.parse(fs.readFileSync(
     path.join(bundleRoot, "TEMPLATE-SOURCES.json"), "utf8"
 ));
+// Windows checkouts may convert text templates from LF to CRLF. Validate
+// the canonical bytes recorded by the manifest without relaxing SHA-256 checks.
+function readVerifiedResource(filePath, resource) {
+    const original = fs.readFileSync(filePath);
+    if (crypto.createHash("sha256").update(original).digest("hex") === resource.sha256) {
+        return original;
+    }
+    if (/\.(?:eez-project|txt|json|md|js)$/i.test(resource.path)) {
+        const canonical = Buffer.from(original.toString("utf8").replace(/\r\n/g, "\n"));
+        if (crypto.createHash("sha256").update(canonical).digest("hex") === resource.sha256) {
+            return canonical;
+        }
+    }
+    return original;
+}
+
 assert.equal(manifest.upstream_license, "MIT");
 assert.equal(manifest.resources.length, 13);
 assert.equal(manifest.firmware_dependencies.license, "GPL-3.0");
@@ -26,7 +42,7 @@ assert.match(
     /GNU GENERAL PUBLIC LICENSE/
 );
 for (const resource of manifest.firmware_dependencies.resources) {
-    const bytes = fs.readFileSync(path.join(bundleRoot, resource.path));
+    const bytes = readVerifiedResource(path.join(bundleRoot, resource.path), resource);
     assert.equal(bytes.length, resource.bytes);
     assert.equal(
         crypto.createHash("sha256").update(bytes).digest("hex"),
@@ -57,7 +73,7 @@ for (const resource of manifest.resources) {
     const actual = resolveProjectTemplateFile(
         resource.path, undefined, undefined, projectRoot
     );
-    const bytes = fs.readFileSync(actual);
+    const bytes = readVerifiedResource(actual, resource);
     assert.equal(bytes.length, resource.bytes);
     assert.equal(
         crypto.createHash("sha256").update(bytes).digest("hex"),

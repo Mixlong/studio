@@ -59,7 +59,7 @@ async function getExtraResource() {
     ];
 }
 
-const productName = "DigiStudio";
+const productName = "DigiwiseStudio";
 const defaultUpdateUrl =
     "https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStudio";
 const updateUrl = process.env.EEZ_UPDATE_URL?.trim() || defaultUpdateUrl;
@@ -119,7 +119,7 @@ files.push(
 
 (async function () {
     const config: any = {
-        appId: "hr.envox.eez.studio",
+        appId: "com.digiwise.studio",
         copyright: "Copyright © 2022 Envox d.o.o.",
         productName,
 
@@ -147,20 +147,7 @@ files.push(
 
         extraResources: await getExtraResource(),
 
-        fileAssociations: [
-            {
-                ext: "eez-project",
-                name: "DigiStudio Project",
-                role: "Editor",
-                mimeType: "application/x-eez-project"
-            },
-            {
-                ext: "eez-dashboard",
-                name: "EEZ Dashboard",
-                role: "Editor",
-                mimeType: "application/x-eez-dashboard"
-            }
-        ],
+        // Do not claim official EEZ Studio project file associations.
 
         mac: {
             artifactName: "${productName}-${version}-${arch}.${ext}",
@@ -242,7 +229,7 @@ files.push(
             category: "Utility",
             synopsis: packageJson.description,
             description:
-                "DigiStudio is a cross-platform low-code tool for embedded GUIs. Built-in EEZ Flow enables the creation of complex scenarios for test and measurement automation, and the Instruments feature offers remote control of multiple T&M equipment.",
+                "DigiwiseStudio is a cross-platform low-code tool for embedded GUIs. Built-in EEZ Flow enables the creation of complex scenarios for test and measurement automation, and the Instruments feature offers remote control of multiple T&M equipment.",
             mimeTypes: ["application/x-eez-project"]
         }
     };
