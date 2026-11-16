@@ -6,7 +6,6 @@ import * as os from "os";
 import { createHash, randomBytes, timingSafeEqual } from "crypto";
 import { getLocale, settings } from "main/settings";
 import { getDigiwiseAuthGuard } from "main/digiwise-auth";
-import { createMcpProject, CreateProjectRequest } from "./create-project";
 import { showMcpApproval } from "./approval-dialog";
 import {
     MCP_MAX_REQUEST_BYTES,
@@ -477,34 +476,6 @@ export async function startMcpServer(
                     if (centralGrant) centralWriteGrantKey = centralKey(centralGrant);
                 }
                 socket.setTimeout(WRITE_TIMEOUT_MS + 3_000);
-            }
-            // New-project creation belongs in Electron main: no active
-            // ProjectStore exists yet. It uses bundled wizard templates,
-            // exclusive file creation, and the same local write permission.
-            if (input.tool === "create_project") {
-                try {
-                    const result = await createMcpProject(
-                        input.args as CreateProjectRequest, window
-                    );
-                    send(socket, { id: input.id, ok: true, result });
-                } catch (error) {
-                    const candidate = error as { code?: string };
-                    const code = candidate?.code;
-                    send(socket, {
-                        id: input.id,
-                        ok: false,
-                        error: mcpReadError(
-                            code === "INVALID_ARGUMENT" || code === "INVALID_STATE"
-                                ? code : "INTERNAL_ERROR",
-                            code === "INVALID_ARGUMENT" || code === "INVALID_STATE"
-                                ? (error as Error).message
-                                : "Unable to create the requested LVGL project"
-                        )
-                    });
-                } finally {
-                    writeApprovalPending = false;
-                }
-                return;
             }
             const request: McpRendererRequest = {
                 id: input.id,

@@ -1088,6 +1088,7 @@ const TemplateSettings = observer(
 ////////////////////////////////////////////////////////////////////////////////
 
 interface McpSettingsState {
+    modelId: string;
     enabled: boolean;
     loading: boolean;
     busy: boolean;
@@ -1097,6 +1098,7 @@ interface McpSettingsState {
 
 class McpSettings extends React.Component<{}, McpSettingsState> {
     state: McpSettingsState = {
+        modelId: "",
         enabled: false,
         loading: true,
         busy: false,
@@ -1189,6 +1191,37 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
         }
     };
 
+    createBoundProject = async () => {
+        const modelId = Number(this.state.modelId);
+        if (this.state.busy || !this.state.enabled ||
+            !Number.isSafeInteger(modelId) || modelId <= 0) {
+            this.setState({
+                error: true,
+                message: isChineseLocale() ? "请输入已授权的有效型号 ID" :
+                    "Enter a valid authorized model ID"
+            });
+            return;
+        }
+        this.setState({ busy: true, message: "", error: false });
+        try {
+            const result: { created?: boolean; canceled?: boolean; projectPath?: string } =
+                await ipcRenderer.invoke("digistudio:mcp:create-bound-project", modelId);
+            if (this.mounted) this.setState({
+                message: result.created
+                    ? (isChineseLocale()
+                        ? "工程已创建并绑定；每次 MCP 操作都需后台在线授权。"
+                        : "New project bound; every MCP operation requires online authorization.")
+                    : (isChineseLocale() ? "已取消创建工程" : "Project creation canceled")
+            });
+        } catch (error) {
+            if (this.mounted) this.setState({
+                error: true, message: (error as Error).message
+            });
+        } finally {
+            if (this.mounted) this.setState({ busy: false });
+        }
+    };
+
     render() {
         const isChinese = isChineseLocale();
         const { enabled, loading, busy, message, error } = this.state;
@@ -1230,10 +1263,30 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
                         {isChinese ? "一键添加到 Codex" : "Add to Codex"}
                     </button>
                 </div>
+                <div className="settings-input-with-button">
+                    <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={this.state.modelId}
+                        disabled={loading || busy}
+                        placeholder={isChinese ? "已授权型号 ID" : "Authorized model ID"}
+                        aria-label={isChinese ? "已授权型号 ID" : "Authorized model ID"}
+                        onChange={event => this.setState({ modelId: event.target.value })}
+                    />
+                    <button
+                        type="button"
+                        className="settings-action-btn"
+                        disabled={!enabled || busy || loading}
+                        onClick={this.createBoundProject}
+                    >
+                        {isChinese ? "创建并绑定新工程" : "Create and bind new project"}
+                    </button>
+                </div>
                 <p className="settings-mcp-hint">
                     {isChinese
-                        ? "开启 MCP 后可读写工程；首次修改需确认，可选仅本次或本次会话允许。关闭 MCP 将撤销会话授权。Codex 配置不会被覆盖。"
-                        : "Enabling MCP permits reads and write requests. Confirm each edit or grant this session; turning MCP off revokes the grant. Codex configuration is preserved."}
+                        ? "须先在后台开启 MCP、配置账号读/写/构建权限和型号授权，再用上方按钮创建可信绑定工程。每次工具执行均联网校验；离线、撤权或切换工程会拒绝执行。MCP 不支持仪器烧录。"
+                        : "Enable MCP and grant the account/model permissions in Admin, then create a trusted bound project here. Each tool invocation is checked online, and offline or revoked access is denied. Instrument programming is not exposed via MCP."}
                 </p>
                 {message && (
                     <p className={classNames("settings-mcp-feedback", { "is-error": error })} role="status">
