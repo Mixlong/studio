@@ -1,13 +1,14 @@
 import { MenuItem } from "@electron/remote";
 import React from "react";
-import { computed, makeObservable, observable, toJS } from "mobx";
+import { action, computed, makeObservable, observable, runInAction, toJS, untracked } from "mobx";
+import classNames from "classnames";
 import { observer } from "mobx-react";
 import * as FlexLayout from "flexlayout-react";
 
 import { validators } from "eez-studio-shared/validation";
 
 import { FlexLayoutContainer } from "eez-studio-ui/FlexLayout";
-import { showGenericDialog } from "eez-studio-ui/generic-dialog";
+import { Dialog, showDialog } from "eez-studio-ui/dialog";
 
 import {
     ClassInfo,
@@ -25,7 +26,12 @@ import { ProjectContext } from "project-editor/project/context";
 import { extractAnimProperties, LVGLStylesDefinition } from "project-editor/lvgl/style-definition";
 import { ProjectEditor } from "project-editor/project-editor-interface";
 import { createObject } from "project-editor/store";
-import { getComponentName } from "project-editor/flow/components/components-registry";
+import {
+    getComponentGroupDisplayName,
+    getComponentGroupName,
+    getComponentName,
+    getComponentVisualData
+} from "project-editor/flow/components/components-registry";
 import { getComponentMaterialIcon } from "project-editor/flow/components/component-icons";
 import { LVGLStylesEditorRuntime } from "project-editor/lvgl/page-runtime";
 import { Checkbox } from "project-editor/ui-components/PropertyGrid/Checkbox";
@@ -36,6 +42,7 @@ import type { LVGLPageRuntime } from "project-editor/lvgl/page-runtime";
 import {
     findBitmap,
     findFont,
+    ProjectType,
     type Project
 } from "project-editor/project/project";
 import { getSelectorCode } from "project-editor/lvgl/style-helper";
@@ -44,6 +51,7 @@ import {
     lvglPropertiesMap,
     text_font_property_info
 } from "project-editor/lvgl/style-catalog";
+import { LVGL_STYLE_PROP_CODES } from "project-editor/lvgl/lvgl-constants";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,6 +62,505 @@ export type LVGLStyleObjects = {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+interface StyleWidgetOption {
+    id: string;
+    label: string;
+    group: string;
+    icon: React.ReactNode;
+}
+
+const NewStyleDialog = observer(
+    class NewStyleDialog extends React.Component<{
+        project: Project;
+        parent: IEezObject;
+        defaultWidgetType: string;
+        lockedWidgetType?: string;
+        parentStyleName?: string;
+        onOk: (result: { name: string; forWidgetType: string }) => void;
+        onCancel: () => void;
+    }> {
+        open = true;
+        name = "";
+        forWidgetType: string;
+        searchText = "";
+        selectedCategory = "All";
+        nameError: string | undefined;
+        submitted = false;
+        nameInputRef = React.createRef<HTMLInputElement>();
+
+        constructor(props: any) {
+            super(props);
+
+            this.forWidgetType =
+                props.lockedWidgetType ||
+                props.defaultWidgetType ||
+                "LVGLPanelWidget";
+
+            makeObservable(this, {
+                open: observable,
+                name: observable,
+                forWidgetType: observable,
+                searchText: observable,
+                selectedCategory: observable,
+                nameError: observable,
+                submitted: observable,
+                widgetOptions: computed,
+                categories: computed,
+                filteredOptions: computed,
+                groupedOptions: computed,
+                selectedWidgetOption: computed,
+                validateName: action,
+                onNameChange: action.bound,
+                onSelectWidget: action.bound,
+                onSelectCategory: action.bound,
+                onSearchChange: action.bound,
+                onClearSearch: action.bound,
+                handleOk: action.bound,
+                handleCancel: action.bound
+            });
+        }
+
+        componentDidMount() {
+            setTimeout(() => {
+                this.nameInputRef.current?.focus();
+            }, 50);
+        }
+
+        get widgetOptions(): StyleWidgetOption[] {
+            const projectStore = this.props.project._store;
+            const classes = getClassesDerivedFrom(
+                projectStore,
+                ProjectEditor.LVGLWidgetClass
+            ).filter(componentClass => {
+                if (componentClass.name === "LVGLUserWidgetWidget") {
+                    return false;
+                }
+                if (componentClass.name === "LVGLScreenWidget") {
+                    return true;
+                }
+                const enabled =
+                    componentClass.objectClass.classInfo
+                        .enabledInComponentPalette;
+                return enabled
+                    ? enabled(ProjectType.LVGL, projectStore)
+                    : true;
+            });
+
+            return classes.map(componentClass => {
+                const { icon, label } = getComponentVisualData(
+                    componentClass,
+                    projectStore
+                );
+                const rawGroup =
+                    componentClass.name === "LVGLScreenWidget"
+                        ? "!1Basic"
+                        : getComponentGroupName(componentClass);
+                const group =
+                    getComponentGroupDisplayName(rawGroup) || "Basic";
+
+                const renderedIcon =
+                    typeof icon === "string" &&
+                    icon.startsWith("material:") ? (
+                        <Icon icon={icon} size={16} />
+                    ) : typeof icon === "string" ? (
+                        <img src={icon} alt={label} />
+                    ) : (
+                        icon
+                    );
+
+                return {
+                    id: componentClass.name,
+                    label:
+                        componentClass.name === "LVGLScreenWidget"
+                            ? "Screen"
+                            : label,
+                    group,
+                    icon: renderedIcon
+                };
+            });
+        }
+
+        get categories(): { name: string; count: number }[] {
+            const counts = new Map<string, number>();
+            for (const opt of this.widgetOptions) {
+                counts.set(opt.group, (counts.get(opt.group) || 0) + 1);
+            }
+            const result = [
+                { name: "All", count: this.widgetOptions.length }
+            ];
+            for (const [name, count] of counts.entries()) {
+                result.push({ name, count });
+            }
+            return result;
+        }
+
+        get filteredOptions(): StyleWidgetOption[] {
+            const query = this.searchText.trim().toLowerCase();
+            return this.widgetOptions.filter(opt => {
+                if (
+                    this.selectedCategory !== "All" &&
+                    opt.group !== this.selectedCategory
+                ) {
+                    return false;
+                }
+                if (
+                    query &&
+                    !opt.label.toLowerCase().includes(query) &&
+                    !opt.id.toLowerCase().includes(query)
+                ) {
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        get groupedOptions(): {
+            group: string;
+            items: StyleWidgetOption[];
+        }[] {
+            const groups = new Map<string, StyleWidgetOption[]>();
+            for (const opt of this.filteredOptions) {
+                let list = groups.get(opt.group);
+                if (!list) {
+                    list = [];
+                    groups.set(opt.group, list);
+                }
+                list.push(opt);
+            }
+            return Array.from(groups.entries()).map(([group, items]) => ({
+                group,
+                items
+            }));
+        }
+
+        get selectedWidgetOption(): StyleWidgetOption | undefined {
+            return this.widgetOptions.find(
+                opt => opt.id === this.forWidgetType
+            );
+        }
+
+        async validateName(nameValue: string): Promise<string | undefined> {
+            const trimmed = nameValue.trim();
+            const values = { name: trimmed };
+            const requiredErr = await validators.required(values, "name");
+            if (requiredErr) {
+                return requiredErr;
+            }
+            const uniqueValidator = validators.unique(
+                {},
+                this.props.parent
+            );
+            const uniqueErr = await uniqueValidator(values, "name");
+            if (uniqueErr) {
+                return uniqueErr;
+            }
+            return undefined;
+        }
+
+        onNameChange(event: React.ChangeEvent<HTMLInputElement>) {
+            this.name = event.target.value;
+            if (this.submitted || this.nameError) {
+                this.validateName(this.name).then(err => {
+                    runInAction(() => {
+                        this.nameError = err;
+                    });
+                });
+            }
+        }
+
+        onSelectWidget(widgetId: string) {
+            if (this.props.lockedWidgetType) {
+                return;
+            }
+            this.forWidgetType = widgetId;
+        }
+
+        onSelectCategory(category: string) {
+            this.selectedCategory = category;
+        }
+
+        onSearchChange(event: React.ChangeEvent<HTMLInputElement>) {
+            this.searchText = event.target.value;
+        }
+
+        onClearSearch() {
+            this.searchText = "";
+        }
+
+        async handleOk() {
+            this.submitted = true;
+            const err = await this.validateName(this.name);
+            runInAction(() => {
+                this.nameError = err;
+            });
+            if (err) {
+                this.nameInputRef.current?.focus();
+                return false;
+            }
+
+            runInAction(() => {
+                this.open = false;
+            });
+
+            this.props.onOk({
+                name: this.name.trim(),
+                forWidgetType: this.forWidgetType
+            });
+            return true;
+        }
+
+        handleCancel() {
+            this.open = false;
+            this.props.onCancel();
+        }
+
+        renderWidgetCard(opt: StyleWidgetOption) {
+            const isSelected = opt.id === this.forWidgetType;
+            return (
+                <button
+                    key={opt.id}
+                    type="button"
+                    className={classNames(
+                        "EezStudio_LVGLNewStyleDialog_WidgetCard",
+                        {
+                            selected: isSelected
+                        }
+                    )}
+                    onClick={() => this.onSelectWidget(opt.id)}
+                    onDoubleClick={() => {
+                        this.onSelectWidget(opt.id);
+                        if (this.name.trim()) {
+                            this.handleOk();
+                        }
+                    }}
+                    title={opt.label}
+                >
+                    <span className="EezStudio_LVGLNewStyleDialog_WidgetIcon">
+                        {opt.icon}
+                    </span>
+                    <span className="EezStudio_LVGLNewStyleDialog_WidgetLabel">
+                        {opt.label}
+                    </span>
+                    {isSelected && (
+                        <span className="EezStudio_LVGLNewStyleDialog_SelectedDot" />
+                    )}
+                </button>
+            );
+        }
+
+        render() {
+            const selectedOpt = this.selectedWidgetOption;
+
+            return (
+                <Dialog
+                    className="EezStudio_LVGLNewStyleDialog"
+                    open={this.open}
+                    modal={true}
+                    backdrop="static"
+                    title={
+                        this.props.parentStyleName
+                            ? `New Child Style (under ${this.props.parentStyleName})`
+                            : "New Style"
+                    }
+                    okButtonText="Create Style"
+                    onOk={this.handleOk}
+                    onCancel={this.handleCancel}
+                >
+                    <div className="EezStudio_LVGLNewStyleDialog_Body">
+                        <div className="EezStudio_LVGLNewStyleDialog_Section">
+                            <div className="EezStudio_LVGLNewStyleDialog_LabelRow">
+                                <label
+                                    className="EezStudio_LVGLNewStyleDialog_Label"
+                                    htmlFor="eez-new-style-name-input"
+                                >
+                                    Style Name
+                                    <span className="required-star">*</span>
+                                </label>
+                            </div>
+                            <input
+                                ref={this.nameInputRef}
+                                id="eez-new-style-name-input"
+                                type="text"
+                                className={classNames(
+                                    "form-control EezStudio_LVGLNewStyleDialog_NameInput",
+                                    {
+                                        "is-invalid": !!this.nameError
+                                    }
+                                )}
+                                placeholder="Enter style name (e.g. BTN_PRIMARY)..."
+                                value={this.name}
+                                onChange={this.onNameChange}
+                                autoComplete="off"
+                                spellCheck={false}
+                            />
+                            {this.nameError && (
+                                <div className="EezStudio_LVGLNewStyleDialog_Error">
+                                    {this.nameError}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="EezStudio_LVGLNewStyleDialog_Section">
+                            <div className="EezStudio_LVGLNewStyleDialog_LabelRow">
+                                <span className="EezStudio_LVGLNewStyleDialog_Label">
+                                    For Widget Type
+                                </span>
+                                {selectedOpt && (
+                                    <span className="EezStudio_LVGLNewStyleDialog_SelectedBadge">
+                                        <span className="badge-icon">
+                                            {selectedOpt.icon}
+                                        </span>
+                                        <span className="badge-text">
+                                            {selectedOpt.label}
+                                        </span>
+                                    </span>
+                                )}
+                            </div>
+
+                            {this.props.lockedWidgetType ? (
+                                <div className="EezStudio_LVGLNewStyleDialog_LockedNotice">
+                                    Child style inherits widget type{" "}
+                                    <strong>
+                                        {selectedOpt?.label ||
+                                            this.props.lockedWidgetType}
+                                    </strong>{" "}
+                                    from parent style{" "}
+                                    <strong>
+                                        {this.props.parentStyleName}
+                                    </strong>
+                                    .
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="EezStudio_LVGLNewStyleDialog_Toolbar">
+                                        <div className="EezStudio_LVGLNewStyleDialog_Categories">
+                                            {this.categories.map(cat => (
+                                                <button
+                                                    key={cat.name}
+                                                    type="button"
+                                                    className={classNames(
+                                                        "EezStudio_LVGLNewStyleDialog_CategoryBtn",
+                                                        {
+                                                            active:
+                                                                this
+                                                                    .selectedCategory ===
+                                                                cat.name
+                                                        }
+                                                    )}
+                                                    onClick={() =>
+                                                        this.onSelectCategory(
+                                                            cat.name
+                                                        )
+                                                    }
+                                                >
+                                                    <span>{cat.name}</span>
+                                                    <span className="cat-count">
+                                                        {cat.count}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div className="EezStudio_LVGLNewStyleDialog_SearchBox">
+                                            <Icon
+                                                icon="material:search"
+                                                size={15}
+                                                className="search-icon"
+                                            />
+                                            <input
+                                                type="text"
+                                                className="EezStudio_LVGLNewStyleDialog_SearchInput"
+                                                placeholder="Filter widget..."
+                                                value={this.searchText}
+                                                onChange={this.onSearchChange}
+                                                onKeyDown={e => {
+                                                    if (
+                                                        e.key === "Enter"
+                                                    ) {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                    }
+                                                }}
+                                            />
+                                            {this.searchText && (
+                                                <button
+                                                    type="button"
+                                                    className="clear-btn"
+                                                    onClick={
+                                                        this.onClearSearch
+                                                    }
+                                                    title="Clear search"
+                                                >
+                                                    ×
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="EezStudio_LVGLNewStyleDialog_WidgetGridContainer">
+                                        {this.filteredOptions.length === 0 ? (
+                                            <div className="EezStudio_LVGLNewStyleDialog_Empty">
+                                                No matching widget types found
+                                            </div>
+                                        ) : this.selectedCategory === "All" &&
+                                          !this.searchText.trim() ? (
+                                            this.groupedOptions.map(group => (
+                                                <div
+                                                    key={group.group}
+                                                    className="EezStudio_LVGLNewStyleDialog_Group"
+                                                >
+                                                    <div className="EezStudio_LVGLNewStyleDialog_GroupHeader">
+                                                        {group.group}
+                                                    </div>
+                                                    <div className="EezStudio_LVGLNewStyleDialog_WidgetGrid">
+                                                        {group.items.map(opt =>
+                                                            this.renderWidgetCard(
+                                                                opt
+                                                            )
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="EezStudio_LVGLNewStyleDialog_WidgetGrid">
+                                                {this.filteredOptions.map(opt =>
+                                                    this.renderWidgetCard(opt)
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </Dialog>
+            );
+        }
+    }
+);
+
+function showNewStyleDialog(params: {
+    project: Project;
+    parent: IEezObject;
+    defaultWidgetType: string;
+    lockedWidgetType?: string;
+    parentStyleName?: string;
+}) {
+    return new Promise<{ name: string; forWidgetType: string } | undefined>(
+        resolve => {
+            showDialog(
+                <NewStyleDialog
+                    {...params}
+                    onOk={result => resolve(result)}
+                    onCancel={() => resolve(undefined)}
+                />
+            );
+        }
+    );
+}
 
 const DefaultStylePropertyGridUI = observer(
     class DefaultStylePropertyGridUI extends React.Component<PropertyProps> {
@@ -180,7 +687,7 @@ export class LVGLStyle extends EezObject {
             );
 
             const icon =
-                getComponentMaterialIcon(componentClass?.name) ??
+                getComponentMaterialIcon(lvglStyle.forWidgetType) ??
                 componentClass?.objectClass.classInfo.icon;
 
             const isDefault =
@@ -190,88 +697,92 @@ export class LVGLStyle extends EezObject {
 
             return (
                 <div
+                    className="EezStudio_LVGLStyleTreeRow"
                     style={{
                         display: "flex",
+                        alignItems: "center",
                         justifyContent: "space-between",
                         flex: 1,
+                        minWidth: 0,
                         paddingRight: 10
                     }}
                 >
-                    <div>
+                    <div className="EezStudio_LVGLStyleTreeItemLabel">
                         {icon && (
-                            <Icon
-                                icon={icon as any}
-                                style={{
-                                    opacity: 0.66,
-                                    marginRight: 5,
-                                    height: 20
-                                }}
-                            />
+                            <span className="EezStudio_LVGLStyleTreeItemIconSlot">
+                                <Icon
+                                    icon={icon as any}
+                                    size={16}
+                                    className="EezStudio_LVGLStyleTreeItemIcon"
+                                />
+                            </span>
                         )}
-                        {lvglStyle.name}
+                        <span className="EezStudio_LVGLStyleTreeItemName">
+                            {lvglStyle.name}
+                        </span>
                     </div>
                     {lvglStyle.redundantModifications.length > 0 && (
-                        <div>
+                        <div className="EezStudio_LVGLStyleTreeItemMeta">
                             {lvglStyle.redundantModifications.length} redundant
                             {lvglStyle.redundantModifications.length == 1
                                 ? " modification"
                                 : " modifications"}
                         </div>
                     )}
-                    {isDefault && <div>Default</div>}
+                    {isDefault && (
+                        <div className="EezStudio_LVGLStyleTreeItemMeta">
+                            Default
+                        </div>
+                    )}
                 </div>
+            );
+        },
+        propertiesPanelLabel: (lvglStyle: LVGLStyle) => {
+            const widgetType = lvglStyle.forWidgetType
+                .replace(/^LVGL/, "")
+                .replace(/Widget$/, "");
+            return `Style: ${lvglStyle.name} (${widgetType})`;
+        },
+        getIcon: (lvglStyle: LVGLStyle) => {
+            const componentClass = getClassesDerivedFrom(
+                ProjectEditor.getProjectStore(lvglStyle),
+                ProjectEditor.LVGLWidgetClass
+            ).find(
+                componentClass => componentClass.name == lvglStyle.forWidgetType
+            );
+            return (
+                getComponentMaterialIcon(lvglStyle.forWidgetType) ??
+                componentClass?.objectClass.classInfo.icon
             );
         },
         newItem: async (parent: IEezObject) => {
             const project = ProjectEditor.getProject(parent);
+            const parentObj = getParent(parent);
+            const parentStyle =
+                parentObj instanceof LVGLStyle ? parentObj : undefined;
+            const currentSelectedStyle =
+                project._store.navigationStore?.selectedStyleObject.get();
+            const defaultWidgetType =
+                parentStyle?.forWidgetType ||
+                (currentSelectedStyle instanceof LVGLStyle
+                    ? currentSelectedStyle.forWidgetType
+                    : "LVGLPanelWidget");
 
-            const result = await showGenericDialog({
-                dialogDefinition: {
-                    title: "New Style",
-                    fields: [
-                        {
-                            name: "name",
-                            type: "string",
-                            validators: [
-                                validators.required,
-                                validators.unique({}, parent)
-                            ]
-                        },
-                        {
-                            name: "forWidgetType",
-                            type: "enum",
-                            enumItems: () => {
-                                return getClassesDerivedFrom(
-                                    project._store,
-                                    ProjectEditor.LVGLWidgetClass
-                                ).map(componentClass => {
-                                    const classInfo =
-                                        componentClass.objectClass.classInfo;
-                                    return {
-                                        id: componentClass.name,
-                                        label: componentClass.displayName
-                                            ? componentClass.displayName
-                                            : classInfo.componentPaletteLabel ||
-                                              getComponentName(
-                                                  componentClass.name
-                                              )
-                                    };
-                                });
-                            },
-                            validators: [validators.required]
-                        }
-                    ]
-                },
-                values: {
-                    forWidgetType: "LVGLPanelWidget"
-                },
-                modal: true,
-                backdrop: "static"
+            const result = await showNewStyleDialog({
+                project,
+                parent,
+                defaultWidgetType,
+                lockedWidgetType: parentStyle?.forWidgetType,
+                parentStyleName: parentStyle?.name
             });
 
+            if (!result) {
+                return undefined;
+            }
+
             const styleProperties: Partial<LVGLStyle> = {
-                name: result.values.name,
-                forWidgetType: result.values.forWidgetType,
+                name: result.name,
+                forWidgetType: result.forWidgetType,
                 definition: {} as any
             };
 
@@ -630,6 +1141,24 @@ export class LVGLStyle extends EezObject {
                         }
                     );
 
+                    if (
+                        styleObj &&
+                        state.includes("PRESSED") &&
+                        definition[part][state]["color_filter_opa"] == undefined
+                    ) {
+                        const colorFilterOpaCode =
+                            runtime.getLvglStylePropCode(
+                                LVGL_STYLE_PROP_CODES.LV_STYLE_COLOR_FILTER_OPA
+                            );
+                        if (colorFilterOpaCode) {
+                            runtime.wasm._lvglSetStylePropNum(
+                                styleObj,
+                                colorFilterOpaCode,
+                                0
+                            );
+                        }
+                    }
+
                     if (styleObj) {
                         if (!lvglStyleObjects[part]) {
                             lvglStyleObjects[part] = {};
@@ -705,11 +1234,13 @@ export class LVGLStyles extends EezObject {
         [widgetType: string]: string;
     };
 
+    _lvglRuntime: LVGLStylesEditorRuntime | undefined;
+    _lvglRuntimeVersion: string | undefined;
+
     constructor() {
         super();
 
         makeObservable(this, {
-            lvglRuntime: computed({ keepAlive: true }),
             allStyles: computed
         });
     }
@@ -749,7 +1280,18 @@ export class LVGLStyles extends EezObject {
     };
 
     get lvglRuntime() {
-        return new LVGLStylesEditorRuntime(ProjectEditor.getProject(this));
+        const project = ProjectEditor.getProject(this);
+        const lvglVersion = project.settings.general.lvglVersion;
+        if (!this._lvglRuntime || this._lvglRuntimeVersion !== lvglVersion) {
+            if (this._lvglRuntime) {
+                this._lvglRuntime.unmount();
+            }
+            this._lvglRuntimeVersion = lvglVersion;
+            this._lvglRuntime = untracked(
+                () => new LVGLStylesEditorRuntime(project)
+            );
+        }
+        return this._lvglRuntime;
     }
 
     get allStyles() {

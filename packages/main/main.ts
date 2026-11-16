@@ -1,6 +1,6 @@
 import "./fix-path";
 
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync } from "fs";
+import { copyFileSync, mkdirSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve } from "path";
 import { spawn } from "child_process";
@@ -9,10 +9,10 @@ import {
     session,
     ipcMain,
     powerSaveBlocker,
-    BrowserWindow,
-    dialog
+    BrowserWindow
 } from "electron";
-import { autoUpdater } from "electron-updater";
+import { setupDigiwiseReleaseUpdater } from "main/digiwise-release-updater";
+
 import { configure } from "mobx";
 
 require("@electron/remote/main").initialize();
@@ -36,53 +36,18 @@ contextMenu({
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Isolate npm start and packaged builds before Electron resolves userData.
+app.setName("DigiwiseStudio");
+app.setPath("userData", join(app.getPath("appData"), "DigiwiseStudio"));
+if (process.platform === "win32") {
+    app.setAppUserModelId("com.digiwise.studio");
+}
+
 app.commandLine.appendSwitch("disable-renderer-backgrounding");
 
 // app.allowRendererProcessReuse = false;
 
 let homeWindow: BrowserWindow;
-
-const DEFAULT_UPDATE_BASE_URL =
-    "https://bikewise.oss-cn-shenzhen.aliyuncs.com/d-space/DigiwiseStudio";
-
-function getUpdateBaseUrl() {
-    try {
-        const config = JSON.parse(
-            readFileSync(
-                join(app.getAppPath(), "build/main/update-url.json"),
-                "utf8"
-            )
-        );
-        if (
-            config &&
-            typeof config.url === "string" &&
-            config.url.startsWith("https://")
-        ) {
-            return config.url;
-        }
-    } catch (_error) {}
-
-    return DEFAULT_UPDATE_BASE_URL;
-}
-
-function getUpdateUrl() {
-    const updateUrl = new URL(getUpdateBaseUrl());
-    let updateDirectory: string | undefined;
-
-    if (process.platform === "darwin") {
-        updateDirectory = "dist-mac";
-    } else if (process.platform === "win32") {
-        updateDirectory = process.arch === "ia32" ? "win-ia32" : "dist-win-x64";
-    } else if (process.env.APPIMAGE) {
-        updateDirectory = "dist-linux";
-    }
-
-    if (updateDirectory) {
-        updateUrl.pathname = `${updateUrl.pathname.replace(/\/+$/, "")}/${updateDirectory}`;
-    }
-
-    return updateUrl.toString();
-}
 
 function installMacUpdate(updateFile: string, version: string) {
     const helperDirectory = mkdtempSync(
@@ -102,7 +67,7 @@ function installMacUpdate(updateFile: string, version: string) {
             currentPid: process.pid,
             updateZipPath: updateFile,
             appPath: resolve(app.getAppPath(), "../../.."),
-            expectedBundleId: "hr.envox.eez.studio",
+            expectedBundleId: "com.digiwise.studio",
             expectedVersion: version,
             logPath,
             helperDirectory
@@ -124,91 +89,6 @@ function installMacUpdate(updateFile: string, version: string) {
     setForceQuit();
     app.quit();
     setTimeout(() => app.exit(0), 1500);
-}
-
-function setupAutoUpdater() {
-    if (!app.isPackaged) {
-        return;
-    }
-
-    const supportsAutoUpdate =
-        process.platform === "win32" ||
-        process.platform === "darwin" ||
-        Boolean(process.env.APPIMAGE);
-
-    if (!supportsAutoUpdate) {
-        return;
-    }
-
-    autoUpdater.setFeedURL({
-        provider: "generic",
-        url: getUpdateUrl()
-    });
-    autoUpdater.allowDowngrade = true;
-    autoUpdater.autoDownload = true;
-    autoUpdater.autoInstallOnAppQuit = process.platform !== "darwin";
-
-    autoUpdater.on("checking-for-update", () => {
-        console.log(`[auto-update] Checking: ${getUpdateUrl()}`);
-    });
-
-    autoUpdater.on("update-available", info => {
-        console.log(`[auto-update] Update available: ${info.version}`);
-        void dialog.showMessageBox(homeWindow, {
-            type: "info",
-            title: "发现新版本",
-            message: `DigiStudio ${info.version} 正在下载。`,
-            detail: "下载完成后可以重启应用安装更新。",
-            buttons: ["知道了"]
-        });
-    });
-
-    autoUpdater.on("update-not-available", info => {
-        console.log(`[auto-update] Up to date: ${info.version}`);
-    });
-
-    autoUpdater.on("update-downloaded", info => {
-        console.log(`[auto-update] Update downloaded: ${info.version}`);
-        void dialog
-            .showMessageBox(homeWindow, {
-                type: "info",
-                title: "更新已下载",
-                message: `DigiStudio ${info.version} 已准备完成。`,
-                detail: "现在重启应用即可完成更新。",
-                buttons: ["立即重启", "稍后"],
-                defaultId: 0,
-                cancelId: 1
-            })
-            .then(result => {
-                if (result.response === 0) {
-                    if (process.platform === "darwin") {
-                        try {
-                            installMacUpdate(info.downloadedFile, info.version);
-                        } catch (error: any) {
-                            console.error(
-                                "[auto-update] Unable to start macOS installer:",
-                                error
-                            );
-                            void dialog.showErrorBox(
-                                "更新安装失败",
-                                error?.message || String(error)
-                            );
-                        }
-                    } else {
-                        setForceQuit();
-                        autoUpdater.quitAndInstall(false, true);
-                    }
-                }
-            });
-    });
-
-    autoUpdater.on("error", error => {
-        console.error("[auto-update] Update check failed:", error);
-    });
-
-    autoUpdater.checkForUpdatesAndNotify().catch(error => {
-        console.error("[auto-update] Unable to check for updates:", error);
-    });
 }
 
 app.on("ready", async function () {
@@ -266,6 +146,10 @@ app.on("ready", async function () {
     // access token remains in the main process and is never sent to React.
     const { registerDigiwiseAuthIpc } = await import("main/digiwise-auth");
     await registerDigiwiseAuthIpc();
+    const { registerDigiwiseTemplateIpc } = await import(
+        "main/digiwise-templates"
+    );
+    registerDigiwiseTemplateIpc();
 
     await setup();
 
@@ -285,7 +169,17 @@ app.on("ready", async function () {
 
     await import("main/menu");
 
-    setupAutoUpdater();
+    // MCP settings are registered here; the read-only bridge remains off
+    // unless explicitly enabled in Settings or by the developer environment.
+    if (!buildProjectFilePath) {
+        void import("mcp/integration")
+            .then(module => module.registerMcpIntegration(homeWindow))
+            .catch(error => console.error("[mcp] Integration failed:", error));
+    }
+
+    if (!buildProjectFilePath) {
+        setupDigiwiseReleaseUpdater(homeWindow, installMacUpdate, setForceQuit);
+    }
 });
 
 // Quit when all windows are closed.

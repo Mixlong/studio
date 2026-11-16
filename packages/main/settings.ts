@@ -47,11 +47,12 @@ class Settings {
 
     dbPaths: IDbPath[] = [];
 
-    locale: string = "";
+    locale: string = "en";
     dateFormat: string = "";
     timeFormat: string = "";
 
-    isDarkTheme: boolean = false;
+    isDarkTheme: boolean = true;
+
 
     get settingsFilePath() {
         return app.getPath("userData") + "/" + SETTINGS_FILE_NAME;
@@ -76,6 +77,9 @@ class Settings {
                 console.error(parseError);
             }
         } catch (readFileError) {
+            this.locale = app.getLocale()?.toLowerCase().startsWith("zh")
+                ? "zh-CN"
+                : "en";
             console.info(
                 `Settings file "${this.settingsFilePath}" doesn't exists.`
             );
@@ -118,7 +122,16 @@ class Settings {
         });
 
         autorun(() => {
-            nativeTheme.themeSource = this.isDarkTheme ? "dark" : "light";
+            const locale = this.locale;
+            BrowserWindow.getAllWindows().forEach(window =>
+                window.webContents.send("locale-changed", locale)
+            );
+        });
+
+        autorun(() => {
+            // Keep Windows native window titlebar light (white) like GUI Guider even in dark theme
+            void this.isDarkTheme;
+            nativeTheme.themeSource = "light";
         });
     }
 
@@ -418,7 +431,7 @@ ipcMain.on("setDbPaths", function (event: any, dbPaths: IDbPath[]) {
 ////////////////////////////////////////////////////////////////////////////////
 
 export function getLocale() {
-    return settings.locale || app.getLocale();
+    return settings.locale || "en";
 }
 
 export function setLocale(value: string) {

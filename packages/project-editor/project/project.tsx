@@ -788,6 +788,8 @@ export class General extends EezObject {
     flowSupport: boolean;
     displayWidth: number;
     displayHeight: number;
+    /** Page loaded when an LVGL project starts in the simulator or firmware. */
+    initialPage?: string;
     circularDisplay: boolean;
     displayBorderRadius: number;
     darkTheme: boolean;
@@ -985,6 +987,12 @@ export class General extends EezObject {
                 disabled: (general: General) =>
                     !ProjectEditor.getProject(general).projectTypeTraits
                         .hasDisplaySizeProperty
+            },
+            {
+                name: "initialPage",
+                displayName: "Initial screen",
+                type: PropertyType.String,
+                disabled: isNotLVGLProject
             },
             {
                 name: "circularDisplay",
@@ -1375,6 +1383,7 @@ export class General extends EezObject {
             flowSupport: observable,
             displayWidth: observable,
             displayHeight: observable,
+            initialPage: observable,
             circularDisplay: observable,
             displayBorderRadius: observable,
             darkTheme: observable,
@@ -2082,7 +2091,8 @@ export class Project extends EezObject {
             tabId: string,
             tabJson: FlexLayout.IJsonTabNode,
             addNextToTabId: string,
-            enabled: boolean
+            enabled: boolean,
+            dockLocation: FlexLayout.DockLocation = FlexLayout.DockLocation.CENTER
         ) {
             if (enabled) {
                 if (!layoutModel.getNodeById(tabId)) {
@@ -2095,7 +2105,7 @@ export class Project extends EezObject {
                             FlexLayout.Actions.addNode(
                                 tabJson,
                                 addNexToTab.getParent()!.getId(),
-                                FlexLayout.DockLocation.CENTER,
+                                dockLocation,
                                 -1,
                                 false
                             )
@@ -2281,8 +2291,31 @@ export class Project extends EezObject {
             LayoutModels.COMPONENTS_PALETTE_TAB_ID,
             LayoutModels.COMPONENTS_PALETTE_TAB,
             LayoutModels.PROPERTIES_TAB_ID,
-            settingsController.showComponentsPaletteInProjectEditor
+            settingsController.showComponentsPaletteInProjectEditor,
+            FlexLayout.DockLocation.BOTTOM
         );
+
+        // Keep activity tabs in the model for the shared toolbar, but do not
+        // let enableTabOnBorder restore the legacy left-side rail. Saved
+        // FlexLayout workspaces load before enableTabs(), so normalize the
+        // rail after all conditional tabs have been added.
+        const rootEditor = this._store.layoutModels.rootEditor;
+        const leftActivityBorder = rootEditor?.getNodeById("border_left");
+        if (
+            rootEditor &&
+            leftActivityBorder instanceof FlexLayout.BorderNode
+        ) {
+            const shouldShow = false;
+            const currentlyShown = leftActivityBorder.toJson().show !== false;
+            if (currentlyShown !== shouldShow) {
+                rootEditor.doAction(
+                    FlexLayout.Actions.updateNodeAttributes(
+                        leftActivityBorder.getId(),
+                        { show: shouldShow } as FlexLayout.IJsonTabNode
+                    )
+                );
+            }
+        }
     }
 
     get missingExtensions() {

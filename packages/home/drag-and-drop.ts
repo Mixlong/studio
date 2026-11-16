@@ -1,6 +1,7 @@
 import { extensions } from "eez-studio-shared/extensions/extensions";
 
 import { tabs } from "home/tabs-store";
+import { digiwiseAuthController } from "home/digiwise-account";
 
 export function handleDragAndDrop() {
     function removeDragData(ev: DragEvent) {
@@ -36,6 +37,11 @@ export function handleDragAndDrop() {
         const dt = ev.dataTransfer;
         if (dt && dt.files.length > 0) {
             $ev.preventDefault();
+
+            if (!digiwiseAuthController.authState.authenticated || !tabs) {
+                removeDragData(ev);
+                return;
+            }
 
             const files = dt.files;
 

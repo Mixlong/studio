@@ -179,7 +179,16 @@ export abstract class RuntimeBase implements IRuntime {
             isRTL: observable
         });
 
-        this.selectedPage = this.projectStore.project.pages[0];
+        const initialPageName =
+            this.projectStore.project.settings.general.initialPage?.trim();
+        const initialPage = initialPageName
+            ? this.projectStore.project.pages.find(
+                  page => page.name === initialPageName
+              )
+            : undefined;
+
+        this.selectedPage =
+            initialPage || this.projectStore.project.pages[0];
         this.stateChangeTickTime = Date.now();
     }
 

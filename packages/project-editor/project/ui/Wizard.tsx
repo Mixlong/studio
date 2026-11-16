@@ -36,8 +36,13 @@ import { Icon } from "eez-studio-ui/icon";
 
 import { openProject } from "home/tabs-store";
 import { settingsController } from "home/settings";
+import {
+    createDigiwiseTemplate,
+    listDigiwiseTemplates
+} from "home/digiwise-templates";
 import { productConfig } from "eez-studio-shared/product-config";
 import { resolveProjectTemplateFile } from "eez-studio-shared/project-templates";
+import type { DigiwiseTemplateItem } from "eez-studio-shared/digiwise-templates";
 
 import {
     DASHBOARD_PROJECT_ICON,
@@ -127,6 +132,9 @@ interface IProjectType {
         | { "8.4.0": string; "9.2.2": string; "9.3.0": string; "9.4.0": string; "9.5.0": string; }
         | { SCPI: string; PROPRIETARY: string };
 
+    templateCategory?: string;
+    remoteTemplate?: DigiwiseTemplateItem;
+
     author?: string;
     authorLink?: string;
 }
@@ -168,6 +176,81 @@ const SAVED_OPTIONS_VERSION = 12;
 enum SaveOptionsFlags {
     All,
     View
+}
+
+export function getBoardPreviewUrl(previewFile: string): string {
+    const absPath = path.resolve(__dirname, "../../../home/_images", previewFile);
+    if (fs.existsSync(absPath)) {
+        return "file:///" + absPath.replace(/\\/g, "/");
+    }
+    return "";
+}
+
+export function renderPreviewImage(image: React.ReactNode | string | undefined, className?: string) {
+    if (!image) {
+        return <div className="preview-placeholder" />;
+    }
+    if (typeof image === "string") {
+        let src = image;
+        if (src.startsWith("boards/")) {
+            src = getBoardPreviewUrl(src);
+        }
+        return (
+            <img
+                src={src}
+                className={className}
+                alt="preview"
+                onError={event => {
+                    event.currentTarget.style.display = "none";
+                }}
+            />
+        );
+    }
+    if (React.isValidElement(image)) {
+        return image;
+    }
+    return <Icon icon={image as any} size={128} />;
+}
+
+function normalizeRemoteTemplateCategory(category: string | null): string | undefined {
+    const normalized = category?.trim().toLowerCase().replace(/[ _-]/g, "");
+    if (
+        normalized === "emptyui" ||
+        normalized === "blankui" ||
+        normalized === "blank" ||
+        normalized === "空白界面"
+    ) {
+        return "EmptyUI";
+    }
+    if (normalized === "flow" || normalized === "流程") {
+        return "Flow";
+    }
+    if (normalized === "widget" || normalized === "control" || normalized === "控件") {
+        return "Widget";
+    }
+    if (normalized === "application" || normalized === "app" || normalized === "应用") {
+        return "Application";
+    }
+    return undefined;
+}
+
+export function getTemplateCategory(p: IProjectType): string {
+    if (p.templateCategory) return p.templateCategory;
+    if (p.id === "LVGL" || p.projectName === "EmptyUI") return "EmptyUI";
+    if (p.id === "LVGL with EEZ Flow") return "Flow";
+    if (p.id === "IEXT" || p.id === "applet" || p.id === "resource") return "Widget";
+    return "Application";
+}
+
+function isTemplatePermissionError(code: string) {
+    return code === "ACCESS_DENIED" || code === "HTTP_403";
+}
+
+function getTemplateCategoryLabel(category: string, isChinese: boolean) {
+    const labels = isChinese
+        ? { All: "全部", EmptyUI: "空白界面", Application: "应用", Flow: "流程", Widget: "控件" }
+        : { All: "All", EmptyUI: "Empty UI", Application: "Application", Flow: "Flow", Widget: "Widget" };
+    return labels[category as keyof typeof labels] || category;
 }
 
 export class WizardModel {
@@ -234,6 +317,10 @@ export class WizardModel {
     createProjectInProgress: boolean = false;
 
     templateProjects: TemplateProject[] = [];
+    digiwiseTemplates: DigiwiseTemplateItem[] = [];
+    templateListLoading = false;
+    templateListError: string | undefined;
+    private templateListRequestId = 0;
 
     projectCreationError: React.ReactNode | undefined;
 
@@ -260,6 +347,9 @@ export class WizardModel {
     };
 
     lvglVersion: LVGLVersion = "8.4.0";
+    displayWidth: number = 800;
+    displayHeight: number = 480;
+    colorDepth: string = "16";
 
     commandsProtocol: CommandsProtocolType;
 
@@ -280,10 +370,16 @@ export class WizardModel {
             bb3ProjectFileError: observable,
             projectVersion: observable,
             templateProjects: observable,
+            digiwiseTemplates: observable,
+            templateListLoading: observable,
+            templateListError: observable,
             projectCreationError: observable,
             gitClone: observable,
             gitInit: observable,
             lvglVersion: observable,
+            displayWidth: observable,
+            displayHeight: observable,
+            colorDepth: observable,
             commandsProtocol: observable,
             selectedTemplateProject: computed,
             validateName: action,
@@ -503,6 +599,56 @@ export class WizardModel {
         }
     }
 
+    async loadDigiwiseTemplates() {
+        const requestId = ++this.templateListRequestId;
+        runInAction(() => {
+            this.templateListLoading = true;
+            this.templateListError = undefined;
+            this.digiwiseTemplates = [];
+        });
+
+        try {
+            const result = await listDigiwiseTemplates();
+            if (requestId !== this.templateListRequestId) {
+                return;
+            }
+
+            if (!result.ok) {
+                runInAction(() => {
+                    // Remote template access is optional. Keep the bundled
+                    // empty LVGL project available when the account has no
+                    // permission to read the remote catalog.
+                    this.templateListError = isTemplatePermissionError(
+                        result.error.code
+                    )
+                        ? undefined
+                        : result.error.code;
+                    this.type = this.blankTemplateProjectType?.id;
+                });
+                return;
+            }
+
+            runInAction(() => {
+                this.digiwiseTemplates = result.data;
+                if (!this.projectTypes.some(item => item.id === this.type)) {
+                    this.type = this.projectTypes[0]?.id;
+                }
+            });
+        } catch (_error) {
+            if (requestId === this.templateListRequestId) {
+                runInAction(() => {
+                    this.templateListError = "PUBLIC_API_UNAVAILABLE";
+                });
+            }
+        } finally {
+            if (requestId === this.templateListRequestId) {
+                runInAction(() => {
+                    this.templateListLoading = false;
+                });
+            }
+        }
+    }
+
     mount() {
         runInAction(() => {
             this.name = undefined;
@@ -518,11 +664,8 @@ export class WizardModel {
             this.searchText = "";
         });
 
-        if (
-            this.section == "templates" &&
-            productConfig.projectTemplates.onlineCatalog.enabled
-        ) {
-            this.fetchTemplateProjects();
+        if (this.section == "templates") {
+            void this.loadDigiwiseTemplates();
         }
 
         if (
@@ -790,9 +933,12 @@ export class WizardModel {
             {
                 id: "LVGL",
                 projectType: PROJECT_TYPE_NAMES[ProjectType.LVGL],
-                image: LVGL_PROJECT_ICON(128),
-                projectName: "LVGL",
-                description: "Start your new LVGL project development here.",
+                image: fs.existsSync(path.resolve(__dirname, "../../../home/_images/boards/emptyui.png")) ? "boards/emptyui.png" : LVGL_PROJECT_ICON(128),
+                projectName: "EmptyUI",
+                defaultProjectName: "EmptyUI",
+                displayWidth: 800,
+                displayHeight: 480,
+                description: "An empty LVGL user interface template.",
                 projectFileUrl: {
                     "8.4.0": getTemplatePathOrUrl(
                         "templates/v0.23.0/LVGL-8.3.eez-project"
@@ -810,6 +956,17 @@ export class WizardModel {
                         "templates/v0.23.0/LVGL-9.0.eez-project"
                     )
                 }
+            },
+            {
+                id: "digiride",
+                projectType: PROJECT_TYPE_NAMES[ProjectType.LVGL],
+                image: "boards/digiride.png",
+                projectName: "DigiRide",
+                defaultProjectName: "DigiRide",
+                displayWidth: 800,
+                displayHeight: 480,
+                description: "Smart Riding Console dashboard with interactive speed, battery, distance & GPS navigation.",
+                projectFileUrl: path.resolve(__dirname, "../../../home/product-projects/DigiRide.eez-project")
             },
             {
                 id: "LVGL with EEZ Flow",
@@ -914,11 +1071,25 @@ export class WizardModel {
     }
 
     get allTemplateProjectTypes(): IProjectType[] {
-        return [
-            ...this.standardProjectTypes,
-            ...this.bb3ProjectTypes,
-            ...this.templateProjectTypes
-        ];
+        return this.digiwiseTemplates
+            .map(template => ({
+                id: `digiwise-template:${template.id}`,
+                projectName: template.name,
+                projectType: template.projectType,
+                description: template.description || "",
+                image: template.coverUrl || LVGL_PROJECT_ICON(128),
+                templateCategory: normalizeRemoteTemplateCategory(
+                    template.category ?? null
+                ),
+                remoteTemplate: template
+            }))
+            .filter(projectType => this.searchFilter(projectType));
+    }
+
+    get blankTemplateProjectType() {
+        return this.standardProjectTypes.find(
+            projectType => projectType.id === "LVGL"
+        );
     }
 
     get folders(): ITreeNode {
@@ -1029,15 +1200,11 @@ export class WizardModel {
 
     get projectTypes(): IProjectType[] {
         if (this.section == "templates") {
-            if (this.folder == "_allTemplates") {
-                return this.allTemplateProjectTypes;
-            } else if (this.folder == "_standard") {
-                return this.standardProjectTypes;
-            } else if (this.folder == "_bb3") {
-                return this.bb3ProjectTypes;
-            } else {
-                return this.templateProjectTypes;
-            }
+            return this.allTemplateProjectTypes.length > 0
+                ? this.allTemplateProjectTypes
+                : this.blankTemplateProjectType
+                  ? [this.blankTemplateProjectType]
+                  : [];
         } else {
             return this.folder
                 ? this.exampleProjectTypes.get(this.folder) || []
@@ -1105,6 +1272,17 @@ export class WizardModel {
 
         if (this.section == "examples") {
             this.name = undefined;
+        } else {
+            const projectType = this.selectedProjectType;
+            if (projectType) {
+                if (projectType.displayWidth && projectType.displayHeight) {
+                    this.displayWidth = projectType.displayWidth;
+                    this.displayHeight = projectType.displayHeight;
+                }
+                if (projectType.defaultProjectName) {
+                    this.name = projectType.defaultProjectName;
+                }
+            }
         }
     }
 
@@ -1314,6 +1492,73 @@ export class WizardModel {
                 }
 
                 let projectFilePath: string;
+
+                const remoteTemplate = this.selectedProjectType?.remoteTemplate;
+                if (remoteTemplate) {
+                    const projectName = this.name!.trim();
+                    const location = this.location!.trim();
+                    const targetDirectory = this.createDirectory
+                        ? path.join(location, projectName)
+                        : location;
+                    if (!targetDirectory) {
+                        this.projectCreationError = settingsController.locale
+                            .toLowerCase()
+                            .startsWith("zh")
+                            ? "请填写有效的项目保存位置。"
+                            : "Choose a valid project location.";
+                        return false;
+                    }
+
+                    const isChinese = settingsController.locale
+                        .toLowerCase()
+                        .startsWith("zh");
+                    runInAction(() => {
+                        this.progress =
+                            getNewProjectWizardLabels().downloadAndCreate;
+                    });
+                    const result = await createDigiwiseTemplate(
+                        {
+                            template: {
+                                id: remoteTemplate.id,
+                                version: remoteTemplate.version,
+                                fileSize: remoteTemplate.fileSize,
+                                sha256: remoteTemplate.sha256,
+                                fileFormat: remoteTemplate.fileFormat
+                            },
+                            projectName,
+                            targetDirectory,
+                            createDirectory: this.createDirectory
+                        },
+                        progress => {
+                            runInAction(() => {
+                                this.progress = getTemplateCreateProgressText(
+                                    progress,
+                                    isChinese
+                                );
+                            });
+                        }
+                    );
+
+                    if (!result.ok) {
+                        runInAction(() => {
+                            this.projectCreationError =
+                                getTemplateCreateErrorMessage(
+                                    result.error.code,
+                                    isChinese
+                                );
+                        });
+                        return false;
+                    }
+
+                    this.saveOptions(SaveOptionsFlags.All);
+                    if (openProjectWhenDone) {
+                        openProject(result.data.projectFilePath, runMode);
+                    }
+                    runInAction(() => {
+                        this.name = undefined;
+                    });
+                    return true;
+                }
 
                 if (
                     this.selectedTemplateProject ||
@@ -2754,13 +2999,230 @@ function PlatformDescription({ wizardModel }: { wizardModel: WizardModel }) {
     );
 }
 
+
+const NEW_PROJECT_WIZARD_LABELS = {
+    en: {
+        title: "New Project",
+        noExamplesFound: "No examples found",
+        noTemplates: "No published templates are available",
+        noTemplateMatches: "No templates match the current filters",
+        loadingTemplates: "Loading templates...",
+        downloadAndCreate: "Downloading and verifying template...",
+        authorizingTemplate: "Preparing secure download...",
+        downloadingTemplate: "Downloading template",
+        verifyingTemplate: "Verifying file integrity...",
+        creatingTemplate: "Creating project files...",
+        templateLoadFailed: "Could not load templates. Check the connection and retry.",
+        retry: "Retry",
+        remoteCreatePending: "Download and create this template",
+        template: "Template",
+        templateVersion: "Template",
+        resolution: "Resolution",
+        resolutionFromTemplate: "Defined by template",
+        createProject: "Create Project",
+        selectTemplate: "Select Project Template",
+        filterByName: "Filter by name...",
+        categories: {
+            All: "All",
+            EmptyUI: "Empty UI",
+            Application: "Application",
+            Flow: "Flow",
+            Widget: "Widget"
+        },
+        projectName: "Project Name",
+        projectNamePlaceholder: "Project name",
+        projectLocation: "Project Location",
+        projectLocationPlaceholder: "Directory path",
+        browse: "Browse...",
+        width: "Width",
+        height: "Height",
+        resolutionPresets: "Common Resolution Presets",
+        colorDepth: "Color Depth",
+        lvglVersion: "LVGL Version",
+        compatible83: "Compatible with 8.3.x",
+        createDirectory: "Create directory",
+        back: "Back",
+        create: "Create"
+    },
+    zh: {
+        title: "新建项目",
+        noExamplesFound: "未找到示例",
+        noTemplates: "暂无已发布模板",
+        noTemplateMatches: "没有符合当前筛选条件的模板",
+        loadingTemplates: "正在加载模板…",
+        downloadAndCreate: "正在下载并校验模板…",
+        authorizingTemplate: "正在获取安全下载地址…",
+        downloadingTemplate: "正在下载模板",
+        verifyingTemplate: "正在校验文件完整性…",
+        creatingTemplate: "正在创建项目文件…",
+        templateLoadFailed: "模板读取失败，请检查连接后重试。",
+        retry: "重试",
+        remoteCreatePending: "下载并创建此模板",
+        template: "模板",
+        templateVersion: "后台模板",
+        resolution: "分辨率",
+        resolutionFromTemplate: "由模板文件确定",
+        createProject: "创建项目",
+        selectTemplate: "选择项目模板",
+        filterByName: "按名称筛选...",
+        categories: {
+            All: "全部",
+            EmptyUI: "空白界面",
+            Application: "应用",
+            Flow: "流程",
+            Widget: "控件"
+        },
+        projectName: "项目名称",
+        projectNamePlaceholder: "项目名称",
+        projectLocation: "保存位置",
+        projectLocationPlaceholder: "目录路径",
+        browse: "浏览...",
+        width: "宽度",
+        height: "高度",
+        resolutionPresets: "常用分辨率快捷预设",
+        colorDepth: "颜色深度",
+        lvglVersion: "LVGL 版本",
+        compatible83: "兼容 8.3.x",
+        createDirectory: "创建子文件夹",
+        back: "返回",
+        create: "创建"
+    }
+};
+
+function getNewProjectWizardLabels() {
+    return settingsController.locale.toLowerCase().startsWith("zh")
+        ? NEW_PROJECT_WIZARD_LABELS.zh
+        : NEW_PROJECT_WIZARD_LABELS.en;
+}
+
+function getTemplateListErrorMessage(code: string, isChinese: boolean) {
+    if (code === "AUTH_REQUIRED" || code === "HTTP_401") {
+        return isChinese ? "登录状态已失效，请重新登录。" : "Your session expired. Sign in again.";
+    }
+    if (code === "ACCESS_DENIED" || code === "HTTP_403") {
+        return isChinese ? "当前账号没有查看模板的权限。" : "This account cannot view templates.";
+    }
+    if (code === "PUBLIC_API_NOT_CONFIGURED") {
+        return isChinese ? "后台接口地址尚未配置。" : "The Public API URL is not configured.";
+    }
+    if (code === "PUBLIC_API_INVALID_RESPONSE") {
+        return isChinese ? "后台返回的模板数据格式无效。" : "The backend returned an invalid template response.";
+    }
+    return isChinese
+        ? NEW_PROJECT_WIZARD_LABELS.zh.templateLoadFailed
+        : NEW_PROJECT_WIZARD_LABELS.en.templateLoadFailed;
+}
+
+function getTemplateCreateErrorMessage(code: string, isChinese: boolean) {
+    if (code === "AUTH_REQUIRED" || code === "HTTP_401") {
+        return isChinese
+            ? "登录状态已失效，请重新登录。"
+            : "Your session expired. Sign in again.";
+    }
+    if (code === "ACCESS_DENIED" || code === "HTTP_403") {
+        return isChinese
+            ? "当前账号没有下载此模板的权限。"
+            : "This account cannot download this template.";
+    }
+    if (code === "TEMPLATE_TARGET_EXISTS") {
+        return isChinese
+            ? "目标文件夹或项目文件已存在，请更换名称或位置。"
+            : "The destination already exists. Choose another name or location.";
+    }
+    if (code === "TEMPLATE_TARGET_NOT_EMPTY") {
+        return isChinese
+            ? "压缩包模板需要空目录，请勾选“创建子文件夹”或选择空目录。"
+            : "ZIP templates need an empty folder. Create a subfolder or choose an empty folder.";
+    }
+    if (code === "TEMPLATE_FILE_TOO_LARGE") {
+        return isChinese
+            ? "模板文件超过允许的大小上限。"
+            : "The template file exceeds the allowed size.";
+    }
+    if (code === "TEMPLATE_FILE_INTEGRITY_FAILED") {
+        return isChinese
+            ? "模板文件校验失败，请重试或联系管理员。"
+            : "Template integrity verification failed. Retry or contact an administrator.";
+    }
+    if (code === "TEMPLATE_ARCHIVE_INVALID" || code === "TEMPLATE_FILE_INVALID") {
+        return isChinese
+            ? "模板文件无效或包含不安全内容。"
+            : "The template is invalid or contains unsafe content.";
+    }
+    if (
+        code === "TEMPLATE_DOWNLOAD_FAILED" ||
+        code === "PUBLIC_API_UNAVAILABLE"
+    ) {
+        return isChinese
+            ? "模板下载失败，请检查网络连接后重试。"
+            : "Template download failed. Check the connection and retry.";
+    }
+    return isChinese ? "模板创建失败，请重试。" : "Could not create the template project. Retry.";
+}
+
+function formatTemplateFileSize(bytes: number) {
+    if (bytes < 1024 * 1024) {
+        return `${Math.ceil(bytes / 1024)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getTemplateCreateProgressText(
+    progress: {
+        stage: "authorizing" | "downloading" | "verifying" | "creating";
+        receivedBytes?: number;
+        totalBytes?: number;
+    },
+    isChinese: boolean
+) {
+    const labels = isChinese
+        ? NEW_PROJECT_WIZARD_LABELS.zh
+        : NEW_PROJECT_WIZARD_LABELS.en;
+    if (
+        progress.stage === "downloading" &&
+        typeof progress.receivedBytes === "number" &&
+        typeof progress.totalBytes === "number" &&
+        progress.totalBytes > 0
+    ) {
+        const percent = Math.min(
+            100,
+            Math.floor((progress.receivedBytes / progress.totalBytes) * 100)
+        );
+        return `${labels.downloadingTemplate} ${percent}% (${formatTemplateFileSize(
+            progress.receivedBytes
+        )} / ${formatTemplateFileSize(progress.totalBytes)})`;
+    }
+    switch (progress.stage) {
+        case "authorizing":
+            return labels.authorizingTemplate;
+        case "downloading":
+            return labels.downloadingTemplate;
+        case "verifying":
+            return labels.verifyingTemplate;
+        case "creating":
+            return labels.creatingTemplate;
+    }
+}
+
 export const NewProjectWizard = observer(
-    class NewProjectWizard extends React.Component<{
-        wizardModel: WizardModel;
-        modalDialog: IObservableValue<any>;
-    }> {
+    class NewProjectWizard extends React.Component<
+        {
+            wizardModel: WizardModel;
+            modalDialog: IObservableValue<any>;
+        },
+        {
+            tempType: "" | "create";
+            templateFilterType: string;
+            templateFilterName: string;
+        }
+    > {
         constructor(props: any) {
             super(props);
+            this.state = {
+                tempType: "",
+                templateFilterType: "",
+                templateFilterName: ""
+            };
         }
 
         componentDidMount() {
@@ -2771,43 +3233,483 @@ export const NewProjectWizard = observer(
             this.props.wizardModel.unmount();
         }
 
+        onCreateProject = async () => {
+            const success = await this.props.wizardModel.createProject(
+                this.props.modalDialog,
+                false
+            );
+            if (success) {
+                this.props.modalDialog.get()?.close();
+            }
+        };
+
+        onBrowseDirectory = async () => {
+            const result = await dialog.showOpenDialog(getCurrentWindow(), {
+                properties: ["openDirectory"]
+            });
+            if (result.filePaths && result.filePaths[0]) {
+                runInAction(() => {
+                    this.props.wizardModel.location = result.filePaths[0];
+                });
+            }
+        };
+
         render() {
             const { wizardModel } = this.props;
+            const labels = getNewProjectWizardLabels();
+
+            // If in examples catalog mode, preserve the tree & list view
+            if (wizardModel.section === "examples") {
+                return (
+                    <div
+                        className={classNames("EezStudio_NewProjectWizard", {
+                            disabled: wizardModel.createProjectInProgress
+                        })}
+                    >
+                        <SearchInput
+                            searchText={wizardModel.searchText}
+                            onClear={action(() => {
+                                wizardModel.searchText = "";
+                            })}
+                            onChange={wizardModel.onSearchChange}
+                        />
+
+                        <div className="EezStudio_NewProjectWizard_Body">
+                            {wizardModel.folders.children.length > 0 ? (
+                                <>
+                                    <div className="EezStudio_NewProjectWizard_Space"></div>
+                                    <FoldersTree wizardModel={wizardModel} />
+                                    <ProjectTypesList wizardModel={wizardModel} />
+                                    <ProjectProperties
+                                        wizardModel={wizardModel}
+                                        modalDialog={this.props.modalDialog}
+                                    />
+                                </>
+                            ) : (
+                                <div className="EezStudio_NewProjectWizard_NoProjects">
+                                    {labels.noExamplesFound}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            const { tempType, templateFilterType, templateFilterName } = this.state;
+            const isChinese = settingsController.locale.toLowerCase().startsWith("zh");
+
+            // Filter applications by category and search name
+            const allApps = wizardModel.projectTypes;
+            const templateCategories = Array.from(
+                new Set(allApps.map(getTemplateCategory))
+            );
+            const filteredApps = allApps.filter(p => {
+                if (templateFilterType && templateFilterType !== "All") {
+                    const cat = getTemplateCategory(p);
+                    if (cat !== templateFilterType) return false;
+                }
+                if (templateFilterName && !p.projectName.toLowerCase().includes(templateFilterName.toLowerCase())) {
+                    return false;
+                }
+                return true;
+            });
+
+            const selectedApp = wizardModel.selectedProjectType || allApps[0];
+            const remoteLvglVersion = selectedApp?.remoteTemplate?.lvglVersion;
+            const isV9 = (remoteLvglVersion || wizardModel.lvglVersion).startsWith("9");
+            const selectedResolution = selectedApp?.remoteTemplate
+                ? labels.resolutionFromTemplate
+                : `${wizardModel.displayWidth} × ${wizardModel.displayHeight}`;
+
+
             return (
                 <div
-                    className={classNames("EezStudio_NewProjectWizard", {
+                    className={classNames("EezStudio_NewProjectWizard", "create-project", {
                         disabled: wizardModel.createProjectInProgress
                     })}
                 >
-                    <SearchInput
-                        searchText={wizardModel.searchText}
-                        onClear={action(() => {
-                            wizardModel.searchText = "";
-                        })}
-                        onChange={wizardModel.onSearchChange}
-                    />
+                    {/* Top tab list: LVGL version switcher (Step 1) or current LVGL version display (Step 2) */}
+                    <div className="tab-list">
+                        <div className="version-tabs">
+                            {selectedApp?.remoteTemplate ? (
+                                <span className="active static-title">
+                                    {remoteLvglVersion
+                                        ? `LVGL ${remoteLvglVersion}`
+                                        : labels.templateVersion}
+                                </span>
+                            ) : tempType === "create" ? (
+                                <span className="active static-title">
+                                    {isV9 ? "LVGL9" : "LVGL8"}
+                                </span>
+                            ) : (
+                                <>
+                                    <span
+                                        className={isV9 ? "active" : ""}
+                                        onClick={action(() => {
+                                            wizardModel.lvglVersion = "9.3.0";
+                                        })}
+                                    >
+                                        LVGL9
+                                    </span>
+                                    <span
+                                        className={!isV9 ? "active" : ""}
+                                        onClick={action(() => {
+                                            wizardModel.lvglVersion = "8.4.0";
+                                        })}
+                                    >
+                                        LVGL8
+                                    </span>
+                                </>
+                            )}
+                        </div>
 
-                    <div className="EezStudio_NewProjectWizard_Body">
-                        {wizardModel.folders.children.length > 0 ? (
-                            <>
-                                <div className="EezStudio_NewProjectWizard_Space"></div>
-                                <FoldersTree wizardModel={wizardModel} />
-                                <ProjectTypesList wizardModel={wizardModel} />
-                                <ProjectProperties
-                                    wizardModel={wizardModel}
-                                    modalDialog={this.props.modalDialog}
-                                />
-                            </>
-                        ) : (
-                            <div className="EezStudio_NewProjectWizard_NoProjects">
-                                No{" "}
-                                {wizardModel.section == "templates"
-                                    ? "templates"
-                                    : "examples"}{" "}
-                                found
+                        {tempType !== "create" && (
+                            <div className="select-info">
+                                <span>
+                                    {labels.template} : <strong>{selectedApp?.projectName || "None"}</strong>
+                                </span>
+                                <span>
+                                    {labels.resolution} : <strong>{selectedResolution}</strong>
+                                </span>
                             </div>
                         )}
+
+                        <div className="create-btn-box">
+                            {tempType !== "create" && (
+                                <span
+                                    className={classNames("create-btn", {
+                                        disabled:
+                                            !selectedApp ||
+                                            wizardModel.templateListLoading
+                                    })}
+                                    title={
+                                        selectedApp?.remoteTemplate
+                                            ? labels.remoteCreatePending
+                                            : undefined
+                                    }
+                                    onClick={() => {
+                                        if (selectedApp) {
+                                            this.setState({ tempType: "create" });
+                                        }
+                                    }}
+                                >
+                                    {labels.createProject}
+                                    <Icon
+                                        icon="material:chevron_right"
+                                        size={18}
+                                        className="create-btn-arrow"
+                                    />
+                                </span>
+                            )}
+                        </div>
                     </div>
+
+                    {/* Step 1: Template selection box (single responsive gallery) */}
+                    <div className={classNames("template-box", { hide: tempType === "create" })}>
+                        <div className="board-template template-gallery">
+                            <div className="search-bar">
+                                <div className="search-item">
+                                    <strong>{labels.selectTemplate}</strong>
+                                    <div className="search-input-wrapper">
+                                        <svg className="search-svg-icon" viewBox="64 64 896 896" width="14" height="14" fill="currentColor">
+                                            <path d="M909.6 854.5L649.9 594.8C690.2 542.7 712 479 712 412c0-80.2-31.3-155.4-87.9-212.1-56.6-56.7-132-87.9-212.1-87.9s-155.5 31.3-212.1 87.9C143.2 256.5 112 331.8 112 412c0 80.1 31.3 155.5 87.9 212.1C256.5 680.8 331.8 712 412 712c67 0 130.6-21.8 182.7-62l259.7 259.6a8.2 8.2 0 0011.6 0l43.6-43.5a8.2 8.2 0 000-11.6zM570.4 570.4C528 612.7 471.8 636 412 636s-116-23.3-158.4-65.6C211.3 528 188 471.8 188 412s23.3-116.1 65.6-158.4C296 211.3 352.2 188 412 188s116.1 23.2 158.4 65.6S636 352.2 636 412s-23.3 116.1-65.6 158.4z" />
+                                        </svg>
+                                        <input
+                                            type="text"
+                                            placeholder={labels.filterByName}
+                                            value={templateFilterName}
+                                            onChange={e => this.setState({ templateFilterName: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="search-item category-filters">
+                                    {["All", ...templateCategories].map(cat => (
+                                        <label key={cat}>
+                                            <input
+                                                type="radio"
+                                                hidden
+                                                name="app_category"
+                                                checked={(cat === "All" && !templateFilterType) || templateFilterType === cat}
+                                                onChange={() => this.setState({ templateFilterType: cat === "All" ? "" : cat })}
+                                            />
+                                            <span>
+                                                {cat === "All"
+                                                    ? labels.categories.All
+                                                    : getTemplateCategoryLabel(
+                                                          cat,
+                                                          isChinese
+                                                      )}
+                                            </span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="temp-box scroll-bar">
+                                {wizardModel.templateListLoading ? (
+                                    <div className="template-gallery-state">
+                                        {labels.loadingTemplates}
+                                    </div>
+                                ) : wizardModel.templateListError &&
+                                  filteredApps.length === 0 ? (
+                                    <div className="template-gallery-state template-gallery-state--error">
+                                        <span>
+                                            {getTemplateListErrorMessage(
+                                                wizardModel.templateListError,
+                                                isChinese
+                                            )}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="template-retry-button"
+                                            onClick={() =>
+                                                void wizardModel.loadDigiwiseTemplates()
+                                            }
+                                        >
+                                            {labels.retry}
+                                        </button>
+                                    </div>
+                                ) : filteredApps.length === 0 ? (
+                                    <div className="template-gallery-state">
+                                        {wizardModel.digiwiseTemplates.length === 0
+                                            ? labels.noTemplates
+                                            : labels.noTemplateMatches}
+                                    </div>
+                                ) : filteredApps.map(projectType => {
+                                    const isSelected = wizardModel.type === projectType.id;
+                                    return (
+                                        <div
+                                            key={projectType.id}
+                                            className={classNames("temp-item", { selected: isSelected })}
+                                            onClick={() => wizardModel.changeType(projectType.id)}
+                                            onDoubleClick={() => this.setState({ tempType: "create" })}
+                                        >
+                                            <label>
+                                                <input
+                                                    type="radio"
+                                                    name="app_select"
+                                                    hidden
+                                                    checked={isSelected}
+                                                    onChange={() => wizardModel.changeType(projectType.id)}
+                                                />
+                                                <div className="temp-item-card">
+                                                    <div className="temp-item-img-box">
+                                                        {renderPreviewImage(projectType.image)}
+                                                    </div>
+                                                    <h4>{projectType.projectName}</h4>
+                                                    {projectType.remoteTemplate && (
+                                                        <div className="template-card-meta">
+                                                            <span>{projectType.remoteTemplate.projectType}</span>
+                                                            <span>v{projectType.remoteTemplate.version}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </label>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Step 2: Parameter configuration form */}
+                    <div className={classNames("create-form", { hide: tempType !== "create" })}>
+
+                        <div className="form-content-split">
+                            {/* Left side: Selected Template preview & summary */}
+                            <div className="template-form-part">
+                                <div className="view-item template-hero-card">
+                                    <div className="view-item-preview">
+                                        {renderPreviewImage(selectedApp?.image)}
+                                    </div>
+                                    <div className="view-item-info">
+                                        <h1>{selectedApp?.projectName}</h1>
+                                        <div className="template-meta-badge">
+                                            <span className="badge-type">{selectedApp?.projectType}</span>
+                                            <span className="badge-res">
+                                                {selectedApp?.remoteTemplate
+                                                    ? labels.resolutionFromTemplate
+                                                    : `${wizardModel.displayWidth} × ${wizardModel.displayHeight}`}
+                                            </span>
+                                        </div>
+                                        <p className="template-desc">{selectedApp?.description}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right side: Info form */}
+                            <div className="info-form-part">
+                                <div className="input-box">
+                                    <h5>{labels.projectName}</h5>
+                                    <input
+                                        type="text"
+                                        placeholder={labels.projectNamePlaceholder}
+                                        value={wizardModel.name || ""}
+                                        onChange={action(e => {
+                                            wizardModel.name = e.target.value;
+                                        })}
+                                    />
+                                    {wizardModel.nameError && (
+                                        <span className="form-error">{wizardModel.nameError}</span>
+                                    )}
+                                </div>
+
+                                <div className="input-box">
+                                    <h5>{labels.projectLocation}</h5>
+                                    <div className="input-with-button">
+                                        <input
+                                            type="text"
+                                            placeholder={labels.projectLocationPlaceholder}
+                                            value={wizardModel.location || ""}
+                                            onChange={action(e => {
+                                                wizardModel.location = e.target.value;
+                                            })}
+                                        />
+                                        <button type="button" onClick={this.onBrowseDirectory}>
+                                            {labels.browse}
+                                        </button>
+                                    </div>
+                                    {wizardModel.locationError && (
+                                        <span className="form-error">{wizardModel.locationError}</span>
+                                    )}
+                                </div>
+
+                                {!selectedApp?.remoteTemplate && (
+                                <div className="board-size">
+                                    <div className="input-box">
+                                        <h5>{labels.width}</h5>
+                                        <input
+                                            type="number"
+                                            value={wizardModel.displayWidth}
+                                            onChange={action(e => {
+                                                wizardModel.displayWidth = parseInt(e.target.value) || 800;
+                                            })}
+                                        />
+                                    </div>
+                                    <div className="input-box">
+                                        <h5>{labels.height}</h5>
+                                        <input
+                                            type="number"
+                                            value={wizardModel.displayHeight}
+                                            onChange={action(e => {
+                                                wizardModel.displayHeight = parseInt(e.target.value) || 480;
+                                            })}
+                                        />
+                                    </div>
+                                </div>
+                                )}
+
+                                {!selectedApp?.remoteTemplate && (
+                                <div className="input-box">
+                                    <h5>{labels.resolutionPresets}</h5>
+                                    <div className="resolution-presets">
+                                        {[
+                                            { w: 800, h: 480, label: "800×480" },
+                                            { w: 480, h: 320, label: "480×320" },
+                                            { w: 1024, h: 600, label: "1024×600" },
+                                            { w: 480, h: 272, label: "480×272" },
+                                            { w: 320, h: 240, label: "320×240" },
+                                            { w: 240, h: 240, label: "240×240" }
+                                        ].map(preset => (
+                                            <button
+                                                type="button"
+                                                key={preset.label}
+                                                className={classNames("preset-btn", {
+                                                    active: wizardModel.displayWidth === preset.w && wizardModel.displayHeight === preset.h
+                                                })}
+                                                onClick={action(() => {
+                                                    wizardModel.displayWidth = preset.w;
+                                                    wizardModel.displayHeight = preset.h;
+                                                })}
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                )}
+
+                                {!selectedApp?.remoteTemplate && (
+                                <div className="input-box">
+                                    <h5>{labels.colorDepth}</h5>
+                                    <select
+                                        value={wizardModel.colorDepth}
+                                        onChange={action(e => {
+                                            wizardModel.colorDepth = e.target.value;
+                                        })}
+                                    >
+                                        <option value="16">16-bit (RGB565)</option>
+                                        <option value="24">24-bit (RGB888)</option>
+                                        <option value="32">32-bit (ARGB8888)</option>
+                                    </select>
+                                </div>
+                                )}
+
+                                {!selectedApp?.remoteTemplate && selectedApp?.projectType === PROJECT_TYPE_NAMES[ProjectType.LVGL] && (
+                                    <div className="input-box">
+                                        <h5>{labels.lvglVersion}</h5>
+                                        <select
+                                            value={wizardModel.lvglVersion}
+                                            onChange={action(e => {
+                                                wizardModel.lvglVersion = e.target.value as any;
+                                            })}
+                                        >
+                                            {isV9 ? (
+                                                <>
+                                                    <option value="9.3.0">9.3.0</option>
+                                                    <option value="9.2.2">9.2.2</option>
+                                                    <option value="9.4.0">9.4.0</option>
+                                                    <option value="9.5.0">9.5.0</option>
+                                                </>
+                                            ) : (
+                                                <option value="8.4.0">8.4.0 ({labels.compatible83})</option>
+                                            )}
+                                        </select>
+                                    </div>
+                                )}
+
+                                <div className="input-box">
+                                    <div className="form-check">
+                                        <input
+                                            type="checkbox"
+                                            id="create-directory-cb"
+                                            checked={wizardModel.createDirectory}
+                                            onChange={action(e => {
+                                                wizardModel.createDirectory = e.target.checked;
+                                            })}
+                                        />
+                                        <label htmlFor="create-directory-cb">
+                                            {labels.createDirectory}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {wizardModel.projectCreationError && (
+                                    <div className="alert alert-danger" style={{ marginTop: 10 }}>
+                                        {wizardModel.projectCreationError}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Bottom buttons */}
+                        <div className="create-bottom">
+                            <div id="_cancel" onClick={() => this.setState({ tempType: "" })}>
+                                {labels.back}
+                            </div>
+                            <div id="_finish" onClick={this.onCreateProject}>
+                                {labels.create}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Progress overlay */}
+                    {wizardModel.createProjectInProgress && (
+                        <div className="progress-box">
+                            <Loader />
+                            <p>{wizardModel.progress || "Creating project..."}</p>
+                        </div>
+                    )}
                 </div>
             );
         }
@@ -2825,7 +3727,7 @@ export function showNewProjectWizard() {
         {
             jsPanel: {
                 id: "new-project-wizard",
-                title: "New Project",
+                title: getNewProjectWizardLabels().title,
                 width: 1280,
                 height: 800
             }

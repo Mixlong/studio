@@ -828,6 +828,9 @@ export class TreeAdapter {
     onClickCallback: ((object: IEezObject) => void) | undefined;
     onDoubleClickCallback: ((object: IEezObject) => void) | undefined;
 
+    // A deferred drag start must be cancellable if dragend arrives first.
+    private pendingDragStart?: ReturnType<typeof setTimeout>;
+
     get draggable() {
         // return (
         //     (this.sortDirection === undefined ||
@@ -1117,10 +1120,20 @@ export class TreeAdapter {
             0
         );
 
-        // postpone render, otherwise we can receive onDragEnd immediatelly
-        setTimeout(() => {
+        // Defer rendering to avoid interrupting native dragstart, but cancel
+        // this callback if dragend/drop occurs before it fires.
+        this.clearPendingDragStart();
+        this.pendingDragStart = setTimeout(() => {
+            this.pendingDragStart = undefined;
             DragAndDropManager.start(event, item.object as any, projectStore);
         });
+    }
+
+    private clearPendingDragStart() {
+        if (this.pendingDragStart !== undefined) {
+            clearTimeout(this.pendingDragStart);
+            this.pendingDragStart = undefined;
+        }
     }
 
     onDrag(row: TreeObjectAdapter, event: any) {
@@ -1128,6 +1141,7 @@ export class TreeAdapter {
     }
 
     onDragEnd(event: any) {
+        this.clearPendingDragStart();
         DragAndDropManager.end(event);
     }
 
@@ -1221,6 +1235,7 @@ export class TreeAdapter {
             }
         }
 
+        this.clearPendingDragStart();
         DragAndDropManager.end(event);
     }
 

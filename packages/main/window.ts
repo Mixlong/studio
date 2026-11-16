@@ -4,6 +4,7 @@ import { BrowserWindow, ipcMain, app, dialog, shell } from "electron";
 import { action, observable, runInAction } from "mobx";
 
 import { getIcon } from "main/util";
+import { shouldHideWindowOnClose } from "main/window-lifecycle";
 import {
     settings,
     settingsRegisterWindow,
@@ -99,6 +100,12 @@ export function createWindow(params: IWindowParams) {
 
     let browserWindow = new BrowserWindow(windowContructorParams);
 
+    // Keep native command/accelerator registration; draw the main menu in React.
+    if (process.platform === "win32" && params.url === "home/index.html") {
+        browserWindow.setAutoHideMenuBar(true);
+        browserWindow.setMenuBarVisibility(false);
+    }
+
     require("@electron/remote/main").enable(browserWindow.webContents);
 
     let window: IWindow | undefined;
@@ -143,7 +150,14 @@ export function createWindow(params: IWindowParams) {
                     return;
                 }
 
-                if (params.hideOnClose && windows.length > 1 && !forceQuit) {
+                const otherVisibleWindows = windows.filter(entry =>
+                    entry.browserWindow !== browserWindow &&
+                    !entry.browserWindow.isDestroyed() &&
+                    entry.browserWindow.isVisible()
+                ).length;
+                if (shouldHideWindowOnClose(
+                    !!params.hideOnClose, forceQuit, otherVisibleWindows
+                )) {
                     browserWindow.hide();
                     event.preventDefault();
                     return;

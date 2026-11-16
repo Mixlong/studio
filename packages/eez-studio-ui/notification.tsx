@@ -41,6 +41,7 @@ export const container = (
         newestOnTop={false}
         closeOnClick
         pauseOnHover
+        style={{ zIndex: 100001 }}
     />
 );
 

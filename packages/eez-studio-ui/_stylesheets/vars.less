@@ -8,40 +8,41 @@
 @borderColor: hsl(220, 14%, 90%);
 @darkBorderColor: hsl(220, 10%, 78%);
 @panelHeaderColor: var(--bs-tertiary-bg);
-@selectionBackgroundColor: hsl(207, 56%, 46%);
-@selectionColor: white;
-@lightSelectionBackgroundColor: hsl(207, 60%, 72%);
-@lightSelectionColor: white;
+@selectionBackgroundColor: #ffb500;
+@selectionColor: #171717;
+@lightSelectionBackgroundColor: #f5dd90;
+@lightSelectionColor: #171717;
 @tableBorderColor: hsl(220, 14%, 89%);
-@nonFocusedSelectionBackgroundColor: hsl(220, 10%, 78%);
-@nonFocusedSelectionColor: black;
+@nonFocusedSelectionBackgroundColor: #ffb500;
+@nonFocusedSelectionColor: #171717;
 @hoverBackgroundColor: hsl(220, 10%, 78%);
 @hoverColor: black;
 @scrollTrackColor: hsl(220, 20%, 95%);
 @scrollThumbColor: hsl(220, 8%, 76%);
 @darkTextColor: hsl(220, 8%, 35%);
-@focusBackgroundColor: hsl(207, 58%, 58%);
+@focusBackgroundColor: #ffb500;
 @focusColor: hsl(220, 10%, 27%);
-@dragSourceBackgroundColor: #e040fb;
-@dragSourceColor: white;
-@dropTargetBackgroundColor: #7c4dff;
-@dropTargetColor: #ffffff;
-@dropPlaceColor: #7c4dff;
+// GUI Guider palette: dragging uses the same gold family as hover/selection.
+@dragSourceBackgroundColor: #ffb50080;
+@dragSourceColor: @textColor;
+@dropTargetBackgroundColor: #ffb500;
+@dropTargetColor: #171717;
+@dropPlaceColor: #ffb500;
 @errorColor: #dc3545;
 @warningBackgroundColor: #ffc107;
 @warningColor: #212529;
-@actionHoverColor: #0056b3;
+@actionHoverColor: #d49b05;
 @connectionLineColor: #999;
 @trixToolbarColor: #eee;
 
 @selectedConnectionLineColor: red;
-@seqConnectionLineColor: #3fadb5;
+@seqConnectionLineColor: #ffb500;
 @activeConnectionLineColor: blue;
-@connectionLineInTheMakingColor: #337bb7;
+@connectionLineInTheMakingColor: #d49b05;
 @activeTabBackgroundColor: #ffffff;
 @disabledConnectionLineColor: #aaa;
 
-@actionSelectedTextColor: white;
+@actionSelectedTextColor: #171717;
 @actionDisabledColor: #ccc;
 
 @readOnlyListItem: #f5f5f5;
@@ -104,12 +105,25 @@
 @shadowElevation4: 0 10px 24px hsla(220, 30%, 10%, 0.18);
 @shadowElevation5: 0 15px 35px hsla(220, 30%, 10%, 0.22);
 
-@borderRadiusSmall: 4px;
+@borderRadiusSmall: 2px;
 
 @componentShadow: @shadowElevation1;
 @componentBodyShadow: none;
 
 @panelHeaderColorInsideFlexLayout: var(--bs-tertiary-bg);
+
+// GUI Guider workspace surface mapping. The light theme keeps Digiwise's
+// existing neutral surfaces; vars-dark.less supplies the REA-confirmed
+// dark-theme surfaces for the same semantic regions.
+@workspaceToolbarBackgroundColor: @panelHeaderColor;
+@workspaceCanvasBackgroundColor: @backgroundColor;
+@workspacePanelBackgroundColor: @panelHeaderColorInsideFlexLayout;
+@workspacePanelActiveBackgroundColor: @panelHeaderColorInsideFlexLayout;
+@workspacePanelBorderColor: @borderColor;
+@workspaceOperationPopupBackgroundColor: @panelHeaderColorInsideFlexLayout;
+@workspaceTreeTextColor: @textColor;
+@workspaceTreeIconColor: #3f3f3f;
+@workspaceTreeGuideColor: #777;
 
 @formControlBorderColor: #ced4da;
 

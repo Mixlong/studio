@@ -16,8 +16,8 @@ import { showAboutBox } from "eez-studio-ui/about-box";
 
 import type * as ImportInstrumentDefinitionModule from "instrument/import-instrument-definition";
 
-import { handleDragAndDrop } from "home/drag-and-drop";
-import { loadTabs, ProjectEditorTab, tabs } from "home/tabs-store";
+import { digiwiseAuthController } from "home/digiwise-account";
+import { ProjectEditorTab, tabs } from "home/tabs-store";
 import { settingsController } from "home/settings";
 import { App } from "home/app";
 import { openProject } from "home/tabs-store";
@@ -31,6 +31,33 @@ import { buildProject } from "home/build-project";
 import { layoutModels } from "eez-studio-ui/side-dock";
 
 configure({ enforceActions: "observed", useProxies: "always" });
+
+const pendingProjectOpens: Array<{ filePath: string; runMode: boolean }> = [];
+
+function openProjectWhenAuthenticated(filePath: string, runMode: boolean) {
+    if (!digiwiseAuthController.authState.authenticated || !tabs) {
+        pendingProjectOpens.push({ filePath, runMode });
+        return;
+    }
+
+    openProject(filePath, runMode);
+}
+
+function flushPendingProjectOpens() {
+    if (!digiwiseAuthController.authState.authenticated || !tabs) {
+        return;
+    }
+
+    while (pendingProjectOpens.length > 0) {
+        const pending = pendingProjectOpens.shift()!;
+        openProject(pending.filePath, pending.runMode);
+    }
+}
+
+window.addEventListener(
+    "digiwise-app-authenticated",
+    flushPendingProjectOpens
+);
 
 // make sure we store all the values waiting to be stored inside blur event handler
 function blurAll() {
@@ -82,6 +109,9 @@ ipcRenderer.on("switch-theme", async () => {
 ipcRenderer.on(
     "importInstrumentDefinitionFile",
     (sender: any, filePath: string) => {
+        if (!digiwiseAuthController.authState.authenticated) {
+            return;
+        }
         const { importInstrumentDefinition } =
             require("instrument/import-instrument-definition") as typeof ImportInstrumentDefinitionModule;
         importInstrumentDefinition(filePath);
@@ -95,7 +125,9 @@ ipcRenderer.on("show-about-box", async () => {
 ipcRenderer.on(
     "open-project",
     async (sender: any, filePath: any, runMode: boolean) => {
-        openProject(filePath, runMode);
+        if (typeof filePath === "string") {
+            openProjectWhenAuthenticated(filePath, !!runMode);
+        }
     }
 );
 
@@ -107,6 +139,9 @@ ipcRenderer.on(
 );
 
 ipcRenderer.on("load-debug-info", async (sender: any, filePath: any) => {
+    if (!digiwiseAuthController.authState.authenticated) {
+        return;
+    }
     try {
         let tab = tabs.activeTab;
         if (tab instanceof ProjectEditorTab) {
@@ -118,6 +153,9 @@ ipcRenderer.on("load-debug-info", async (sender: any, filePath: any) => {
 });
 
 ipcRenderer.on("save-debug-info", () => {
+    if (!digiwiseAuthController.authState.authenticated) {
+        return;
+    }
     try {
         let tab = tabs.activeTab;
         if (tab instanceof ProjectEditorTab) {
@@ -129,6 +167,9 @@ ipcRenderer.on("save-debug-info", () => {
 });
 
 ipcRenderer.on("new-project", async (sender: any, filePath: any) => {
+    if (!digiwiseAuthController.authState.authenticated) {
+        return;
+    }
     const { showNewProjectWizard } = await import(
         "project-editor/project/ui/Wizard"
     );
@@ -136,6 +177,9 @@ ipcRenderer.on("new-project", async (sender: any, filePath: any) => {
 });
 
 ipcRenderer.on("add-instrument", async (sender: any, filePath: any) => {
+    if (!digiwiseAuthController.authState.authenticated) {
+        return;
+    }
     const { showAddInstrumentDialog } = await import(
         "instrument/add-instrument-dialog"
     );
@@ -181,8 +225,6 @@ async function main() {
     }
 
     if (!buildProject) {
-        loadTabs();
-
         const root = createRoot(document.getElementById("EezStudio_Content")!);
         root.render(
             <Main>
@@ -190,11 +232,10 @@ async function main() {
                 <LineMarkers />
             </Main>
         );
-
-        handleDragAndDrop();
+    } else {
+        // The hidden build helper has no interactive IDE session or login UI.
+        ipcRenderer.send("open-command-line-project");
     }
-
-    ipcRenderer.send("open-command-line-project");
 }
 
 main();

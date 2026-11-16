@@ -12,7 +12,8 @@ const HOME_WINDOW_PARAMS: IWindowParams = {
 };
 
 export function openHomeWindow(params?: Partial<IWindowParams>) {
-    return openWindow(Object.assign(HOME_WINDOW_PARAMS, params));
+    // Do not mutate shared defaults for temporary hidden/build windows.
+    return openWindow({ ...HOME_WINDOW_PARAMS, ...params });
 }
 
 export function bringHomeWindowToFocus() {

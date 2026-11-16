@@ -208,7 +208,8 @@ export const PropertyGrid = observer(
                                 })}
                                 style={
                                     propertyInfo.type === PropertyType.Array ||
-                                    propertyInfo.type === PropertyType.Any
+                                    propertyInfo.type === PropertyType.Any ||
+                                    propertyInfo.propertyGridRowComponent
                                         ? {
                                               width: "100%"
                                           }

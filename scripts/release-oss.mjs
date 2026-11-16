@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
@@ -21,8 +20,23 @@ const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const mode = process.argv[2];
 const dryRun = process.argv.includes("--dry-run");
 const releaseVersion = process.env.RELEASE_VERSION?.trim() || "patch";
+const releaseChannel = process.env.RELEASE_CHANNEL?.trim();
+const buildNumberText = process.env.RELEASE_BUILD_NUMBER?.trim();
+if (!new Set(["dev", "stable"]).has(releaseChannel)) {
+    throw new Error("RELEASE_CHANNEL must be dev or stable; use scripts/release-channel.mjs");
+}
+if (!buildNumberText || !/^[0-9]+$/.test(buildNumberText) || Number(buildNumberText) < 1 || !Number.isSafeInteger(Number(buildNumberText))) {
+    throw new Error("RELEASE_BUILD_NUMBER must be a positive safe integer; refusing a non-unique release path");
+}
+const buildNumber = Number(buildNumberText);
 const stagingRoot = path.join(projectRoot, "release-oss");
-const stagingDirectory = path.join(stagingRoot, "DigiwiseStudio");
+const stagingDirectory = path.join(
+    stagingRoot,
+    "DigiwiseStudio",
+    "versions",
+    releaseVersion,
+    `build-${buildNumber}`
+);
 
 const commands = {
     all: [
@@ -333,8 +347,8 @@ function writeUpdateMetadata(
 }
 
 function stageRelease() {
-    if (!dryRun) {
-        rmSync(stagingRoot, { recursive: true, force: true });
+    if (!dryRun && existsSync(stagingDirectory)) {
+        throw new Error(`Release staging path already exists; refusing to overwrite: ${stagingDirectory}`);
     }
 
     if (mode === "all") {
@@ -388,6 +402,93 @@ function stageRelease() {
     } else {
         stageDirectory("dist", stagingDirectory);
     }
+
+    writeReleaseManifest();
+}
+
+function listReleaseArtifacts(directory, relativeTo = directory) {
+    return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        const absolutePath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+            return listReleaseArtifacts(absolutePath, relativeTo);
+        }
+        const relativePath = path.relative(relativeTo, absolutePath).split(path.sep).join("/");
+        const content = readFileSync(absolutePath);
+        return [{ path: relativePath, size: content.length, sha512: createHash("sha512").update(content).digest("base64") }];
+    }).sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function writeReleaseManifest() {
+    const packageVersion = dryRun
+        ? releaseVersion
+        : JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8")).version;
+    if (packageVersion !== releaseVersion) {
+        throw new Error(`Built package version ${packageVersion} does not match release version ${releaseVersion}`);
+    }
+    const artifacts = dryRun ? [] : listReleaseArtifacts(stagingDirectory);
+    const relativeVersionDirectory = path.relative(path.join(stagingRoot, "DigiwiseStudio"), stagingDirectory).split(path.sep).join("/");
+    const feeds = {};
+    if (mode === "all" || mode === "mac") feeds.darwin = `${relativeVersionDirectory}/dist-mac/`;
+    if (mode === "all" || mode === "win") feeds["win32-x64"] = `${relativeVersionDirectory}/dist-win-x64/`;
+    if (mode === "win-ia32") feeds["win32-ia32"] = `${relativeVersionDirectory}/win-ia32/`;
+    for (const [platform, feedPath] of Object.entries(feeds)) {
+        const platformDirectory = platform === "darwin" ? "dist-mac" : platform === "win32-ia32" ? "win-ia32" : "dist-win-x64";
+        const platformArtifacts = artifacts.filter(artifact => artifact.path.startsWith(platformDirectory + "/"));
+        if (!dryRun && platformArtifacts.length === 0) {
+            throw new Error(`No staged artifacts found for ${platform}`);
+        }
+        const manifest = {
+            schemaVersion: 1,
+            app: "DigiwiseStudio",
+            channel: releaseChannel,
+            platform,
+            version: packageVersion,
+            buildNumber,
+            status: "published",
+            createdAt: new Date().toISOString(),
+            feed: feedPath,
+            artifactBase: `${relativeVersionDirectory}/`,
+            feeds,
+            artifacts: platformArtifacts
+        };
+        const markerPath = path.join(
+            stagingRoot,
+            "DigiwiseStudio",
+            "builds",
+            String(buildNumber),
+            platform,
+            "release.json"
+        );
+        if (!dryRun) {
+            if (existsSync(markerPath)) {
+                throw new Error(`Release marker already exists; refusing to overwrite: ${markerPath}`);
+            }
+            mkdirSync(path.dirname(markerPath), { recursive: true });
+            writeFileSync(markerPath, JSON.stringify(manifest, null, 2) + "\n", { flag: "wx" });
+        }
+        console.log(`[release] manifest: ${path.relative(projectRoot, markerPath)}`);
+    }
+}
+
+function writeEmbeddedReleaseIdentity() {
+    if (dryRun) {
+        console.log("[dry-run] would embed update-release.json");
+        return;
+    }
+    const buildMainDirectory = path.join(projectRoot, "build", "main");
+    if (!existsSync(buildMainDirectory)) {
+        throw new Error(`Build output is missing: ${buildMainDirectory}`);
+    }
+    const version = JSON.parse(readFileSync(path.join(projectRoot, "package.json"), "utf8")).version;
+    const probeWindow = Number(process.env.RELEASE_PROBE_WINDOW || 10);
+    if (!Number.isInteger(probeWindow) || probeWindow < 5 || probeWindow > 20) {
+        throw new Error("RELEASE_PROBE_WINDOW must be an integer from 5 to 20");
+    }
+    writeFileSync(
+        path.join(buildMainDirectory, "update-release.json"),
+        JSON.stringify({ channel: releaseChannel, buildNumber, version, probeWindow }, null, 2),
+        { flag: "w" }
+    );
 }
 
 validateMacRelease();
@@ -405,6 +506,7 @@ if (mode === "all") {
     run(["run", "clean-dist"]);
 }
 run(["run", "build"]);
+writeEmbeddedReleaseIdentity();
 prepareWinCrossBuild();
 for (const command of commands[mode]) {
     run(command);

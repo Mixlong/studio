@@ -85,4 +85,3 @@ const api = new DigiwisePublicApi(
     console.error(error);
     process.exitCode = 1;
 });
-

@@ -1,13 +1,20 @@
 import fs from "fs";
 import path from "path";
 import { app, ipcMain, safeStorage } from "electron";
+import { readUpdateReleaseIdentity } from "main/update-discovery";
+import {
+    validateDigiwiseChangelog,
+    DigiwiseChangelog,
+    DigiwiseChangelogIdentity,
+    DigiwiseChangelogLanguage
+} from "eez-studio-shared/digiwise-changelog";
 
 import type {
     DigiwiseAuthState,
+    DigiwiseCaptcha,
     DigiwiseIpcError,
     DigiwiseIpcResult,
-    DigiwiseRegisterResponse,
-    DigiwiseSendCodeResponse
+    DigiwiseIdeUser
 } from "eez-studio-shared/digiwise-auth";
 import {
     DigiwisePublicApi,
@@ -16,8 +23,8 @@ import {
 
 interface StoredAuthSession {
     accessToken: string;
-    userId?: string;
-    email: string;
+    user: DigiwiseIdeUser;
+    expiresAt: number;
 }
 
 interface EncryptedSessionFile {
@@ -26,29 +33,69 @@ interface EncryptedSessionFile {
     payload: string;
 }
 
-// Local development uses the locally running studio-admin Public API. Packaged
-// builds must provide the deployed gateway through the environment instead of
-// silently falling back to a local or simulated service.
-const publicApiBaseUrl =
-    process.env.DIGIWISE_PUBLIC_API_BASE_URL?.trim() ||
-    (!app.isPackaged
-        ? "http://127.0.0.1:13000/main/api/v1"
-        : undefined);
+// The token must only be sent to the deployed Java IDE API in installed builds.
+// At packaging time an HTTPS URL is embedded into the app, never a dev localhost fallback.
+function readPublicApiBaseUrl(): string | undefined {
+    const injected = process.env.DIGIWISE_IDE_API_BASE_URL?.trim();
+    if (injected) return injected;
+    if (!app.isPackaged) return "http://127.0.0.1:18080/api/ide/v1";
+    try {
+        const value = JSON.parse(
+            fs.readFileSync(
+                path.join(app.getAppPath(), "build/main/ide-public-api.json"),
+                "utf8"
+            )
+        );
+        return typeof value.baseUrl === "string" ? value.baseUrl.trim() : undefined;
+    } catch (_error) {
+        return undefined;
+    }
+}
+const publicApiBaseUrl = readPublicApiBaseUrl();
 let publicApi: DigiwisePublicApi | null = null;
 let publicApiConfigError: DigiwisePublicApiError | null = null;
 let currentSession: StoredAuthSession | null = null;
+let authGeneration = 0;
 let ipcRegistered = false;
+const sessionListeners = new Set<() => void>();
+export function onDigiwiseAuthSessionChanged(listener: () => void): () => void {
+    sessionListeners.add(listener);
+    return () => sessionListeners.delete(listener);
+}
+function notifySessionListeners() {
+    for (const listener of sessionListeners) {
+        try {
+            listener();
+        } catch (error) {
+            console.error("[auth] Session listener failed", error);
+        }
+    }
+}
+
+
+/** Main-process-only security guard. Never exposes a token to the MCP client. */
+export function getDigiwiseAuthGuard() {
+    const valid = !!currentSession &&
+        currentSession.expiresAt > Date.now() &&
+        currentSession.user.accountStatus === "active";
+    return {
+        authenticated: valid,
+        userId: valid ? currentSession!.user.id : null,
+        generation: authGeneration
+    };
+}
 
 function getPublicApi() {
     if (publicApiConfigError) {
         throw publicApiConfigError;
     }
 
-    if (!publicApiBaseUrl) {
+    if (!publicApiBaseUrl ||
+        (app.isPackaged && !publicApiBaseUrl.startsWith("https://"))) {
         publicApiConfigError = new DigiwisePublicApiError(
             500,
             "PUBLIC_API_NOT_CONFIGURED",
-            "The Digiwise Public API URL is not configured",
+            "The Digiwise IDE Public API URL is not configured",
             "local-config"
         );
         throw publicApiConfigError;
@@ -64,7 +111,7 @@ function getPublicApi() {
                 : new DigiwisePublicApiError(
                       500,
                       "PUBLIC_API_NOT_CONFIGURED",
-                      "The Digiwise Public API URL is invalid",
+                      "The Digiwise IDE Public API URL is invalid",
                       "local-config"
                   );
         throw publicApiConfigError;
@@ -73,6 +120,25 @@ function getPublicApi() {
 
 function sessionFilePath() {
     return path.join(app.getPath("userData"), "digiwise-auth-session.json");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isIdeUser(value: unknown): value is DigiwiseIdeUser {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        typeof value.id === "string" &&
+        typeof value.username === "string" &&
+        typeof value.displayName === "string" &&
+        (value.identityType === "internal" || value.identityType === "external") &&
+        (value.accountStatus === "active" || value.accountStatus === "disabled") &&
+        (typeof value.email === "string" || value.email === null)
+    );
 }
 
 async function loadSession() {
@@ -91,14 +157,19 @@ async function loadSession() {
         const decrypted = safeStorage.decryptString(
             Buffer.from(file.payload, "base64")
         );
-        const session = JSON.parse(decrypted) as StoredAuthSession;
+        const session = JSON.parse(decrypted) as Partial<StoredAuthSession>;
         if (
             typeof session.accessToken === "string" &&
-            (typeof session.userId === "string" ||
-                typeof session.userId === "undefined") &&
-            typeof session.email === "string"
+            isIdeUser(session.user) &&
+            typeof session.expiresAt === "number" &&
+            Number.isFinite(session.expiresAt) &&
+            session.expiresAt > Date.now()
         ) {
-            currentSession = session;
+            currentSession = {
+                accessToken: session.accessToken,
+                user: session.user,
+                expiresAt: session.expiresAt
+            };
         }
     } catch (_error) {
         // A missing, unreadable or stale local session is equivalent to a
@@ -134,6 +205,8 @@ async function saveSession(session: StoredAuthSession) {
 
 async function clearSession() {
     currentSession = null;
+    authGeneration++;
+    notifySessionListeners();
 
     try {
         await fs.promises.unlink(sessionFilePath());
@@ -144,6 +217,14 @@ async function clearSession() {
 
 function emptyState(): DigiwiseAuthState {
     return { authenticated: false };
+}
+
+function stateFromSession(session: StoredAuthSession): DigiwiseAuthState {
+    return {
+        authenticated: true,
+        user: session.user,
+        expiresIn: Math.max(0, Math.ceil((session.expiresAt - Date.now()) / 1000))
+    };
 }
 
 function toIpcError(error: unknown): DigiwiseIpcError {
@@ -180,21 +261,45 @@ async function call<T>(operation: () => Promise<T>): Promise<DigiwiseIpcResult<T
     }
 }
 
-function readString(input: unknown, field: string) {
-    if (!input || typeof input !== "object") {
+export async function callDigiwisePublicApiWithSession<T>(
+    operation: (
+        api: DigiwisePublicApi,
+        accessToken: string
+    ) => Promise<T>
+): Promise<DigiwiseIpcResult<T>> {
+    const session = currentSession;
+    if (!session || session.expiresAt <= Date.now()) {
+        if (session) {
+            await clearSession();
+        }
+        return fail<T>(
+            new DigiwisePublicApiError(
+                401,
+                "AUTH_REQUIRED",
+                "Sign in before accessing IDE templates",
+                "session-required"
+            )
+        );
+    }
+
+    return call(() => operation(getPublicApi(), session.accessToken));
+}
+
+function readRequiredString(input: unknown, field: string) {
+    if (!isRecord(input)) {
         throw new DigiwisePublicApiError(
             422,
-            "VALIDATION_ERROR",
+            "INVALID_REQUEST",
             `${field} is required`,
             "local-validation"
         );
     }
 
-    const value = (input as Record<string, unknown>)[field];
-    if (typeof value !== "string") {
+    const value = input[field];
+    if (typeof value !== "string" || value.length === 0) {
         throw new DigiwisePublicApiError(
             422,
-            "VALIDATION_ERROR",
+            "INVALID_REQUEST",
             `${field} is required`,
             "local-validation"
         );
@@ -203,34 +308,74 @@ function readString(input: unknown, field: string) {
     return value;
 }
 
+function readOptionalString(input: unknown, field: string) {
+    if (!isRecord(input) || typeof input[field] === "undefined") {
+        return undefined;
+    }
+
+    if (typeof input[field] !== "string") {
+        throw new DigiwisePublicApiError(
+            422,
+            "INVALID_REQUEST",
+            `${field} must be a string`,
+            "local-validation"
+        );
+    }
+
+    return input[field] as string;
+}
+
 async function getAuthState(): Promise<DigiwiseAuthState> {
     if (!currentSession) {
         return emptyState();
     }
 
+    if (currentSession.expiresAt <= Date.now()) {
+        await clearSession();
+        return emptyState();
+    }
+
     try {
-        const entitlements = await getPublicApi().getEntitlements(
+        const currentUser = await getPublicApi().getCurrentUser(
             currentSession.accessToken
         );
-        return {
-            authenticated: true,
-            email: currentSession.email,
-            ...(currentSession.userId
-                ? { userId: currentSession.userId }
-                : {}),
-            accountStatus: entitlements.accountStatus,
-            entitlements
+        if (
+            !isIdeUser(currentUser.user) ||
+            !Number.isFinite(currentUser.expiresIn) ||
+            currentUser.expiresIn <= 0
+        ) {
+            throw new DigiwisePublicApiError(
+                502,
+                "PUBLIC_API_INVALID_RESPONSE",
+                "The current-user response is invalid",
+                "current-user-response"
+            );
+        }
+        currentSession = {
+            ...currentSession,
+            user: currentUser.user,
+            expiresAt: Date.now() + currentUser.expiresIn * 1000
         };
+        await saveSession(currentSession);
+        return stateFromSession(currentSession);
     } catch (error) {
         if (
             error instanceof DigiwisePublicApiError &&
-            error.status === 401
+            (error.status === 401 || error.status === 403)
         ) {
             await clearSession();
             return emptyState();
         }
         throw error;
     }
+}
+
+function changelogIdentity(): DigiwiseChangelogIdentity {
+    const channel = readUpdateReleaseIdentity(
+        app.getAppPath(),
+        file => fs.readFileSync(file, "utf8")
+    )?.channel || "stable";
+    return { version: app.getVersion(), channel };
 }
 
 export async function registerDigiwiseAuthIpc() {
@@ -240,51 +385,94 @@ export async function registerDigiwiseAuthIpc() {
 
     ipcRegistered = true;
     await loadSession();
+    // Public, read-only content. Renderer cannot request another installed version.
+    ipcMain.handle("digistudio:release:identity", () => changelogIdentity());
+    ipcMain.handle(
+        "digistudio:release:changelog",
+        (_event, language: DigiwiseChangelogLanguage):
+            Promise<DigiwiseIpcResult<DigiwiseChangelog>> =>
+            call(async () => {
+                if (language !== "zh-CN" && language !== "en-US") {
+                    throw new DigiwisePublicApiError(422, "INVALID_REQUEST",
+                        "Unsupported changelog language", "local-validation");
+                }
+                const identity = changelogIdentity();
+                return validateDigiwiseChangelog(
+                    await getPublicApi().getReleaseChangelog(
+                        identity.version, identity.channel, language
+                    ),
+                    identity,
+                    language
+                );
+            })
+    );
+
 
     ipcMain.handle("digistudio:auth:state", () => call(() => getAuthState()));
 
     ipcMain.handle(
-        "digistudio:auth:send-code",
-        (_event, input: unknown): Promise<DigiwiseIpcResult<DigiwiseSendCodeResponse>> =>
-            call(() => {
-                const email = readString(input, "email");
-                return getPublicApi().sendCode(email);
-            })
-    );
-
-    ipcMain.handle(
-        "digistudio:auth:register",
-        async (
-            _event,
-            input: unknown
-        ): Promise<DigiwiseIpcResult<DigiwiseRegisterResponse>> =>
-            call(() => {
-                const email = readString(input, "email");
-                const code = readString(input, "code");
-                const password = readString(input, "password");
-                return getPublicApi().register(email, code, password);
-            })
+        "digistudio:auth:captcha",
+        (): Promise<DigiwiseIpcResult<DigiwiseCaptcha>> =>
+            call(() => getPublicApi().getCaptcha())
     );
 
     ipcMain.handle(
         "digistudio:auth:login",
         async (_event, input: unknown): Promise<DigiwiseIpcResult<DigiwiseAuthState>> =>
             call(async () => {
-                const email = readString(input, "email");
-                const password = readString(input, "password");
-                const login = await getPublicApi().login(email, password);
-                await saveSession({
+                const username = readRequiredString(input, "username").trim();
+                const password = readRequiredString(input, "password");
+                const captchaCode = readOptionalString(input, "captchaCode")?.trim();
+                const captchaUuid = readOptionalString(input, "captchaUuid")?.trim();
+                const login = await getPublicApi().login(
+                    username,
+                    password,
+                    captchaCode,
+                    captchaUuid
+                );
+
+                if (
+                    !login.accessToken ||
+                    login.tokenType !== "Bearer" ||
+                    !isIdeUser(login.user) ||
+                    !Number.isFinite(login.expiresIn) ||
+                    login.expiresIn <= 0
+                ) {
+                    throw new DigiwisePublicApiError(
+                        502,
+                        "PUBLIC_API_INVALID_RESPONSE",
+                        "The login response is invalid",
+                        "login-response"
+                    );
+                }
+
+                const session: StoredAuthSession = {
                     accessToken: login.accessToken,
-                    ...(login.userId ? { userId: login.userId } : {}),
-                    email: login.email || email
-                });
-                return getAuthState();
+                    user: login.user,
+                    expiresAt: Date.now() + login.expiresIn * 1000
+                };
+                await saveSession(session);
+                authGeneration++;
+                notifySessionListeners();
+                return stateFromSession(session);
             })
     );
 
-    ipcMain.handle("digistudio:auth:logout", async () => {
-        await clearSession();
-        return ok(emptyState());
-    });
+    ipcMain.handle(
+        "digistudio:auth:logout",
+        (): Promise<DigiwiseIpcResult<DigiwiseAuthState>> =>
+            call(async () => {
+                const session = currentSession;
+                if (session) {
+                    try {
+                        await getPublicApi().logout(session.accessToken);
+                    } catch (_error) {
+                        // Local sign-out must still complete if the server is
+                        // unavailable. The token is removed before returning.
+                    }
+                }
+                await clearSession();
+                return emptyState();
+            })
+    );
 }
-

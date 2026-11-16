@@ -1,79 +1,39 @@
-export type DigiwiseAccountStatus = "active" | "suspended" | "disabled";
+export type DigiwiseIdentityType = "internal" | "external";
 
-export type DigiwiseTrialStatus =
-    | "not_started"
-    | "active"
-    | "expired"
-    | "revoked";
+export type DigiwiseAccountStatus = "active" | "disabled";
 
-export type DigiwiseLicenseSource =
-    | "none"
-    | "trial"
-    | "code"
-    | "enterprise"
-    | "admin";
-
-export type DigiwiseLicenseStatus =
-    | "inactive"
-    | "active"
-    | "expired"
-    | "revoked"
-    | "suspended";
-
-export interface DigiwiseTrial {
-    status: DigiwiseTrialStatus;
-    startedAt?: string | null;
-    expiresAt?: string | null;
-}
-
-export interface DigiwiseLicense {
-    source: DigiwiseLicenseSource;
-    status: DigiwiseLicenseStatus;
-    expiresAt: string | null;
-    organizationId: string | null;
-}
-
-export interface DigiwiseEntitlementSnapshot {
-    serverTime: string;
+export interface DigiwiseIdeUser {
+    id: string;
+    username: string;
+    displayName: string;
+    identityType: DigiwiseIdentityType;
     accountStatus: DigiwiseAccountStatus;
-    workspaceId?: string | null;
-    trial: DigiwiseTrial;
-    license: DigiwiseLicense;
-    capabilities: string[];
+    email: string | null;
 }
 
-export interface DigiwiseRegisterResponse {
-    userId: string;
-    accountStatus: DigiwiseAccountStatus;
-    trial: DigiwiseTrial;
-    serverTime: string;
-}
-
-export interface DigiwiseSendCodeResponse {
-    requestId: string;
-    accepted: true;
+export interface DigiwiseCaptcha {
+    enabled: boolean;
+    uuid?: string;
+    imageBase64?: string;
+    mimeType?: string;
 }
 
 export interface DigiwiseLoginResponse {
     accessToken: string;
     tokenType: "Bearer";
     expiresIn: number;
-    refreshToken?: string;
-    userId?: string;
-    email?: string;
+    user: DigiwiseIdeUser;
 }
 
-export interface DigiwiseRedeemResponse {
-    redemptionId: string;
-    entitlements: DigiwiseEntitlementSnapshot;
+export interface DigiwiseCurrentUserResponse {
+    user: DigiwiseIdeUser;
+    expiresIn: number;
 }
 
 export interface DigiwiseAuthState {
     authenticated: boolean;
-    email?: string;
-    userId?: string;
-    accountStatus?: DigiwiseAccountStatus;
-    entitlements?: DigiwiseEntitlementSnapshot;
+    user?: DigiwiseIdeUser;
+    expiresIn?: number;
 }
 
 export interface DigiwiseIpcError {
@@ -86,4 +46,3 @@ export interface DigiwiseIpcError {
 export type DigiwiseIpcResult<T> =
     | { ok: true; data: T }
     | { ok: false; error: DigiwiseIpcError };
-

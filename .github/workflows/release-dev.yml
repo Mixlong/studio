@@ -59,10 +59,14 @@ jobs:
                       runner: macos-15
                       script: release:dev:mac
                       artifact: release-macos
+                      metadata: dist-mac/latest-mac.yml
+                      marker_platform: darwin
                     - platform: Windows x64
                       runner: windows-2022
                       script: release:dev:win
                       artifact: release-windows-x64
+                      metadata: dist-win-x64/latest.yml
+                      marker_platform: win32-x64
         runs-on: ${{ matrix.runner }}
         env:
             RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
@@ -85,8 +89,10 @@ jobs:
             - name: Verify staged release files
               shell: bash
               run: |
-                  test -d release-oss/DigiwiseStudio
-                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
+                  release_dir="release-oss/DigiwiseStudio/versions/${RELEASE_VERSION}/build-${GITHUB_RUN_NUMBER}"
+                  test -f "$release_dir/${{ matrix.metadata }}"
+                  test -f "release-oss/DigiwiseStudio/builds/${GITHUB_RUN_NUMBER}/${{ matrix.marker_platform }}/release.json"
+                  find release-oss/DigiwiseStudio -maxdepth 8 -type f -print
 
             - name: Upload staged release
               uses: actions/upload-artifact@v4
@@ -118,9 +124,12 @@ jobs:
             - name: Verify staged release files
               shell: bash
               run: |
-                  test -f release-oss/DigiwiseStudio/dist-mac/latest-mac.yml
-                  test -f release-oss/DigiwiseStudio/dist-win-x64/latest.yml
-                  find release-oss/DigiwiseStudio -maxdepth 3 -type f -print
+                  release_dir="release-oss/DigiwiseStudio/versions/${RELEASE_VERSION}/build-${GITHUB_RUN_NUMBER}"
+                  test -f "$release_dir/dist-mac/latest-mac.yml"
+                  test -f "$release_dir/dist-win-x64/latest.yml"
+                  test -f "release-oss/DigiwiseStudio/builds/${GITHUB_RUN_NUMBER}/darwin/release.json"
+                  test -f "release-oss/DigiwiseStudio/builds/${GITHUB_RUN_NUMBER}/win32-x64/release.json"
+                  find release-oss/DigiwiseStudio -maxdepth 8 -type f -print
 
             - name: Package release assets
               shell: bash
@@ -129,11 +138,9 @@ jobs:
                   mac_archive="DigiStudio-${RELEASE_VERSION}-mac.tar.gz"
                   win_archive="DigiStudio-${RELEASE_VERSION}-win-x64.tar.gz"
 
-                  tar -czf "$RUNNER_TEMP/$mac_archive" \
-                    -C release-oss/DigiwiseStudio dist-mac
-                  tar -czf "$RUNNER_TEMP/$win_archive" \
-                    -C release-oss/DigiwiseStudio dist-win-x64
-
+                  release_dir="versions/${RELEASE_VERSION}/build-${GITHUB_RUN_NUMBER}"
+                  tar -czf "$RUNNER_TEMP/$mac_archive" -C release-oss/DigiwiseStudio "$release_dir/dist-mac" "builds/${GITHUB_RUN_NUMBER}/darwin/release.json"
+                  tar -czf "$RUNNER_TEMP/$win_archive" -C release-oss/DigiwiseStudio "$release_dir/dist-win-x64" "builds/${GITHUB_RUN_NUMBER}/win32-x64/release.json"
                   test -s "$RUNNER_TEMP/$mac_archive"
                   test -s "$RUNNER_TEMP/$win_archive"
 

@@ -3080,10 +3080,16 @@ extern ext_font_desc_t fonts[];
         this.startBuild();
 
         const build = this;
+        const initialPageName =
+            this.project.settings.general.initialPage?.trim();
+        const initialPage = initialPageName
+            ? this.pages.find(page => page.name === initialPageName)
+            : undefined;
+        const page = initialPage || this.pages[0];
 
         build.indent();
         build.line(
-            `loadScreen(SCREEN_ID_${this.getScreenIdentifier(this.pages[0]).toUpperCase()});`
+            `loadScreen(SCREEN_ID_${this.getScreenIdentifier(page).toUpperCase()});`
         );
         build.unindent();
 

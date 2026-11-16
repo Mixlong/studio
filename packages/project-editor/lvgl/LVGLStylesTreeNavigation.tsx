@@ -47,9 +47,17 @@ const AddButton = observer(
             if (this.props.navigationObject) {
                 const aNewItem = await addItem(this.props.navigationObject);
                 if (aNewItem) {
-                    this.props.treeAdapter.selectItem(
-                        this.props.treeAdapter.getItemFromId(getId(aNewItem))!
+                    const item = this.props.treeAdapter.getItemFromId(
+                        getId(aNewItem)
                     );
+                    if (item) {
+                        this.props.treeAdapter.selectItem(item);
+                    }
+                    runInAction(() => {
+                        this.context.navigationStore.selectedStyleObject.set(
+                            aNewItem
+                        );
+                    });
 
                     const result = ProjectEditor.getEditorComponent(
                         aNewItem,
@@ -232,7 +240,7 @@ export const LVGLStylesTreeNavigation = observer(
         get treeAdapter() {
             return new TreeAdapter(
                 this.treeObjectAdapter,
-                undefined,
+                this.props.selectedObject,
                 undefined,
                 true,
                 this.sortDirection,
@@ -250,6 +258,10 @@ export const LVGLStylesTreeNavigation = observer(
         }
 
         onClickItem = (object: IEezObject) => {
+            if (isPartOfNavigation(this.props.navigationObject)) {
+                this.context.navigationStore.setSelectedPanel(this);
+            }
+
             if (this.props.onClickItem) {
                 this.props.onClickItem(object);
                 return;

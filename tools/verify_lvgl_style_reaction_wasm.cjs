@@ -9,7 +9,7 @@ const { createNativeStyleSample } = require("../build/project-editor/lvgl/style-
 
 const src = fs.readFileSync(
     path.join(__dirname, "../packages/project-editor/lvgl/page-runtime.ts"), "utf8"
-);
+).replace(/\r\n/g, "\n");
 const classAt = src.indexOf("export class LVGLStylesEditorRuntime");
 const begin = src.indexOf("                this.autorRunDispose = autorun(() => {", classAt);
 const end = src.indexOf("\n                });\n                } catch (error)", begin);

@@ -77,6 +77,7 @@ const COMPONENT_MATERIAL_ICONS: Record<string, string> = {
     LVGLLottieWidget: "material:animation",
     LVGLMenuWidget: "material:menu",
     LVGLMessageBoxWidget: "material:message",
+    LVGLMessageBoxButtonWidget: "material:smart_button",
     LVGLMeterWidget: "material:speed",
     LVGLPanelWidget: "material:web_asset",
     LVGLQRCodeWidget: "material:qr_code",
