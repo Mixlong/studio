@@ -450,17 +450,6 @@ async function convertMp3ToPcm(
     sourceFilePath: string,
     resolveFilePath: (filePath: string) => string
 ) {
-    const converterScriptPath = audio.converterScript
-        ? resolveFilePath(audio.converterScript)
-        : getBundledConverterScriptPath();
-    if (!converterScriptPath || !fs.existsSync(converterScriptPath)) {
-        throw new Error(
-            audio.converterScript
-                ? `MP3 converter script was not found: ${audio.converterScript}`
-                : "The bundled MP3 converter is unavailable. Set a converter script in Audio Settings."
-        );
-    }
-
     const sampleFormat =
         resource.sampleFormat === "source" ? "s16" : resource.sampleFormat;
     const format = getPcmFormatInfo(sampleFormat);
@@ -488,18 +477,46 @@ async function convertMp3ToPcm(
     const argumentTemplate =
         audio.converterArguments ||
         "--input \"{input}\" --output \"{output}\" --format {format} --sample-rate {sampleRate} --channels {channels} --ffmpeg \"{ffmpeg}\"";
-    const args = [
-        converterScriptPath,
-        ...tokenizeArguments(
-            argumentTemplate.replace(
-                /\{(input|output|format|sampleRate|channels|ffmpeg)\}/g,
-                (_match, name) => values[name as keyof typeof values]
-            )
-        )
-    ];
-
     try {
-        await runAudioConverter(audio.pythonExecutable || "python3", args);
+        if (audio.converterScript || audio.converterArguments) {
+            // Keep support for existing custom Python converter workflows.
+            const converterScriptPath = audio.converterScript
+                ? resolveFilePath(audio.converterScript)
+                : getBundledConverterScriptPath();
+            if (!converterScriptPath || !fs.existsSync(converterScriptPath)) {
+                throw new Error(
+                    audio.converterScript
+                        ? `MP3 converter script was not found: ${audio.converterScript}`
+                        : "The bundled MP3 converter is unavailable. Set a converter script in Audio Settings."
+                );
+            }
+            const args = [
+                converterScriptPath,
+                ...tokenizeArguments(
+                    argumentTemplate.replace(
+                        /\{(input|output|format|sampleRate|channels|ffmpeg)\}/g,
+                        (_match, name) => values[name as keyof typeof values]
+                    )
+                )
+            ];
+            await runAudioConverter(audio.pythonExecutable || "python3", args);
+        } else {
+            // The built-in converter needs FFmpeg only, not Python.
+            const pcmFormat = {
+                s8: ["s8", "pcm_s8"],
+                u8: ["u8", "pcm_u8"],
+                s16: ["s16le", "pcm_s16le"],
+                u16: ["u16le", "pcm_u16le"]
+            }[sampleFormat];
+            await runAudioConverter(audio.ffmpegExecutable || "ffmpeg", [
+                "-y", "-nostdin", "-hide_banner", "-loglevel", "error",
+                "-i", sourceFilePath, "-vn",
+                "-ac", String(targetChannels),
+                "-ar", String(targetSampleRate),
+                "-f", pcmFormat[0], "-acodec", pcmFormat[1],
+                outputFilePath
+            ]);
+        }
         const data = await fs.promises.readFile(outputFilePath);
         const blockAlign = targetChannels * (format.bitsPerSample / 8);
         if (!data.length || data.length % blockAlign !== 0) {

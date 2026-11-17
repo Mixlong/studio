@@ -2318,7 +2318,7 @@ export class Font extends EezObject {
                 return undefined;
             }
         },
-        icon: "material:font_download"
+        icon: "material:text_fields"
     };
 
     get glyphsMap() {
@@ -2829,7 +2829,7 @@ const feature: ProjectEditorFeature = {
     key: "fonts",
     type: PropertyType.Array,
     typeClass: Font,
-    icon: "material:font_download",
+    icon: "material:text_fields",
     create: () => [],
     check: (projectStore, object: EezObject[], messages: IMessage[]) => {
         if (object.length > 255) {

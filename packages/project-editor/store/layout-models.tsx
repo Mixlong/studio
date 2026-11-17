@@ -35,6 +35,14 @@ export class LayoutModels extends AbstractLayoutModels {
     static RUNTIME_MODE_EDITORS_TABSET_ID = "RUNTIME-EDITORS";
     static PROPERTIES_TAB_ID = "PROPERTIES";
     static COMPONENTS_PALETTE_TAB_ID = "COMPONENTS_PALETTE";
+    static NAVIGATION_TAB_STRIP_CLASS =
+        "DigiStudio_ProjectEditor_NavigationTabStrip";
+    static TOP_NAVIGATION_TAB_STRIP_CLASS =
+        "DigiStudio_ProjectEditor_TopNavigationTabStrip";
+    static CANVAS_TAB_STRIP_CLASS =
+        "DigiStudio_ProjectEditor_CanvasTabStrip";
+    static INSPECTOR_TAB_STRIP_CLASS =
+        "DigiStudio_ProjectEditor_InspectorTabStrip";
     static BREAKPOINTS_TAB_ID = "BREAKPOINTS_PALETTE";
     static DEBUGGER_TAB_ID = "DEBUGGER";
     static DEBUGGER_LOGS_TAB_ID = "DEBUGGER_LOGS";
@@ -134,7 +142,7 @@ export class LayoutModels extends AbstractLayoutModels {
         name: "Fonts",
         id: LayoutModels.FONTS_TAB_ID,
         component: "fonts",
-        icon: "material:font_download"
+        icon: "material:text_fields"
     };
 
     static BITMAPS_TAB: FlexLayout.IJsonTabNode = {
@@ -280,6 +288,19 @@ export class LayoutModels extends AbstractLayoutModels {
     // Track if docker simulator mode is active
     isDockerSimulatorMode: boolean = false;
 
+    // GUI Guider-style toolbar entry points replace the vertical left rail.
+    // Store only presentation state; the existing feature components remain intact.
+    activeActivityTool: string | undefined = undefined;
+
+    toggleActivityTool(tabId: string) {
+        this.activeActivityTool =
+            this.activeActivityTool === tabId ? undefined : tabId;
+    }
+
+    closeActivityTool() {
+        this.activeActivityTool = undefined;
+    }
+
     get root() {
         if (this.projectStore.projectTypeTraits.isIEXT) {
             return this.rootEditorForIEXT;
@@ -310,6 +331,9 @@ export class LayoutModels extends AbstractLayoutModels {
             rootDockerSimulator: observable,
 
             isDockerSimulatorMode: observable,
+            activeActivityTool: observable,
+            toggleActivityTool: action,
+            closeActivityTool: action,
             root: computed,
 
             styles: observable,
@@ -455,7 +479,7 @@ export class LayoutModels extends AbstractLayoutModels {
         return [
             {
                 name: "rootEditor",
-                version: 120,
+                version: 122,
                 json: {
                     global: LayoutModels.GLOBAL_OPTIONS,
                     borders: this.borders,
@@ -469,6 +493,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.TOP_NAVIGATION_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.PAGES_TAB,
                                             LayoutModels.WIDGETS_TAB,
@@ -478,6 +504,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.NAVIGATION_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.FLOW_STRUCTURE_TAB
                                         ]
@@ -485,6 +513,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.NAVIGATION_TAB_STRIP_CLASS,
                                         children: [LayoutModels.VARIABLES_TAB]
                                     }
                                 ]
@@ -503,12 +533,16 @@ export class LayoutModels extends AbstractLayoutModels {
                                 children: [
                                     {
                                         type: "tabset",
-                                        weight: 2,
+                                        weight: 60,
+                                        classNameTabStrip:
+                                            "DigiStudio_ProjectEditor_PropertiesTabStrip",
                                         children: [LayoutModels.PROPERTIES_TAB]
                                     },
                                     {
                                         type: "tabset",
-                                        weight: 1,
+                                        weight: 40,
+                                        classNameTabStrip:
+                                            LayoutModels.INSPECTOR_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.COMPONENTS_PALETTE_TAB
                                         ]
@@ -537,6 +571,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.NAVIGATION_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.EXTENSION_DEFINITIONS_TAB
                                         ]
@@ -544,11 +580,15 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 5,
+                                        classNameTabStrip:
+                                            LayoutModels.NAVIGATION_TAB_STRIP_CLASS,
                                         children: [LayoutModels.SCPI_TAB]
                                     },
                                     {
                                         type: "tabset",
                                         weight: 5,
+                                        classNameTabStrip:
+                                            LayoutModels.NAVIGATION_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.INSTRUMENT_COMMANDS_TAB
                                         ]
@@ -570,6 +610,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 2,
+                                        classNameTabStrip:
+                                            "DigiStudio_ProjectEditor_PropertiesTabStrip",
                                         children: [LayoutModels.PROPERTIES_TAB]
                                     }
                                 ]
@@ -595,6 +637,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.TOP_NAVIGATION_TAB_STRIP_CLASS,
                                         children: [
                                             LayoutModels.PAGES_TAB,
                                             LayoutModels.WIDGETS_TAB,
@@ -604,6 +648,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 1,
+                                        classNameTabStrip:
+                                            LayoutModels.INSPECTOR_TAB_STRIP_CLASS,
                                         children: [
                                             {
                                                 type: "tab",
@@ -617,6 +663,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         weight: 2,
+                                        classNameTabStrip:
+                                            LayoutModels.INSPECTOR_TAB_STRIP_CLASS,
                                         children: [
                                             {
                                                 type: "tab",
@@ -711,6 +759,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                         type: "tabset",
                                         weight: 50,
                                         enableTabStrip: true,
+                                        classNameTabStrip:
+                                            LayoutModels.INSPECTOR_TAB_STRIP_CLASS,
                                         enableDrag: false,
                                         enableDrop: false,
                                         enableClose: false,
@@ -1189,6 +1239,8 @@ export class LayoutModels extends AbstractLayoutModels {
                                     {
                                         type: "tabset",
                                         enableTabStrip: true,
+                                        classNameTabStrip:
+                                            "DigiStudio_ProjectEditor_GroupsTabStrip",
                                         enableDrag: false,
                                         enableDrop: false,
                                         enableClose: false,
@@ -1231,6 +1283,7 @@ export class LayoutModels extends AbstractLayoutModels {
 
     load(layoutModels: any) {
         super.load(layoutModels);
+        this.applyProjectEditorPanelTabStripClasses();
 
         // Existing workspaces persist their FlexLayout tabs independently.
         // Remove the obsolete docked Changes tab without resetting any other
@@ -1308,6 +1361,166 @@ export class LayoutModels extends AbstractLayoutModels {
 
         this.projectStore.project.enableTabs();
         this.ensureAudioBorderWidth();
+    }
+
+    private applyProjectEditorPanelTabStripClasses() {
+        // Mark the editing canvas for palette scoping even when loading
+        // saved FlexLayout models; only panel content gets black surfaces.
+        for (const [model, tabSetId] of [
+            [this.rootEditor, LayoutModels.EDITOR_MODE_EDITORS_TABSET_ID],
+            [this.rootRuntime, LayoutModels.RUNTIME_MODE_EDITORS_TABSET_ID]
+        ] as const) {
+            const node = model?.getNodeById(tabSetId);
+            if (
+                node instanceof FlexLayout.TabSetNode &&
+                node.getClassNameTabStrip() !== LayoutModels.CANVAS_TAB_STRIP_CLASS
+            ) {
+                model.doAction(
+                    FlexLayout.Actions.updateNodeAttributes(node.getId(), {
+                        classNameTabStrip: LayoutModels.CANVAS_TAB_STRIP_CLASS
+                    })
+                );
+            }
+        }
+
+        for (const model of [this.rootEditor, this.rootEditorForIEXT]) {
+            this.applyTabSetClass(
+                model,
+                LayoutModels.PROPERTIES_TAB_ID,
+                "DigiStudio_ProjectEditor_PropertiesTabStrip"
+            );
+
+            for (const tabId of [
+                LayoutModels.PAGES_TAB_ID,
+                LayoutModels.USER_WIDGETS_TAB_ID,
+                LayoutModels.ACTIONS_TAB_ID
+            ]) {
+                this.applyTabSetClass(
+                    model,
+                    tabId,
+                    LayoutModels.TOP_NAVIGATION_TAB_STRIP_CLASS
+                );
+            }
+
+            for (const tabId of [
+                LayoutModels.FLOW_STRUCTURE_TAB_ID,
+                LayoutModels.VARIABLES_TAB_ID,
+                LayoutModels.EXTENSION_DEFINITIONS_TAB_ID,
+                LayoutModels.SCPI_TAB_ID,
+                LayoutModels.INSTRUMENT_COMMANDS_TAB_ID
+            ]) {
+                this.applyTabSetClass(
+                    model,
+                    tabId,
+                    LayoutModels.NAVIGATION_TAB_STRIP_CLASS
+                );
+            }
+
+            this.applyTabSetClass(
+                model,
+                LayoutModels.COMPONENTS_PALETTE_TAB_ID,
+                LayoutModels.INSPECTOR_TAB_STRIP_CLASS
+            );
+        }
+
+        for (const tabId of [
+            LayoutModels.PAGES_TAB_ID,
+            LayoutModels.USER_WIDGETS_TAB_ID,
+            LayoutModels.ACTIONS_TAB_ID
+        ]) {
+            this.applyTabSetClass(
+                this.rootRuntime,
+                tabId,
+                LayoutModels.TOP_NAVIGATION_TAB_STRIP_CLASS
+            );
+        }
+
+        // The three navigation controls now live in the toolbar itself.
+        // Remove only their original tab strip; never hide a tabset that
+        // contains unrelated user-docked tabs.
+        for (const model of [
+            this.rootEditor,
+            this.rootEditorForIEXT,
+            this.rootRuntime
+        ]) {
+            this.hideOriginalTopNavigationStrip(model);
+        }
+
+        let groupsTabSet: FlexLayout.TabSetNode | undefined;
+        this.lvglGroups?.visitNodes(node => {
+            if (
+                node instanceof FlexLayout.TabSetNode &&
+                node
+                    .getChildren()
+                    .some(
+                        child =>
+                            child instanceof FlexLayout.TabNode &&
+                            child.getComponent() === "groups"
+                    )
+            ) {
+                groupsTabSet = node;
+            }
+        });
+
+        if (
+            groupsTabSet &&
+            groupsTabSet.getClassNameTabStrip() !==
+                "DigiStudio_ProjectEditor_GroupsTabStrip"
+        ) {
+            this.lvglGroups.doAction(
+                FlexLayout.Actions.updateNodeAttributes(groupsTabSet.getId(), {
+                    classNameTabStrip:
+                        "DigiStudio_ProjectEditor_GroupsTabStrip"
+                })
+            );
+        }
+    }
+
+    private hideOriginalTopNavigationStrip(model: FlexLayout.Model | undefined) {
+        const pages = model?.getNodeById(LayoutModels.PAGES_TAB_ID);
+        const parent = pages?.getParent();
+        const navigationIds = new Set([
+            LayoutModels.PAGES_TAB_ID,
+            LayoutModels.USER_WIDGETS_TAB_ID,
+            LayoutModels.ACTIONS_TAB_ID
+        ]);
+
+        if (
+            model &&
+            parent instanceof FlexLayout.TabSetNode &&
+            parent.isEnableTabStrip() &&
+            parent.getChildren().every(
+                node =>
+                    node instanceof FlexLayout.TabNode &&
+                    navigationIds.has(node.getId())
+            )
+        ) {
+            model.doAction(
+                FlexLayout.Actions.updateNodeAttributes(parent.getId(), {
+                    enableTabStrip: false
+                })
+            );
+        }
+    }
+
+    private applyTabSetClass(
+        model: FlexLayout.Model | undefined,
+        tabId: string,
+        classNameTabStrip: string
+    ) {
+        const tab = model?.getNodeById(tabId);
+        const tabSet = tab?.getParent();
+
+        if (
+            tabSet instanceof FlexLayout.TabSetNode &&
+            tabSet.getClassNameTabStrip() !== classNameTabStrip
+        ) {
+            model?.doAction(
+                FlexLayout.Actions.updateNodeAttributes(tabSet.getId(), {
+                    classNameTabStrip
+                })
+            );
+        }
     }
 
     toggleComponentsPalette() {

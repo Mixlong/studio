@@ -1,0 +1,208 @@
+// Workspace skins provide semantic surface tokens for the app shell.
+// LVGL project styles and color themes remain independent of these tokens.
+:root {
+    // One semantic typography scale shared by Home, menus, tabs and editor panels.
+    // GUI Guider 1.10.1 UI font stack recovered from its renderer CSS.
+    // Windows resolves Segoe UI first; other platforms retain the same fallbacks.
+    --dw-ui-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+        "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --dw-text-primary: @textColor;
+    --dw-text-secondary: var(--bs-secondary-color);
+    --dw-text-muted: var(--bs-tertiary-color, var(--bs-secondary-color));
+    --dw-text-disabled: var(--bs-tertiary-color, var(--bs-secondary-color));
+    --dw-text-on-accent: #171717;
+
+    --dw-menu-bg: @panelHeaderColor;
+    --dw-menu-text: var(--dw-text-primary);
+    --dw-menu-border: @workspacePanelBorderColor;
+    --dw-menu-hover-bg: @hoverBackgroundColor;
+    --dw-menu-hover-text: var(--dw-text-primary);
+    --dw-menu-title: #27c98b;
+    --dw-toolbar-bg: @workspaceToolbarBackgroundColor;
+    --dw-toolbar-border: @workspacePanelBorderColor;
+    --dw-tab-bg: @workspaceToolbarBackgroundColor;
+    --dw-tab-border: @workspacePanelBorderColor;
+    --dw-tab-text: var(--dw-text-secondary);
+    --dw-tab-active-text: var(--dw-text-primary);
+    --dw-tab-active-bg: @workspacePanelActiveBackgroundColor;
+    --dw-tab-indicator: @selectionBackgroundColor;
+    --dw-tab-hover-bg: @hoverBackgroundColor;
+    --dw-tab-hover-text: var(--dw-text-primary);
+    --dw-panel-bg: @panelHeaderColorInsideFlexLayout;
+    --dw-panel-header-bg: @panelHeaderColor;
+    --dw-panel-border: @workspacePanelBorderColor;
+    --dw-panel-hover-text: var(--dw-text-primary);
+    --dw-canvas-bg: @workspaceCanvasBackgroundColor;
+
+    // Canvas selection tokens are separate from app-shell selection states.
+    // Default skins inherit the current theme color; individual workspace
+    // skins can override these without changing tree, tab or list selection.
+    --dw-canvas-selection-primary: @selectionBackgroundColor;
+    --dw-canvas-selection-handle-fill: #ffffff;
+    --dw-canvas-selection-handle-border: var(--dw-canvas-selection-primary);
+    --dw-canvas-selection-marquee-fill: fade(@selectionBackgroundColor, 50%);
+    --dw-canvas-selection-marquee-border: var(--dw-canvas-selection-primary);
+    --dw-canvas-selection-parent: var(--dw-canvas-selection-primary);
+
+    // 方式 A：CSS 变量覆盖（GUI Guider theme4 黄色主题色板）
+    --digi-accent: #ffb500;
+    --digi-accent-dark: #d49b05;
+    --digi-accent-hover: #ffb50080;
+
+    --bs-font-sans-serif: var(--dw-ui-font-family);
+    --bs-primary: #ffb500;
+    --bs-primary-rgb: 255, 181, 0;
+    --bs-link-color: #d49b05;
+    --bs-link-hover-color: #ffb500;
+    --bs-focus-ring-color: rgba(255, 181, 0, 0.25);
+    --bs-border-radius: 2px;
+    --bs-border-radius-sm: 2px;
+    --bs-border-radius-lg: 3px;
+
+    --el-color-primary: #ffb500;
+    --el-color-primary-dark-2: #d49b05;
+    --el-color-primary-light-3: #ffcb4d;
+    --el-color-primary-light-5: #ffda80;
+    --el-color-primary-light-7: #ffe9b3;
+    --el-color-primary-light-8: #fff0cc;
+    --el-color-primary-light-9: #fff8e6;
+    --el-border-radius-base: 2px;
+    --el-border-radius-small: 2px;
+}
+
+[data-bs-theme="dark"],
+html.dark {
+    --digi-accent: #ffb500;
+    --digi-accent-dark: #d49b05;
+    --digi-accent-hover: #ffb50080;
+
+    --bs-font-sans-serif: var(--dw-ui-font-family);
+    // Keep the same readable hierarchy on every dark workspace surface.
+    --dw-text-primary: #e3e3e3;
+    --dw-text-secondary: #b3b3b3;
+    --dw-text-muted: #8d8d8d;
+    --dw-text-disabled: #686868;
+    --bs-body-color: var(--dw-text-primary);
+    --bs-body-color-rgb: 227, 227, 227;
+    --bs-secondary-color: var(--dw-text-secondary);
+    --bs-tertiary-color: var(--dw-text-muted);
+    --bs-primary: #ffb500;
+    --bs-primary-rgb: 255, 181, 0;
+    --bs-body-bg: #141414;
+    --bs-body-bg-rgb: 20, 20, 20;
+    --bs-secondary-bg: #1c1c1c;
+    --bs-secondary-bg-rgb: 28, 28, 28;
+    --bs-tertiary-bg: #181818;
+    --bs-tertiary-bg-rgb: 24, 24, 24;
+    --bs-border-color: #2b2b2b;
+    --bs-link-color: #ffb500;
+    --bs-link-hover-color: #f5dd90;
+    --bs-focus-ring-color: rgba(255, 181, 0, 0.25);
+    --bs-border-radius: 2px;
+    --bs-border-radius-sm: 2px;
+    --bs-border-radius-lg: 3px;
+
+    --el-color-primary: #ffb500;
+    --el-color-primary-dark-2: #ffca3a;
+    --el-color-primary-light-3: #b37f00;
+    --el-color-primary-light-5: #805b00;
+    --el-color-primary-light-7: #4d3600;
+    --el-color-primary-light-8: #332400;
+    --el-color-primary-light-9: #1f1600;
+    --el-border-radius-base: 2px;
+    --el-border-radius-small: 2px;
+}
+
+// GUI Guider 1.10.1 selected-widget outline measured from the REA
+// after-widget-selection capture: RGB(0, 118, 204) / #0076CC.
+// Keep this token scope limited to the Guider dark workspace skin.
+:root[data-bs-theme="dark"][data-workspace-skin="guider"] {
+    --dw-canvas-selection-primary: #0076cc;
+    --dw-canvas-selection-handle-fill: #ffffff;
+    --dw-canvas-selection-handle-border: #0076cc;
+    --dw-canvas-selection-marquee-fill: rgba(0, 118, 204, 0.12);
+    --dw-canvas-selection-marquee-border: #0076cc;
+    --dw-canvas-selection-parent: #0076cc;
+}
+
+.btn-primary,
+.el-button--primary {
+    --bs-btn-color: #171717;
+    --bs-btn-bg: var(--digi-accent, #ffb500);
+    --bs-btn-border-color: var(--digi-accent, #ffb500);
+    --bs-btn-hover-color: #171717;
+    --bs-btn-hover-bg: var(--digi-accent-dark, #d49b05);
+    --bs-btn-hover-border-color: var(--digi-accent-dark, #d49b05);
+    --bs-btn-active-color: #171717;
+    --bs-btn-active-bg: var(--digi-accent-dark, #d49b05);
+    --bs-btn-active-border-color: var(--digi-accent-dark, #d49b05);
+    --el-button-text-color: #171717;
+    --el-button-hover-text-color: #171717;
+    --el-button-active-bg-color: #d49b05;
+    --el-button-active-border-color: #d49b05;
+    color: #171717;
+}
+
+.form-check-input {
+    border-color: #646b7a;
+    background-color: rgba(0, 0, 0, 0.25);
+
+    &:hover:not(:checked) {
+        border-color: var(--digi-accent, #ffb500);
+    }
+}
+
+.form-check-input:checked {
+    background-color: var(--digi-accent, #ffb500);
+    border-color: var(--digi-accent, #ffb500);
+}
+
+.form-check-input:focus {
+    border-color: var(--digi-accent, #ffb500);
+    box-shadow: 0 0 0 0.15rem rgba(255, 181, 0, 0.25);
+}
+
+.nav-pills {
+    --bs-nav-pills-border-radius: 2px;
+    --bs-nav-pills-link-active-color: #171717;
+    --bs-nav-pills-link-active-bg: var(--digi-accent, #ffb500);
+}
+
+.el-tree--highlight-current .el-tree-node.is-current > .el-tree-node__content {
+    background-color: var(--el-color-primary, #ffb500) !important;
+    color: #171717 !important;
+}
+
+.el-tree-node__content:hover {
+    background-color: var(--digi-accent-hover, #ffb50080) !important;
+}
+
+// Theme-specific Guider surface tokens. The workspace structure stays
+// shared across light and dark modes; only these color values change.
+:root[data-bs-theme="dark"][data-workspace-skin="guider"] {
+    --dw-menu-bg: #050505;
+    --dw-menu-text: var(--dw-text-primary);
+    --dw-menu-border: #151515;
+    --dw-menu-hover-bg: #313131;
+    --dw-menu-hover-text: var(--dw-text-primary);
+    --dw-menu-title: #27c98b;
+    --dw-toolbar-bg: #252525;
+    --dw-toolbar-border: #363636;
+    --dw-tab-bg: #252525;
+    --dw-tab-border: #373737;
+    --dw-tab-text: var(--dw-text-secondary);
+    --dw-tab-active-text: var(--dw-text-primary);
+    --dw-tab-active-bg: #111111;
+    --dw-tab-indicator: #111111;
+    --dw-tab-hover-bg: #383838;
+    --dw-tab-hover-text: var(--dw-text-primary);
+    --dw-panel-bg: #000000;
+    --dw-panel-header-bg: #1c1c1c;
+    --dw-panel-border: #292929;
+    // REA theme4: .ant-tree-treenode:hover:before uses #ffb50080;
+    // the selected row uses #ffb500, with text #000.
+    --dw-panel-hover-bg: #ffb50080;
+    --dw-panel-hover-text: var(--dw-text-primary);
+    --dw-canvas-bg: #242424;
+}

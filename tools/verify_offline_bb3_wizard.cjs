@@ -52,8 +52,13 @@ async function verify() {
                 )
             );
             assert(original, version);
+            // Git on Windows may check out text templates with CRLF. Verify
+            // canonical LF bytes against the recorded upstream SHA-256.
+            const canonicalBytes = Buffer.from(
+                bytes.toString("utf8").replace(/\r\n/g, "\n")
+            );
             assert.equal(
-                crypto.createHash("sha256").update(bytes).digest("hex"),
+                crypto.createHash("sha256").update(canonicalBytes).digest("hex"),
                 original.sha256
             );
             assert(JSON.parse(bytes.toString("utf8")).settings?.general);

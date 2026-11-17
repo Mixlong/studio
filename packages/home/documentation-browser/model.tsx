@@ -766,7 +766,10 @@ class Model {
                 label: (
                     <span className="EezStudio_DocumentationBrowser_ComponentTreeNode">
                         <span>
-                            {typeof componentInfo.icon === "string" ? (
+                            {typeof componentInfo.icon === "string" &&
+                            componentInfo.icon.startsWith("material:") ? (
+                                <Icon icon={componentInfo.icon} size={18} />
+                            ) : typeof componentInfo.icon === "string" ? (
                                 <img src={componentInfo.icon} />
                             ) : (
                                 componentInfo.icon
@@ -795,8 +798,8 @@ class Model {
                                     componentInfo.docCounters.total && (
                                     <Icon
                                         icon="material:check_circle"
-                                        style={{ color: "green" }}
-                                        size={20}
+                                        style={{ color: "var(--dw-menu-title, #27c98b)" }}
+                                        size={18}
                                     />
                                 )}
                             </span>

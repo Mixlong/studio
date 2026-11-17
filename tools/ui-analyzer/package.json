@@ -1,0 +1,34 @@
+{
+  "name": "digiwise-ui-analyzer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only UI reverse analysis utility for DigiwiseStudio design research",
+  "main": "main.cjs",
+  "author": "DigiwiseStudio",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "pack:win": "electron-builder --win portable --x64"
+  },
+  "dependencies": {
+    "@electron/asar": "3.4.1"
+  },
+  "devDependencies": {
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.digiwise.ui-analyzer",
+    "productName": "Digiwise UI Analyzer",
+    "directories": { "output": "../../artifacts/ui-analyzer-dist" },
+    "files": [
+      "main.cjs", "preload.cjs", "index.html", "renderer.js", "styles.css",
+      "src/**/*", "scripts/**/*", "package.json", "!**/*.log", "!**/reports/**"
+    ],
+    "asar": true,
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "artifactName": "Digiwise-UI-Analyzer.exe"
+    }
+  }
+}

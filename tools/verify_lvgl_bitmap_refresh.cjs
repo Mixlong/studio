@@ -9,11 +9,11 @@ const root = path.resolve(__dirname, "..");
 const runtime = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/page-runtime.ts"),
     "utf8"
-);
+).replace(/\r\n/g, "\n");
 const bitmap = fs.readFileSync(
     path.join(root, "packages/project-editor/features/bitmap/bitmap.tsx"),
     "utf8"
-);
+).replace(/\r\n/g, "\n");
 
 const editorStart = runtime.indexOf("export class LVGLPageEditorRuntime");
 const editorEnd = runtime.indexOf("export class LVGLNonActivePageViewerRuntime");

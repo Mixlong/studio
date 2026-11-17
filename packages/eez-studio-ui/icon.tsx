@@ -24,6 +24,29 @@ import {
 
 const MATERIAL_PREFIX = "material:";
 const SVG_PREFIX = "svg:";
+const GUI_GUIDER_PREFIX = "guider:";
+const FONT_AWESOME_PREFIX = "fa:";
+
+// Glyphs recovered from GUI Guider's shipped renderer CSS.
+const GUI_GUIDER_ICON_GLYPHS: { [icon: string]: string } = {
+    save: "\ue6e2",
+    undo: "\ued85",
+    redo: "\ued8a",
+    python: "\ue6c2",
+    debug: "\ue6dd"
+};
+
+// GUI Guider's operation bar uses Font Awesome 5 for these actions.
+const FONT_AWESOME_ICON_GLYPHS: { [icon: string]: string } = {
+    copy: "\uf0c5",
+    paste: "\uf0ea",
+    check: "\uf00c",
+    hammer: "\uf6e3",
+    download: "\uf019",
+    registered: "\uf25d",
+    play: "\uf04b",
+    square: "\uf0c8"
+};
 
 // Material Symbols removed several style-specific Material Icons aliases.
 // Keep existing icon references working while rendering the canonical symbol.
@@ -31,6 +54,7 @@ const MATERIAL_SYMBOL_ALIASES: { [icon: string]: string } = {
     error_outline: "error",
     file_download: "download",
     file_upload: "upload",
+    font_download: "text_fields",
     cloud_search: "travel_explore",
     lightbulb_outline: "lightbulb",
     mode_edit: "edit",
@@ -81,12 +105,75 @@ export const Icon = observer(
 
             let result;
 
+            const renderFontIcon = (fontClassName: string, glyph: string) => {
+                const iconClassName = classnames(
+                    "EezStudio_Icon",
+                    fontClassName,
+                    className
+                );
+
+                let iconStyle: React.CSSProperties = {
+                    fontSize: iconSize + "px"
+                };
+                if (style) {
+                    iconStyle = Object.assign(iconStyle, style);
+                }
+
+                const iconEl = (
+                    <i
+                        className={iconClassName}
+                        style={iconStyle}
+                        aria-hidden="true"
+                        onClick={onClick}
+                        title={this.props.title}
+                    >
+                        {glyph}
+                    </i>
+                );
+
+                if (this.props.overlayText) {
+                    return (
+                        <div className="EezStudio_IconWithOverlayContainer">
+                            {iconEl}
+                            <span className="EezStudio_IconOverlay">
+                                {this.props.overlayText}
+                            </span>
+                        </div>
+                    );
+                }
+
+                return iconEl;
+            };
+
             if (typeof icon === "string" && icon.startsWith(SVG_PREFIX)) {
                 icon = SVG_ICONS[icon.substring(4)];
             }
 
             if (typeof icon === "string") {
-                if (icon.startsWith(MATERIAL_PREFIX)) {
+                const guiGuiderGlyph = icon.startsWith(GUI_GUIDER_PREFIX)
+                    ? GUI_GUIDER_ICON_GLYPHS[
+                          icon.slice(GUI_GUIDER_PREFIX.length)
+                      ]
+                    : undefined;
+                const fontAwesomeGlyph = icon.startsWith(
+                    FONT_AWESOME_PREFIX
+                )
+                    ? FONT_AWESOME_ICON_GLYPHS[
+                          icon.slice(FONT_AWESOME_PREFIX.length)
+                      ]
+                    : undefined;
+
+                if (guiGuiderGlyph) {
+                    result = renderFontIcon(
+                        "EezStudio_GUI_GuiderIcon",
+                        guiGuiderGlyph
+                    );
+                } else if (fontAwesomeGlyph) {
+                    result = renderFontIcon(
+                        "font-awesome-icons",
+                        fontAwesomeGlyph
+                    );
+                } else if (icon.startsWith(MATERIAL_PREFIX)) {
                     let iconClassName = classnames(
                         "EezStudio_Icon",
                         "material-symbols-outlined",

@@ -160,6 +160,24 @@ export function serializeEmbeddedMessage(message: EmbeddedOutgoingMessage) {
     return JSON.stringify(message);
 }
 
+// Preserve optional middleware fields (progress, phase, error metadata, etc.)
+// in the remote console instead of showing only the "data" property.
+export function formatEmbeddedIncomingMessage(message: EmbeddedIncomingMessage): string {
+    if (message.command !== "log") {
+        return `WebSocket ${message.command}: ${JSON.stringify(message, null, 2)}`;
+    }
+    const data = typeof message.data === "string"
+        ? message.data
+        : JSON.stringify(message.data ?? null, null, 2);
+    const otherFields = Object.fromEntries(
+        Object.entries(message).filter(([key]) => key !== "command" && key !== "data")
+    );
+    if (Object.keys(otherFields).length === 0) {
+        return data;
+    }
+    return `${data}\n[WebSocket details] ${JSON.stringify(otherFields, null, 2)}`;
+}
+
 export function parseEmbeddedMessage(data: unknown): EmbeddedIncomingMessage {
     let value: unknown = data;
     if (typeof data === "string") {

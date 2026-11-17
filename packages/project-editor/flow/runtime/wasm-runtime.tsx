@@ -151,6 +151,12 @@ export class WasmRuntime extends RemoteRuntime {
 
     lgvlPageRuntime: LVGLPageViewerRuntime | undefined;
 
+    triggerLvglGesture() {
+        if (this.projectStore.projectTypeTraits.isLVGL) {
+            this.lgvlPageRuntime?.triggerGesture();
+        }
+    }
+
     selectedDashboardTheme: string | undefined;
 
     onInitialized: (() => void) | undefined;
@@ -1348,6 +1354,7 @@ export const WasmCanvas = observer(
         declare context: React.ContextType<typeof ProjectContext>;
 
         canvasRef = React.createRef<HTMLCanvasElement>();
+        pointerStart: { x: number; y: number } | undefined;
 
         sendPointerEvent(event: PointerEvent) {
             const canvas = this.canvasRef.current;
@@ -1408,6 +1415,8 @@ export const WasmCanvas = observer(
                 wasmRuntime.wheelPressed = 1;
             }
 
+            this.pointerStart = { x: event.clientX, y: event.clientY };
+
             canvas.setPointerCapture(event.pointerId);
             this.sendPointerEvent(event);
         };
@@ -1430,6 +1439,21 @@ export const WasmCanvas = observer(
 
             canvas.releasePointerCapture(event.pointerId);
             this.sendPointerEvent(event);
+
+            const start = this.pointerStart;
+            this.pointerStart = undefined;
+            if (start) {
+                const dx = event.clientX - start.x;
+                const dy = event.clientY - start.y;
+                if (Math.abs(dx) >= 50 && Math.abs(dx) >= Math.abs(dy) * 1.25) {
+                    const pageBeforeGesture = wasmRuntime.selectedPage;
+                    window.setTimeout(() => {
+                        if (wasmRuntime.selectedPage == pageBeforeGesture) {
+                            wasmRuntime.triggerLvglGesture();
+                        }
+                    }, 50);
+                }
+            }
         };
 
         onPointerCancel = (event: PointerEvent) => {
@@ -1446,6 +1470,7 @@ export const WasmCanvas = observer(
 
             canvas.releasePointerCapture(event.pointerId);
             this.sendPointerEvent(event);
+            this.pointerStart = undefined;
         };
 
         onWheel = (event: WheelEvent) => {
@@ -1580,6 +1605,7 @@ export const WasmCanvas = observer(
                 <canvas
                     tabIndex={0}
                     ref={this.canvasRef}
+                    data-digi-mcp-preview-project-id={this.context.project.objID}
                     width={wasmRuntime.displayWidth}
                     height={wasmRuntime.displayHeight}
                     style={

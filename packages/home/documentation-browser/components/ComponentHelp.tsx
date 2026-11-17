@@ -2,6 +2,7 @@ import React from "react";
 import { observer } from "mobx-react";
 
 import { sourceRootDir } from "eez-studio-shared/util";
+import { Icon } from "eez-studio-ui/icon";
 
 import {
     DASHBOARD_PROJECT_ICON,
@@ -113,7 +114,16 @@ export const ComponentHelp = observer(
                             className="EezStudio_Component_Documentation_Title"
                             style={componentInfo.titleStyle}
                         >
-                            <div>{componentInfo.icon}</div>
+                            <div>
+                                {typeof componentInfo.icon === "string" &&
+                                componentInfo.icon.startsWith("material:") ? (
+                                    <Icon icon={componentInfo.icon} size={32} />
+                                ) : typeof componentInfo.icon === "string" ? (
+                                    <img src={componentInfo.icon} />
+                                ) : (
+                                    componentInfo.icon
+                                )}
+                            </div>
                             <div>{componentInfo.nameWithoutProjectType}</div>
                         </div>
                         <div className="EezStudio_Component_Documentation_Title_ProjectTypes">

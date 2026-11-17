@@ -21,12 +21,81 @@ import {
     findWindowByBrowserWindow,
     isCrashed
 } from "main/window";
-import { settings } from "main/settings";
+import { getLocale, settings } from "main/settings";
 import { APP_NAME } from "main/util";
 import { undoManager } from "eez-studio-shared/store";
 import { isDev } from "eez-studio-shared/util-electron";
 
 ////////////////////////////////////////////////////////////////////////////////
+
+const MENU_LABELS_ZH_CN: Record<string, string> = {
+    About: "关于",
+    Services: "服务",
+    Hide: "隐藏",
+    "Hide Others": "隐藏其他应用",
+    "Show All": "显示全部",
+    Quit: "退出",
+    "New Project...": "新建项目...",
+    "Add Instrument...": "添加仪器...",
+    "New Window": "新建窗口",
+    "Open...": "打开...",
+    "Open Recent": "最近打开",
+    "Reload Project": "重新加载项目",
+    "Load Debug Info...": "加载调试信息...",
+    "Save Debug Info...": "保存调试信息...",
+    "Import Instrument Definition...": "导入仪器定义...",
+    Save: "保存",
+    "Save As": "另存为",
+    Check: "检查",
+    Build: "构建",
+    "Build Extensions": "构建扩展",
+    "Build and Install Extensions": "构建并安装扩展",
+    "Close Window": "关闭窗口",
+    Exit: "退出",
+    File: "文件",
+    Undo: "撤销",
+    Redo: "重做",
+    Cut: "剪切",
+    Copy: "复制",
+    Paste: "粘贴",
+    Delete: "删除",
+    "Select All": "全选",
+    "Find Project Component": "查找项目组件",
+    Edit: "编辑",
+    Home: "首页",
+    History: "历史记录",
+    "Shortcuts and Groups": "快捷键和分组",
+    Notebooks: "笔记本",
+    Extensions: "扩展",
+    Settings: "设置",
+    "Scrapbook for Project Editor": "项目编辑器剪贴簿",
+    "Toggle Full Screen": "切换全屏",
+    "Toggle Developer Tools": "切换开发者工具",
+    "Switch to Light Theme": "切换到浅色主题",
+    "Switch to Dark Theme": "切换到深色主题",
+    "Zoom In": "放大",
+    "Zoom Out": "缩小",
+    "Reset Zoom": "重置缩放",
+    "Hide Components Palette": "隐藏组件面板",
+    "Show Components Palette": "显示组件面板",
+    "Reset Layout": "重置布局",
+    "Next Tab": "下一个标签页",
+    "Previous Tab": "上一个标签页",
+    Reload: "重新加载",
+    View: "视图",
+    Window: "窗口",
+    Minimize: "最小化",
+    Close: "关闭",
+    "Bring All to Front": "将所有窗口置于前台",
+    Documentation: "文档",
+    Help: "帮助"
+};
+
+function menuLabel(label: string, locale: string = getLocale()): string {
+    return locale.toLowerCase().startsWith("zh")
+        ? (MENU_LABELS_ZH_CN[label] || label).replace(/\.{3}$/, "")
+        : label.replace(/\.{3}$/, "");
+}
 
 function showAboutBox(item: any, focusedWindow: any) {
     if (focusedWindow) {
@@ -125,14 +194,14 @@ function buildMacOSAppMenu(
         label: APP_NAME,
         submenu: [
             {
-                label: "About " + APP_NAME,
+                label: menuLabel("About") + " " + APP_NAME,
                 click: showAboutBox
             },
             {
                 type: "separator"
             },
             {
-                label: "Services",
+                label: menuLabel("Services"),
                 role: "services",
                 submenu: []
             },
@@ -140,24 +209,24 @@ function buildMacOSAppMenu(
                 type: "separator"
             },
             {
-                label: "Hide " + APP_NAME,
+                label: menuLabel("Hide") + " " + APP_NAME,
                 accelerator: "Command+H",
                 role: "hide"
             },
             {
-                label: "Hide Others",
+                label: menuLabel("Hide Others"),
                 accelerator: "Command+Alt+H",
                 role: "hideOthers"
             },
             {
-                label: "Show All",
+                label: menuLabel("Show All"),
                 role: "unhide"
             },
             {
                 type: "separator"
             },
             {
-                label: "Quit",
+                label: menuLabel("Quit"),
                 accelerator: "Command+Q",
                 click: function () {
                     setForceQuit();
@@ -170,26 +239,30 @@ function buildMacOSAppMenu(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-function buildFileMenu(win: IWindow | undefined) {
+function buildFileMenu(
+    win: IWindow | undefined,
+    locale: string = getLocale()
+) {
+    const t = (label: string) => menuLabel(label, locale);
     const fileMenuSubmenu: Electron.MenuItemConstructorOptions[] = [];
 
     fileMenuSubmenu.push(
         {
-            label: "New Project...",
+            label: t("New Project..."),
             accelerator: "CmdOrCtrl+N",
             click: function (item, focusedWindow) {
                 createNewProject();
             }
         },
         {
-            label: "Add Instrument...",
+            label: t("Add Instrument..."),
             accelerator: "CmdOrCtrl+Alt+N",
             click: function (item, focusedWindow) {
                 addInstrument();
             }
         },
         {
-            label: "New Window",
+            label: t("New Window"),
             accelerator: "CmdOrCtrl+Shift+N",
             click: function (item, focusedWindow) {
                 openHomeWindow();
@@ -199,7 +272,7 @@ function buildFileMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Open...",
+            label: t("Open..."),
             accelerator: "CmdOrCtrl+O",
             click: (item, focusedWindow) => {
                 if (!focusedWindow) {
@@ -213,7 +286,7 @@ function buildFileMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Open Recent",
+            label: t("Open Recent"),
             submenu: settings.mru.map(mru => ({
                 label: mru.filePath,
                 click: function () {
@@ -253,7 +326,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 type: "separator"
             },
             {
-                label: "Reload Project",
+                label: t("Reload Project"),
                 click: function (item: any, focusedWindow: any) {
                     focusedWindow.webContents.send("reload-project");
                 }
@@ -265,7 +338,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 type: "separator"
             },
             {
-                label: "Load Debug Info...",
+                label: t("Load Debug Info..."),
                 click: async function (item: any, focusedWindow: any) {
                     const result = await dialog.showOpenDialog(focusedWindow, {
                         properties: ["openFile"],
@@ -291,7 +364,7 @@ function buildFileMenu(win: IWindow | undefined) {
 
         if (win.state.isDebuggerActive) {
             fileMenuSubmenu.push({
-                label: "Save Debug Info...",
+                label: t("Save Debug Info..."),
                 click: function (item: any, focusedWindow: any) {
                     saveDebugInfo(focusedWindow);
                 }
@@ -304,7 +377,7 @@ function buildFileMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Import Instrument Definition...",
+            label: t("Import Instrument Definition..."),
             click: async function (item: any, focusedWindow: any) {
                 const result = await dialog.showOpenDialog(focusedWindow, {
                     properties: ["openFile"],
@@ -331,7 +404,7 @@ function buildFileMenu(win: IWindow | undefined) {
             },
             {
                 id: "save",
-                label: "Save",
+                label: t("Save"),
                 accelerator: "CmdOrCtrl+S",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -340,7 +413,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 }
             },
             {
-                label: "Save As",
+                label: t("Save As"),
                 accelerator: "CmdOrCtrl+Shift+S",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -353,7 +426,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 type: "separator"
             },
             {
-                label: "Check",
+                label: t("Check"),
                 accelerator: "CmdOrCtrl+K",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -362,7 +435,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 }
             },
             {
-                label: "Build",
+                label: t("Build"),
                 accelerator: "CmdOrCtrl+B",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -375,7 +448,7 @@ function buildFileMenu(win: IWindow | undefined) {
         if (win.state.hasExtensionDefinitions) {
             fileMenuSubmenu.push(
                 {
-                    label: "Build Extensions",
+                    label: t("Build Extensions"),
                     click: function (item: any, focusedWindow: any) {
                         if (focusedWindow) {
                             focusedWindow.webContents.send("build-extensions");
@@ -383,7 +456,7 @@ function buildFileMenu(win: IWindow | undefined) {
                     }
                 },
                 {
-                    label: "Build and Install Extensions",
+                    label: t("Build and Install Extensions"),
                     click: function (item: any, focusedWindow: any) {
                         if (focusedWindow) {
                             focusedWindow.webContents.send(
@@ -401,7 +474,7 @@ function buildFileMenu(win: IWindow | undefined) {
             },
             {
                 id: "save",
-                label: "Save",
+                label: t("Save"),
                 accelerator: "CmdOrCtrl+S",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -421,7 +494,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 type: "separator"
             },
             {
-                label: "Close Window",
+                label: t("Close Window"),
                 accelerator: "CmdOrCtrl+W",
                 click: function (item: any, focusedWindow: any) {
                     if (focusedWindow) {
@@ -442,7 +515,7 @@ function buildFileMenu(win: IWindow | undefined) {
                 type: "separator"
             },
             {
-                label: "Exit",
+                label: t("Exit"),
                 click: function (item: any, focusedWindow: any) {
                     if (isCrashed(focusedWindow)) {
                         app.exit();
@@ -456,18 +529,22 @@ function buildFileMenu(win: IWindow | undefined) {
     }
 
     return {
-        label: "File",
+        label: t("File"),
         submenu: fileMenuSubmenu
     };
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-function buildEditMenu(win: IWindow | undefined) {
+function buildEditMenu(
+    win: IWindow | undefined,
+    locale: string = getLocale()
+) {
+    const t = (label: string) => menuLabel(label, locale);
     const editSubmenu: Electron.MenuItemConstructorOptions[] = [
         {
             id: "undo",
-            label: "Undo",
+            label: t("Undo"),
             accelerator: "CmdOrCtrl+Z",
             click: function (item, focusedWindow) {
                 if (focusedWindow) {
@@ -483,7 +560,7 @@ function buildEditMenu(win: IWindow | undefined) {
         },
         {
             id: "redo",
-            label: "Redo",
+            label: t("Redo"),
             accelerator: "CmdOrCtrl+Y",
             click: function (item, focusedWindow) {
                 if (focusedWindow) {
@@ -501,7 +578,7 @@ function buildEditMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Cut",
+            label: t("Cut"),
             accelerator: "CmdOrCtrl+X",
             role: "cut",
             click: function (item) {
@@ -511,7 +588,7 @@ function buildEditMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Copy",
+            label: t("Copy"),
             accelerator: "CmdOrCtrl+C",
             role: "copy",
             click: function (item) {
@@ -521,7 +598,7 @@ function buildEditMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Paste",
+            label: t("Paste"),
             accelerator: "CmdOrCtrl+V",
             role: "paste",
             click: function (item) {
@@ -531,7 +608,7 @@ function buildEditMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Delete",
+            label: t("Delete"),
             accelerator: "Delete",
             role: "delete",
             click: function (item) {
@@ -544,7 +621,7 @@ function buildEditMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Select All",
+            label: t("Select All"),
             accelerator: "CmdOrCtrl+A",
             role: "selectAll",
             click: function (item) {
@@ -560,7 +637,7 @@ function buildEditMenu(win: IWindow | undefined) {
             type: "separator"
         });
         editSubmenu.push({
-            label: "Find Project Component",
+            label: t("Find Project Component"),
             accelerator: "CmdOrCtrl+Shift+F",
             click: function (item) {
                 if (win) {
@@ -571,7 +648,7 @@ function buildEditMenu(win: IWindow | undefined) {
     }
 
     const editMenu: Electron.MenuItemConstructorOptions = {
-        label: "Edit",
+        label: t("Edit"),
         submenu: editSubmenu
     };
 
@@ -596,12 +673,16 @@ function buildEditMenu(win: IWindow | undefined) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-function buildViewMenu(win: IWindow | undefined) {
+function buildViewMenu(
+    win: IWindow | undefined,
+    locale: string = getLocale()
+) {
+    const t = (label: string) => menuLabel(label, locale);
     let viewSubmenu: Electron.MenuItemConstructorOptions[] = [];
 
     viewSubmenu.push(
         {
-            label: "Home",
+            label: t("Home"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("openTab", "home");
@@ -609,7 +690,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "History",
+            label: t("History"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("openTab", "history");
@@ -617,7 +698,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Shortcuts and Groups",
+            label: t("Shortcuts and Groups"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send(
@@ -628,7 +709,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Noteboooks",
+            label: t("Notebooks"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send(
@@ -639,7 +720,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Extensions",
+            label: t("Extensions"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("openTab", "extensions");
@@ -647,7 +728,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Settings",
+            label: t("Settings"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("openTab", "settings");
@@ -658,7 +739,7 @@ function buildViewMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Scrapbook for Project Editor",
+            label: t("Scrapbook for Project Editor"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("showScrapbookManager");
@@ -672,7 +753,7 @@ function buildViewMenu(win: IWindow | undefined) {
 
     viewSubmenu.push(
         {
-            label: "Toggle Full Screen",
+            label: t("Toggle Full Screen"),
             accelerator: (function () {
                 if (isMacOs()) {
                     return "Ctrl+Command+F";
@@ -687,7 +768,7 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: "Toggle Developer Tools",
+            label: t("Toggle Developer Tools"),
             accelerator: (function () {
                 if (isMacOs()) {
                     return "Alt+Command+I";
@@ -702,9 +783,11 @@ function buildViewMenu(win: IWindow | undefined) {
             }
         },
         {
-            label: settings.isDarkTheme
-                ? "Switch to Light Theme"
-                : "Switch to Dark Theme",
+            label: t(
+                settings.isDarkTheme
+                    ? "Switch to Light Theme"
+                    : "Switch to Dark Theme"
+            ),
             accelerator: (function () {
                 if (isMacOs()) {
                     return "Alt+Command+T";
@@ -722,15 +805,15 @@ function buildViewMenu(win: IWindow | undefined) {
             type: "separator"
         },
         {
-            label: "Zoom In",
+            label: t("Zoom In"),
             role: "zoomIn"
         },
         {
-            label: "Zoom Out",
+            label: t("Zoom Out"),
             role: "zoomOut"
         },
         {
-            label: "Reset Zoom",
+            label: t("Reset Zoom"),
             role: "resetZoom"
         },
         {
@@ -744,9 +827,11 @@ function buildViewMenu(win: IWindow | undefined) {
         });
 
         viewSubmenu.push({
-            label: settings.showComponentsPaletteInProjectEditor
-                ? "Hide Components Palette"
-                : "Show Components Palette",
+            label: t(
+                settings.showComponentsPaletteInProjectEditor
+                    ? "Hide Components Palette"
+                    : "Show Components Palette"
+            ),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send(
@@ -757,7 +842,7 @@ function buildViewMenu(win: IWindow | undefined) {
         });
 
         viewSubmenu.push({
-            label: "Reset Layout",
+            label: t("Reset Layout"),
             click: function (item) {
                 if (win) {
                     win.browserWindow.webContents.send("resetLayoutModels");
@@ -771,7 +856,7 @@ function buildViewMenu(win: IWindow | undefined) {
     }
 
     viewSubmenu.push({
-        label: "Next Tab",
+        label: t("Next Tab"),
         accelerator: "Ctrl+Tab",
         click: function (item) {
             if (win) {
@@ -781,7 +866,7 @@ function buildViewMenu(win: IWindow | undefined) {
     });
 
     viewSubmenu.push({
-        label: "Previous Tab",
+        label: t("Previous Tab"),
         accelerator: "Ctrl+Shift+Tab",
         click: function (item) {
             if (win) {
@@ -795,7 +880,7 @@ function buildViewMenu(win: IWindow | undefined) {
     });
 
     viewSubmenu.push({
-        label: "Reload",
+        label: t("Reload"),
         accelerator: "CmdOrCtrl+R",
         click: function (item) {
             if (win) {
@@ -807,7 +892,7 @@ function buildViewMenu(win: IWindow | undefined) {
     });
 
     return {
-        label: "View",
+        label: t("View"),
         submenu: viewSubmenu
     };
 }
@@ -818,16 +903,16 @@ function buildMacOSWindowMenu(
     win: IWindow | undefined
 ): Electron.MenuItemConstructorOptions {
     return {
-        label: "Window",
+        label: menuLabel("Window"),
         role: "window",
         submenu: [
             {
-                label: "Minimize",
+                label: menuLabel("Minimize"),
                 accelerator: "CmdOrCtrl+M",
                 role: "minimize"
             },
             {
-                label: "Close",
+                label: menuLabel("Close"),
                 accelerator: "CmdOrCtrl+W",
                 role: "close"
             },
@@ -835,7 +920,7 @@ function buildMacOSWindowMenu(
                 type: "separator"
             },
             {
-                label: "Bring All to Front",
+                label: menuLabel("Bring All to Front"),
                 role: "front"
             }
         ]
@@ -845,13 +930,15 @@ function buildMacOSWindowMenu(
 ////////////////////////////////////////////////////////////////////////////////
 
 function buildHelpMenu(
-    win: IWindow | undefined
+    win: IWindow | undefined,
+    locale: string = getLocale()
 ): Electron.MenuItemConstructorOptions {
+    const t = (label: string) => menuLabel(label, locale);
     const helpMenuSubmenu: Electron.MenuItemConstructorOptions[] = [];
 
     if (isDev) {
         helpMenuSubmenu.push({
-            label: "Documentation",
+            label: t("Documentation"),
             accelerator: "F1",
             click: function (item: any, focusedWindow: any) {
                 focusedWindow.webContents.send("show-documentation-browser");
@@ -863,12 +950,12 @@ function buildHelpMenu(
     }
 
     helpMenuSubmenu.push({
-        label: "About",
+        label: t("About"),
         click: showAboutBox
     });
 
     return {
-        label: "Help",
+        label: t("Help"),
         role: "help",
         submenu: helpMenuSubmenu
     };
@@ -903,16 +990,164 @@ function buildMenuTemplate(win: IWindow | undefined) {
 autorun(() => {
     for (let i = 0; i < windows.length; i++) {
         const win = windows[i];
-        if (win.focused) {
+        if (win.focused || windows.length === 1) {
             let menuTemplate = buildMenuTemplate(win);
             let menu = Menu.buildFromTemplate(menuTemplate);
             Menu.setApplicationMenu(menu);
+            if (process.platform === "win32" && win.url === "home/index.html") {
+                win.browserWindow.setMenuBarVisibility(false);
+            }
         }
     }
 });
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The workspace menu is rendered by the home renderer so its appearance
+// follows DigiStudio's workspace skin instead of the Windows native menu style.
+type WorkspaceMenuSession = {
+    label: string;
+    menu: Electron.Menu;
+    items: Electron.MenuItem[];
+};
+
+const workspaceMenuSessions = new Map<number, WorkspaceMenuSession>();
+
+function serializeWorkspaceMenuItems(
+    items: Electron.MenuItem[],
+    parentPath: number[] = []
+): any[] {
+    return items.map((item, index) => {
+        const path = [...parentPath, index];
+        return {
+            path,
+            type: item.type,
+            label: item.label,
+            accelerator: item.accelerator
+                ? item.accelerator
+                      .toString()
+                      .replace(/CommandOrControl|CmdOrCtrl/g, isMacOs() ? "Cmd" : "Ctrl")
+                      .replace(/\bCommand\b/g, isMacOs() ? "Cmd" : "Ctrl")
+                      .replace(/\bControl\b/g, "Ctrl")
+                      .replace(/\bAlt\b/g, isMacOs() ? "Option" : "Alt")
+                      .replace(/\+Plus\b/gi, "++")
+                : undefined,
+            enabled: item.enabled,
+            checked: item.checked,
+            submenu: item.submenu
+                ? serializeWorkspaceMenuItems(item.submenu.items, path)
+                : undefined
+        };
+    });
+}
+
+function getWorkspaceMenuItem(
+    items: Electron.MenuItem[],
+    path: number[]
+): Electron.MenuItem | undefined {
+    let currentItems = items;
+    let currentItem: Electron.MenuItem | undefined;
+
+    for (let i = 0; i < path.length; i++) {
+        const index = path[i];
+        if (!Number.isInteger(index) || index < 0) {
+            return undefined;
+        }
+
+        currentItem = currentItems[index];
+        if (!currentItem) {
+            return undefined;
+        }
+
+        if (i < path.length - 1) {
+            if (!currentItem.submenu) {
+                return undefined;
+            }
+            currentItems = currentItem.submenu.items;
+        }
+    }
+
+    return currentItem;
+}
+
+function isWorkspaceMenuSender(event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) {
+    return event.sender.getURL().includes("/home/index.html");
+}
+
+ipcMain.handle(
+    "get-workspace-menu",
+    (event, label: string, locale?: string) => {
+        if (!["File", "Edit", "View", "Help"].includes(label)) return [];
+
+        const browserWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!browserWindow || !isWorkspaceMenuSender(event)) return [];
+
+        // Reuse the existing menu definitions, labels, enabled states and
+        // callbacks. Only the visual presentation is moved into the renderer.
+        const activeLocale = typeof locale === "string" ? locale : getLocale();
+        const activeWindow = findWindowByBrowserWindow(browserWindow);
+        const menuItem =
+            label === "File"
+                ? buildFileMenu(activeWindow, activeLocale)
+                : label === "Edit"
+                  ? buildEditMenu(activeWindow, activeLocale)
+                  : label === "View"
+                    ? buildViewMenu(activeWindow, activeLocale)
+                    : buildHelpMenu(activeWindow, activeLocale);
+        const menu = Menu.buildFromTemplate([menuItem]);
+        const submenu = menu.items[0]?.submenu;
+
+        if (!submenu) return [];
+
+        workspaceMenuSessions.set(event.sender.id, {
+            label,
+            menu,
+            items: submenu.items
+        });
+
+        return serializeWorkspaceMenuItems(submenu.items);
+    }
+);
+
+ipcMain.on(
+    "execute-workspace-menu-command",
+    (event, label: string, path: number[]) => {
+        if (!isWorkspaceMenuSender(event) || !Array.isArray(path) || path.length === 0 || path.length > 8) {
+            return;
+        }
+
+        const session = workspaceMenuSessions.get(event.sender.id);
+        const browserWindow = BrowserWindow.fromWebContents(event.sender);
+        if (!session || session.label !== label || !browserWindow) return;
+
+        const menuItem = getWorkspaceMenuItem(session.items, path);
+        if (!menuItem || !menuItem.enabled || menuItem.type === "separator" || menuItem.submenu) {
+            return;
+        }
+
+        if (typeof menuItem.click === "function") {
+            menuItem.click(menuItem, browserWindow, {} as any);
+        } else if (menuItem.role === "zoomIn") {
+            browserWindow.webContents.setZoomLevel(
+                browserWindow.webContents.getZoomLevel() + 0.5
+            );
+        } else if (menuItem.role === "zoomOut") {
+            browserWindow.webContents.setZoomLevel(
+                browserWindow.webContents.getZoomLevel() - 0.5
+            );
+        } else if (menuItem.role === "resetZoom") {
+            browserWindow.webContents.setZoomLevel(0);
+        }
+
+        workspaceMenuSessions.delete(event.sender.id);
+    }
+);
+
+ipcMain.on("dispose-workspace-menu", event => {
+    if (isWorkspaceMenuSender(event)) {
+        workspaceMenuSessions.delete(event.sender.id);
+    }
+});
 ipcMain.on("getReservedKeybindings", function (event: any) {
     const menuTemplate = buildMenuTemplate(undefined);
 

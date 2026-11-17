@@ -14,6 +14,10 @@ import {
     TreeObjectAdapter
 } from "project-editor/core/objectAdapter";
 import { ProjectContext } from "project-editor/project/context";
+import {
+    getTreeGuideInfo,
+    type TreeGuideInfo
+} from "project-editor/ui-components/tree-guides";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -64,6 +68,7 @@ const TreeRow = observer(
         onToggleCollapse: (event: any) => void;
         onEditItem?: (itemId: string) => void;
         renderItem?: (itemId: string) => React.ReactNode;
+        guides?: TreeGuideInfo;
     }> {
         ref = React.createRef<HTMLDivElement>();
 
@@ -100,7 +105,8 @@ const TreeRow = observer(
                 level,
                 collapsable,
                 onToggleCollapse,
-                onEditItem
+                onEditItem,
+                guides
             } = this.props;
 
             let className = classNames("tree-row", {
@@ -116,8 +122,12 @@ const TreeRow = observer(
                     <Icon
                         icon={
                             treeAdapter.collapsableAdapter!.isExpanded(item)
-                                ? "material:keyboard_arrow_down"
-                                : "material:keyboard_arrow_right"
+                                ? guides
+                                    ? "material:indeterminate_check_box"
+                                    : "material:keyboard_arrow_down"
+                                : guides
+                                  ? "material:add_box"
+                                  : "material:keyboard_arrow_right"
                         }
                         size={18}
                         className="tree-row-triangle"
@@ -145,6 +155,39 @@ const TreeRow = observer(
                     onDrag={this.props.onDrag}
                     onDragEnd={this.props.onDragEnd}
                 >
+                    {/* Drag/drop identifies the label through the first span in a row. */}
+                    {guides && (
+                        <>
+                            {guides.continuationLevels.map(guideLevel => (
+                                <div
+                                    key={guideLevel}
+                                    className="tree-guide tree-guide-continuation"
+                                    style={{ left: guideLevel * 18 + 9 }}
+                                    aria-hidden="true"
+                                />
+                            ))}
+                            {level > 0 && (
+                                <div
+                                    className={classNames(
+                                        "tree-guide tree-guide-branch",
+                                        {
+                                            "is-last": guides.isLastSibling,
+                                            "is-expandable": collapsable
+                                        }
+                                    )}
+                                    style={{ left: level * 18 + 9 }}
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {guides.hasVisibleChildren && (
+                                <div
+                                    className="tree-guide tree-guide-children"
+                                    style={{ left: (level + 1) * 18 + 9 }}
+                                    aria-hidden="true"
+                                />
+                            )}
+                        </>
+                    )}
                     {triangle}
 
                     {this.props.renderItem ? (
@@ -180,6 +223,7 @@ interface TreeProps {
     onEditItem?: (itemId: string) => void;
     renderItem?: (itemId: string) => React.ReactNode;
     onFilesDrop?: (files: File[], filePaths: string[]) => void;
+    showHierarchyGuides?: boolean;
 }
 
 export const Tree = observer(
@@ -841,10 +885,22 @@ export const Tree = observer(
         };
 
         render() {
-            const { treeAdapter, tabIndex, onFocus, onEditItem, renderItem } =
-                this.props;
+            const {
+                treeAdapter,
+                tabIndex,
+                onFocus,
+                onEditItem,
+                renderItem,
+                showHierarchyGuides
+            } = this.props;
+
+            const rows = this.allRows;
+            const guides = showHierarchyGuides
+                ? getTreeGuideInfo(rows)
+                : undefined;
 
             const className = classNames("EezStudio_Tree", {
+                "tree-hierarchy-guides": showHierarchyGuides,
                 "drag-source":
                     treeAdapter.draggableAdapter &&
                     treeAdapter.draggableAdapter.isDragging
@@ -874,12 +930,13 @@ export const Tree = observer(
                             position: "relative"
                         }}
                     >
-                        {this.allRows.map(row => (
+                        {rows.map((row, index) => (
                             <TreeRow
                                 key={treeAdapter.getItemId(row.item)}
                                 treeAdapter={treeAdapter}
                                 item={row.item}
                                 level={row.level}
+                                guides={guides?.[index]}
                                 draggable={
                                     this.props.treeAdapter.draggable &&
                                     row.draggable

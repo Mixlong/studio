@@ -14,11 +14,11 @@ const root = path.resolve(__dirname, "..");
 const runtime = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/page-runtime.ts"),
     "utf8"
-);
+).replace(/\r\n/g, "\n");
 const view = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/style.tsx"),
     "utf8"
-);
+).replace(/\r\n/g, "\n");
 const runtimeStart = runtime.indexOf("export class LVGLStylesEditorRuntime");
 assert(runtimeStart > 0);
 const runtimeSource = runtime.slice(runtimeStart);
@@ -74,7 +74,7 @@ assert(
 const styleSource = fs.readFileSync(
     path.join(root, "packages/project-editor/lvgl/widgets/Base.tsx"),
     "utf8"
-);
+).replace(/\r\n/g, "\n");
 assert(
     styleSource.includes("if (this._useStyleForStylePreview) {\n            return undefined;"),
     "Style preview marker must not alter normal widget style selection"

@@ -3,44 +3,45 @@
 // two themes visibly related instead of two unrelated ad hoc palettes.
 @backgroundColor: var(--bs-body-bg);
 @textColor: var(--bs-body-color);
-@sectionBackgroundColor: hsl(220, 12%, 33%);
-@borderColor: hsl(220, 12%, 27%);
-@darkBorderColor: hsl(220, 12%, 24%);
+@sectionBackgroundColor: #1f1f1f;
+@borderColor: #2b2b2b;
+@darkBorderColor: #222222;
 @panelHeaderColor: var(--bs-tertiary-bg);
-@selectionBackgroundColor: hsl(207, 56%, 46%);
-@selectionColor: hsl(220, 15%, 89%);
-@lightSelectionBackgroundColor: hsl(207, 60%, 72%);
-@lightSelectionColor: hsl(220, 15%, 89%);
-@tableBorderColor: hsl(220, 12%, 27%);
-@nonFocusedSelectionBackgroundColor: hsl(220, 8%, 40%);
-@nonFocusedSelectionColor: hsl(220, 20%, 93%);
-@hoverBackgroundColor: hsl(220, 8%, 40%);
+@selectionBackgroundColor: #ffb500;
+@selectionColor: #171717;
+@lightSelectionBackgroundColor: #f5dd90;
+@lightSelectionColor: #171717;
+@tableBorderColor: #2b2b2b;
+@nonFocusedSelectionBackgroundColor: #ffb500;
+@nonFocusedSelectionColor: #171717;
+@hoverBackgroundColor: #2a2a2a;
 @hoverColor: hsl(220, 15%, 89%);
 @scrollTrackColor: hsl(220, 20%, 95%);
 @scrollThumbColor: hsl(220, 8%, 76%);
 @darkTextColor: hsl(220, 15%, 87%);
-@focusBackgroundColor: hsl(207, 58%, 58%);
+@focusBackgroundColor: #ffb500;
 @focusColor: hsl(220, 10%, 27%);
-@dragSourceBackgroundColor: #e040fb;
-@dragSourceColor: white;
-@dropTargetBackgroundColor: #7c4dff;
-@dropTargetColor: #ffffff;
-@dropPlaceColor: #7c4dff;
+// GUI Guider palette: dragging uses the same gold family as hover/selection.
+@dragSourceBackgroundColor: #ffb50080;
+@dragSourceColor: @textColor;
+@dropTargetBackgroundColor: #ffb500;
+@dropTargetColor: #171717;
+@dropPlaceColor: #ffb500;
 @errorColor: #dc3545;
 @warningBackgroundColor: #ffc107;
 @warningColor: #212529;
-@actionHoverColor: #0056b3;
+@actionHoverColor: #d49b05;
 @connectionLineColor: #999;
 @trixToolbarColor: #eee;
 
 @selectedConnectionLineColor: red;
-@seqConnectionLineColor: #3fadb5;
+@seqConnectionLineColor: #ffb500;
 @activeConnectionLineColor: rgb(18, 18, 48);
-@connectionLineInTheMakingColor: #337bb7;
+@connectionLineInTheMakingColor: #d49b05;
 @activeTabBackgroundColor: #666666;
 @disabledConnectionLineColor: #999;
 
-@actionSelectedTextColor: white;
+@actionSelectedTextColor: #171717;
 @actionDisabledColor: #666;
 
 @readOnlyListItem: #f5f5f5;
@@ -106,12 +107,26 @@
 @shadowElevation4: 0 10px 24px hsla(220, 40%, 1%, 0.5);
 @shadowElevation5: 0 15px 35px hsla(220, 40%, 1%, 0.6);
 
-@borderRadiusSmall: 4px;
+@borderRadiusSmall: 2px;
 
 @componentShadow: @shadowElevation1;
 @componentBodyShadow: none;
 
 @panelHeaderColorInsideFlexLayout: rgba(var(--bs-tertiary-bg-rgb), 1);
+
+// GUI Guider theme4 surface mapping, retained as semantic variables so the
+// workspace chrome, canvas and inspector stay synchronized in dark mode.
+// The palette is taken from the REA-extracted theme4 rules, not sampled from
+// an individual DigiwiseStudio component.
+@workspaceToolbarBackgroundColor: #2b2b2b;
+@workspaceCanvasBackgroundColor: #1f1e1e;
+@workspacePanelBackgroundColor: #000;
+@workspacePanelActiveBackgroundColor: #000;
+@workspacePanelBorderColor: #2b2b2b;
+@workspaceOperationPopupBackgroundColor: #1d1d1d;
+@workspaceTreeTextColor: #b9b9b9;
+@workspaceTreeIconColor: #eeeeee;
+@workspaceTreeGuideColor: #b9b9b9;
 
 @formControlBorderColor: #515151;
 

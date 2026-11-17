@@ -1,4 +1,7 @@
 import { dialog, getCurrentWindow } from "@electron/remote";
+import { getLocale } from "eez-studio-shared/i10n";
+
+const isChinese = () => getLocale().toLowerCase().startsWith("zh");
 
 export function info(message: string, detail: string | undefined) {
     return dialog.showMessageBox(getCurrentWindow(), {
@@ -7,7 +10,7 @@ export function info(message: string, detail: string | undefined) {
         message: message,
         detail: detail,
         noLink: true,
-        buttons: ["OK"]
+        buttons: [isChinese() ? "确定" : "OK"]
     });
 }
 
@@ -34,7 +37,7 @@ export async function confirm(
         message: message,
         detail: detail,
         noLink: true,
-        buttons: ["Yes", "No"],
+        buttons: isChinese() ? ["是", "否"] : ["Yes", "No"],
         cancelId: 1
     });
     const buttonIndex = result.response;
@@ -76,7 +79,7 @@ export async function confirmWithButtons(
         message: message,
         detail: detail,
         noLink: true,
-        buttons: buttons || ["Yes", "No"],
+        buttons: buttons && buttons.length ? buttons : (isChinese() ? ["是", "否"] : ["Yes", "No"]),
         cancelId: 1
     });
     return result.response;

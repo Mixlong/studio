@@ -3,6 +3,8 @@ node_modules
 npm-debug.log
 
 /dist
+dist-*
+bootstrap-*
 /release-oss
 /build
 packages/**/*.js
@@ -49,3 +51,8 @@ tools/lvgl-api/build
 /test/**
 
 .claude
+.codex
+/artifacts
+*.tsbuildinfo
+main.*.css
+

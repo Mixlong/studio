@@ -64,6 +64,7 @@ import {
     RubberBandSelectionMouseHandler,
     LVGLPanMouseHandler
 } from "project-editor/flow/editor/mouse-handler";
+import { CanvasRulers } from "project-editor/flow/editor/canvas-rulers";
 import { Svg, ComponentEnclosure } from "project-editor/flow/editor/render";
 import { ConnectionLines } from "project-editor/flow/connection-line/ConnectionLineComponent";
 import { Selection } from "project-editor/flow/editor/selection";
@@ -219,12 +220,14 @@ export const Canvas = observer(
         lastMouseUpTime: number | undefined;
 
         draggable = new Draggable(this);
+        autoPanCursor = false;
 
         constructor(props: any) {
             super(props);
 
             makeObservable(this, {
                 _mouseHandler: observable,
+                autoPanCursor: observable,
                 onDragStart: action.bound,
                 onDragEnd: action.bound
             });
@@ -465,8 +468,72 @@ export const Canvas = observer(
             event.preventDefault();
         };
 
+        // A real widget or connection is editable; the screen root and
+        // non-selectable presentation layers are only a pan surface.
+        isEditableCanvasHit(
+            hit:
+                | {
+                      id: string;
+                      connectionInput?: string;
+                      connectionOutput?: string;
+                  }
+                | undefined
+        ) {
+            if (!hit) {
+                return false;
+            }
+
+            if (hit.connectionInput || hit.connectionOutput) {
+                return true;
+            }
+
+            const object = this.props.flowContext.document.findObjectById(
+                hit.id
+            );
+            if (!object || object.isSelectable === false) {
+                return false;
+            }
+
+            const page = ProjectEditor.getPage(this.props.flowContext.flow);
+            return (
+                object.object !== page &&
+                object.object !== page?.lvglScreenWidget
+            );
+        }
+
+        // Resize handles and timeline controls must keep their interactions.
+        isCanvasControl(target: EventTarget | null) {
+            return !!(
+                closestByClass(
+                    target,
+                    "EezStudio_FlowEditorSelection_ResizeHandle"
+                ) ||
+                closestByClass(
+                    target,
+                    WidgetTimelinePathEditorHandler.CLASS_NAME
+                )
+            );
+        }
+
         createMouseHandler(event: MouseEvent) {
             const flowContext = this.props.flowContext;
+
+            // Automatically pan when the pointer is over a non-editable layer
+            // or the empty workspace. No toolbar mode switching is needed.
+            if (
+                flowContext.projectStore.projectTypeTraits.isLVGL &&
+                !event.altKey &&
+                !this.isCanvasControl(event.target) &&
+                !this.isEditableCanvasHit(
+                    flowContext.document.objectFromPoint(
+                        flowContext.viewState.transform.pointerEventToPagePoint(
+                            event
+                        )
+                    )
+                )
+            ) {
+                return new PanMouseHandler();
+            }
 
             if (!event.altKey) {
                 if (
@@ -666,6 +733,15 @@ export const Canvas = observer(
 
                 this.mouseHandler.down(this.props.flowContext, event);
             }
+
+            // The transparent drag overlay inherits the hand while panning.
+            if (
+                this.draggable.overlayElement &&
+                this.mouseHandler instanceof PanMouseHandler &&
+                this.props.flowContext.projectStore.projectTypeTraits.isLVGL
+            ) {
+                this.draggable.overlayElement.style.cursor = "grabbing";
+            }
         }
 
         onDragMove = (event: PointerEvent) => {
@@ -810,18 +886,28 @@ export const Canvas = observer(
         }
 
         onPointerMove = action((event: React.PointerEvent<HTMLDivElement>) => {
+            const flowContext = this.props.flowContext;
             if (this.mouseHandler) {
-                this.props.flowContext.viewState.hoveredConnectionLines =
-                    undefined;
-            } else {
-                this.props.flowContext.viewState.hoveredConnectionLines =
-                    getObjectIdFromPoint(
-                        this.props.flowContext.document,
-                        this.props.flowContext.viewState,
-                        this.props.flowContext.viewState.transform.pointerEventToPagePoint(
-                            event
-                        )
-                    );
+                flowContext.viewState.hoveredConnectionLines = undefined;
+                return;
+            }
+
+            const hit = getObjectIdFromPoint(
+                flowContext.document,
+                flowContext.viewState,
+                flowContext.viewState.transform.pointerEventToPagePoint(event)
+            );
+            flowContext.viewState.hoveredConnectionLines = hit;
+            this.autoPanCursor =
+                flowContext.projectStore.projectTypeTraits.isLVGL &&
+                !this.props.dragAndDropActive &&
+                !this.isCanvasControl(event.target) &&
+                !this.isEditableCanvasHit(hit);
+        });
+
+        onPointerLeave = action(() => {
+            if (!this.mouseHandler) {
+                this.autoPanCursor = false;
             }
         });
 
@@ -853,11 +939,17 @@ export const Canvas = observer(
                     ref={(ref: any) => (this.div = ref!)}
                     className={classNames({
                         EezStudio_FlowCanvasContainer_DragAndDropActive:
-                            this.props.dragAndDropActive
+                            this.props.dragAndDropActive,
+                        EezStudio_FlowCanvasContainer_AutoPan:
+                            this.autoPanCursor && !this.mouseHandler,
+                        EezStudio_FlowCanvasContainer_Panning:
+                            this.props.flowContext.projectStore.projectTypeTraits.isLVGL &&
+                            this.mouseHandler instanceof PanMouseHandler
                     })}
                     style={style}
                     onContextMenu={this.onContextMenu}
                     onPointerMove={this.onPointerMove}
+                    onPointerLeave={this.onPointerLeave}
                 >
                     <div
                         className="eez-canvas"
@@ -884,6 +976,18 @@ export const Canvas = observer(
                     {this.mouseHandler &&
                         this.mouseHandler.render &&
                         this.mouseHandler.render(this.props.flowContext)}
+
+                    {this.props.flowContext.projectStore.projectTypeTraits.isLVGL &&
+                        !this.props.flowContext.projectStore.runtime && (
+                            <CanvasRulers
+                                transform={transform}
+                                screenRect={
+                                    ProjectEditor.getPage(
+                                        this.props.flowContext.flow
+                                    )?.pageRect
+                                }
+                            />
+                        )}
 
                     <DragSnapLinesOverlay
                         dragSnapLines={this.props.dragSnapLines}

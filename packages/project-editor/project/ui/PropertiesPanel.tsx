@@ -104,7 +104,9 @@ export const PropertiesPanel = observer(
 
             const objects = this.objects;
 
-            let icon = null;
+            // Keep a stable properties icon even when the current object has
+            // no dedicated icon or multiple objects are selected.
+            let icon: React.ReactNode = "svg:properties";
 
             if (objects.length == 0) {
                 title = "Nothing selected";
@@ -114,7 +116,7 @@ export const PropertiesPanel = observer(
                     object = getParent(object);
                 }
 
-                icon = getObjectIcon(object);
+                icon = getObjectIcon(object) ?? "svg:properties";
                 title = getPropertiesPanelLabel(object);
             } else {
                 title = "Multiple objects selected";

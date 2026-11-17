@@ -5,7 +5,7 @@ const path = require("path");
 const vm = require("vm");
 const { runInAction } = require("mobx");
 const file = path.join(__dirname, "../packages/project-editor/lvgl/page-runtime.ts");
-const source = fs.readFileSync(file, "utf8");
+const source = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
 const begin = source.indexOf("    tick = () => {", source.indexOf("export class LVGLStylesEditorRuntime"));
 const end = source.indexOf("\n    unmount() {", begin);
 assert(begin > 0 && end > begin, "Locate actual Style Preview tick function");
@@ -86,6 +86,8 @@ const selection = new timerSandbox.module.exports();
 const sharedCanvas = {};
 selection.selectedStyle = { name: "previous" };
 selection.canvas = sharedCanvas;
+// Match a native preview that has finished mounting before style selection.
+selection.isMounted = true;
 selection.previewFrameReady = true;
 selection.previewError = undefined;
 selection.previewStage = "Waiting for LVGL frame";

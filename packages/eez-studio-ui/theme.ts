@@ -16,11 +16,11 @@ export const lightTheme: ThemeInterface = {
     backgroundColor: "white",
     borderColor: "#e0e0e0",
     panelHeaderColor: "#f0f0f0",
-    selectionBackgroundColor: "#337bb7",
+    selectionBackgroundColor: "#ffb500",
     connectionLineColor: "#999",
     selectedConnectionLineColor: "red",
-    seqConnectionLineColor: "#3FADB5",
-    activeConnectionLineColor: "blue",
+    seqConnectionLineColor: "#ffb500",
+    activeConnectionLineColor: "#d49b05",
     disabledLineColor: "#aaa"
 };
 
@@ -28,11 +28,11 @@ export const darkTheme: ThemeInterface = {
     backgroundColor: "#222222",
     borderColor: "#444444",
     panelHeaderColor: "#333333",
-    selectionBackgroundColor: "#337bb7",
+    selectionBackgroundColor: "#ffb500",
     connectionLineColor: "#999",
     selectedConnectionLineColor: "red",
-    seqConnectionLineColor: "#3FADB5",
-    activeConnectionLineColor: "blue",
+    seqConnectionLineColor: "#ffb500",
+    activeConnectionLineColor: "#d49b05",
     disabledLineColor: "#999"
 };
 

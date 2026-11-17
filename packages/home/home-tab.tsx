@@ -8,48 +8,65 @@ import { ipcRenderer } from "electron";
 
 import { Icon } from "eez-studio-ui/icon";
 
-import { Settings } from "home/settings";
+import { Settings, settingsController } from "home/settings";
 import {
     NewProjectWizard,
     wizardModelTemplates,
     wizardModelExamples
 } from "project-editor/project/ui/Wizard";
 import {
-    ExtensionsManager,
-    extensionsManagerStore
+    ExtensionsManager
 } from "./extensions-manager/extensions-manager";
 import { Projects } from "home/open-projects";
 import { Instruments, defaultInstrumentsStore } from "home/instruments";
 import { instrumentDatabases } from "eez-studio-shared/db";
 import { productConfig } from "eez-studio-shared/product-config";
 import * as notification from "eez-studio-ui/notification";
+import { studioVersion } from "eez-studio-shared/util";
+import type { DigiwiseIpcResult } from "eez-studio-shared/digiwise-auth";
+import {
+    DigiwiseChangelog,
+    DigiwiseChangelogIdentity,
+    DigiwiseChangelogLanguage,
+    validateDigiwiseChangelog
+} from "eez-studio-shared/digiwise-changelog";
 import { getHomePath } from "eez-studio-shared/util-electron";
+import {
+    DigiwiseAccount,
+    DigiwiseLoginNav
+} from "home/digiwise-account";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const SAVED_OPTIONS_VERSION = 1;
+const SAVED_OPTIONS_VERSION = 2;
 
 type HomeTabId =
     | "open"
+    | "lvgl8"
+    | "lvgl9"
     | "create"
     | "examples"
     | "run"
     | "instruments"
     | "extensions"
+    | "account"
     | "settings";
 
 function normalizeHomeTabId(value: unknown): HomeTabId {
     const homeTabIds: HomeTabId[] = [
         "open",
+        "lvgl8",
+        "lvgl9",
         "create",
         "examples",
         "run",
         "instruments",
         "extensions",
+        "account",
         "settings"
     ];
 
-    if (!homeTabIds.includes(value as HomeTabId)) {
+    if (!homeTabIds.includes(value as HomeTabId) || value == "account") {
         return "open";
     }
 
@@ -116,7 +133,7 @@ const DIGIRIDE_PROJECT_ASSET = path.join(
     "DigiRide.eez-project"
 );
 
-async function openDigiRideProject() {
+export async function openDigiRideProject() {
     const projectDirectory = getHomePath(
         path.join("eez-projects", "DigiRide")
     );
@@ -128,8 +145,6 @@ async function openDigiRideProject() {
     try {
         await fs.promises.mkdir(projectDirectory, { recursive: true });
 
-        // Open a writable user copy. The bundled asset may be inside the
-        // application archive, so editing it in place would fail on save.
         if (!fs.existsSync(projectFilePath)) {
             await fs.promises.copyFile(
                 DIGIRIDE_PROJECT_ASSET,
@@ -146,29 +161,13 @@ async function openDigiRideProject() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const HOME_TAB_CREATE_ICON = (
-    <svg viewBox="0 0 24 24" fill="currentcolor">
-        <path fill="none" d="M0 0h24v24H0z" />
-        <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5v2H5v14h14v-5h2z" />
-        <path d="M21 7h-4V3h-2v4h-4v2h4v4h2V9h4z" />
-    </svg>
+// The reference home page uses Font Awesome's solid 15px navigation glyphs.
+// These code points use the icon font already bundled with DigiStudio.
+const homeIcon = (glyph: string) => (
+    <i className="font-awesome-icons" aria-hidden="true">
+        {glyph}
+    </i>
 );
-
-const HOME_TAB_EXAMPLES_ICON = (
-    <svg viewBox="0 0 32 32" fill="currentcolor">
-        <path d="M20 2v12l10-6-10-6z" />
-        <path d="M28 14v8H4V6h10V4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8v4H8v2h16v-2h-4v-4h8a2 2 0 0 0 2-2v-8h-2ZM18 28h-4v-4h4v4Z" />
-        <path d="M0 0h32v32H0z" fill="none" />
-    </svg>
-);
-
-const HOME_TAB_INSTRUMENTS_ICON = (
-    <svg viewBox="-50 -50 1124 1124" fill="currentcolor">
-        <path d="M128 896h896v128H0V0h128v896zm18.4-450.2 236.6-.2L443 205h81l74.4 318.6L662.6 314l81.4-.6L796.6 448l226.8-2.4.4 84H746.4l-41-104.2-60 289h-75l-89.6-333.2-32.6 148.4-301.8.2v-84z" />
-    </svg>
-);
-
-////////////////////////////////////////////////////////////////////////////////
 
 const HomeNavigationItem = (props: {
     icon: string | React.ReactNode;
@@ -188,11 +187,13 @@ const HomeNavigationItem = (props: {
             aria-current={props.selected ? "page" : undefined}
             onClick={props.onClick}
         >
-            <Icon
-                icon={props.icon}
-                size={18}
-                attention={props.attention}
-            />
+            <span className="EezStudio_HomeTab_NavigationIcon" aria-hidden="true">
+                <Icon
+                    icon={props.icon}
+                    size={15}
+                    attention={props.attention}
+                />
+            </span>
             <span>{props.label}</span>
         </button>
     );
@@ -200,129 +201,239 @@ const HomeNavigationItem = (props: {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const HomeLatestChangesPanel = observer(() => {
+    const isChinese = settingsController.locale.toLowerCase().startsWith("zh");
+    const language: DigiwiseChangelogLanguage = isChinese ? "zh-CN" : "en-US";
+    const [activeTab, setActiveTab] = React.useState("");
+    const [content, setContent] = React.useState<DigiwiseChangelog | null>(null);
+    const [installedVersion, setInstalledVersion] = React.useState(studioVersion);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        let active = true;
+        setLoading(true);
+        setContent(null);
+        setActiveTab("");
+
+        const load = async () => {
+            try {
+                const identity = (await ipcRenderer.invoke(
+                    "digistudio:release:identity"
+                )) as DigiwiseChangelogIdentity;
+                if (!active) return;
+                if (typeof identity?.version !== "string" ||
+                    (identity.channel !== "stable" && identity.channel !== "dev")) {
+                    return;
+                }
+                setInstalledVersion(identity.version);
+                const cacheKey = [
+                    "digiwise-ide-changelog-v1",
+                    identity.channel,
+                    identity.version,
+                    language
+                ].join(":");
+                // Cache is never allowed to supply content for another version/channel/language.
+                try {
+                    const cached = window.localStorage.getItem(cacheKey);
+                    if (cached && active) {
+                        setContent(validateDigiwiseChangelog(
+                            JSON.parse(cached), identity, language
+                        ));
+                    }
+                } catch (_error) {
+                    // Bad/old cache cannot replace the current release's content.
+                }
+
+                const response = await ipcRenderer.invoke(
+                    "digistudio:release:changelog", language
+                ) as DigiwiseIpcResult<DigiwiseChangelog>;
+                if (!active || !response.ok) return;
+                const latest = validateDigiwiseChangelog(
+                    response.data, identity, language
+                );
+                setContent(latest);
+                try {
+                    window.localStorage.setItem(cacheKey, JSON.stringify(latest));
+                } catch (_error) {
+                    // Private mode / disabled storage: remote content is still usable.
+                }
+            } catch (_error) {
+                // No cross-version or hardcoded fallback; same-version cache, if any,
+                // remains visible when the service cannot be reached.
+            } finally {
+                if (active) setLoading(false);
+            }
+        };
+        void load();
+        return () => { active = false; };
+    }, [language]);
+
+    const updateTabs = content?.groups || [];
+    const selectedTab = updateTabs.find(tab => tab.code === activeTab) || updateTabs[0];
+
+    return (
+        <aside className="EezStudio_HomeTab_Updates"
+            aria-label={isChinese ? "最新变动" : "Latest changes"}>
+            <h2 className="EezStudio_HomeTab_UpdatesHeading">
+                {isChinese ? "最新变动" : "Latest Changes"}
+            </h2>
+            <div className="EezStudio_HomeTab_UpdatesBanner">
+                <strong>DigiwiseStudio</strong>
+                <span>
+                    {isChinese
+                        ? "当前版本 " + installedVersion + " · 更新内容"
+                        : "Current version " + installedVersion + " · Release notes"}
+                </span>
+            </div>
+            <section className="EezStudio_HomeTab_UpdatesFeature">
+                <h3>{isChinese ? "新功能介绍" : "What's New"}</h3>
+                {selectedTab ? (
+                    <>
+                        <div className="EezStudio_HomeTab_UpdatesTabs"
+                            role="tablist"
+                            aria-label={isChinese ? "更新分类" : "Update categories"}>
+                            {updateTabs.map(tab => (
+                                <button
+                                    key={tab.code}
+                                    id={`home-update-tab-${tab.code}`}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={tab.code === selectedTab.code}
+                                    aria-controls="home-update-panel"
+                                    className={classNames({
+                                        selected: tab.code === selectedTab.code
+                                    })}
+                                    onClick={() => setActiveTab(tab.code)}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div id="home-update-panel"
+                            className="EezStudio_HomeTab_UpdatesDetails"
+                            role="tabpanel"
+                            aria-labelledby={`home-update-tab-${selectedTab.code}`}>
+                            <h4>{selectedTab.title}</h4>
+                            <ul>
+                                {selectedTab.items.map((item, index) => (
+                                    <li key={index}>{item}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    </>
+                ) : (
+                    <div className="EezStudio_HomeTab_UpdatesDetails">
+                        <p>{loading
+                            ? (isChinese ? "正在加载更新内容…" : "Loading release notes…")
+                            : (isChinese
+                                ? "当前版本暂无已发布的更新内容"
+                                : "No published release notes for this version")}</p>
+                    </div>
+                )}
+            </section>
+        </aside>
+    );
+});
+
 export const Home = observer(
     class Home extends React.Component {
         render() {
+            const isChinese = settingsController.locale.toLowerCase().startsWith("zh");
+            const pageTitle =
+                homeTabStore.activeTab == "settings"
+                    ? isChinese ? "IDE 设置" : "IDE Settings"
+                    : homeTabStore.activeTab == "account"
+                      ? isChinese ? "账号与授权" : "Account and license"
+                    : homeTabStore.activeTab == "create"
+                      ? isChinese ? "新建" : "New"
+                      : isChinese ? "首页" : "Home";
+
             return (
-                <div className="EezStudio_HomeTab">
-                    <aside
-                        className="EezStudio_HomeTab_Navigation"
-                        aria-label="Home navigation"
-                    >
-                        <div className="EezStudio_HomeTab_NavigationGroup">
-                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
-                                Product
-                            </div>
-                            <HomeNavigationItem
-                                icon="material:directions_bike"
-                                label="DigiRide"
-                                title="Open the editable DigiRide project"
-                                onClick={() => {
-                                    void openDigiRideProject();
-                                }}
+                <div className={classNames("EezStudio_HomeTab", {
+                    "EezStudio_HomeTab--settings": homeTabStore.activeTab == "settings"
+                })}>
+                    <header className="EezStudio_HomeTab_Header" aria-label="DigiStudio Home">
+                        <div className="EezStudio_HomeTab_HeaderBrand">
+                            <img
+                                className="EezStudio_HomeTab_HeaderLogo"
+                                src="_images/digiwise-logo-dark-bg.svg"
+                                alt="DIGIWISE"
+                                draggable={false}
                             />
                         </div>
-                        <div className="EezStudio_HomeTab_NavigationGroup">
-                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
-                                Project
-                            </div>
+                        <h1 className="EezStudio_HomeTab_HeaderPageTitle">{pageTitle}</h1>
+                    </header>
+                    <div className="EezStudio_HomeTab_Workspace">
+                    <aside className="EezStudio_HomeTab_Navigation" aria-label={isChinese ? "首页导航" : "Home Navigation"}>
+                        <div className="EezStudio_HomeTab_NavigationPrimary">
                             <HomeNavigationItem
-                                icon="material:history"
-                                label="Recent projects"
-                                title="View recent projects"
-                                selected={homeTabStore.activeTab == "open"}
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "open";
-                                })}
+                                icon={homeIcon("\uf015")}
+                                label={isChinese ? "首页" : "Home"}
+                                title={isChinese ? "最近项目" : "Recent projects"}
+                                selected={homeTabStore.activeTab == "open" || homeTabStore.activeTab == "lvgl8" || homeTabStore.activeTab == "lvgl9"}
+                                onClick={action(() => { homeTabStore.activeTab = "open"; })}
                             />
                             <HomeNavigationItem
-                                icon="material:folder_open"
-                                label="Open project"
-                                title="Open a local DigiStudio Project"
-                                onClick={() => {
-                                    ipcRenderer.send("open-project");
-                                }}
-                            />
-                            <HomeNavigationItem
-                                icon={HOME_TAB_CREATE_ICON}
-                                label="Create project"
-                                title="Create a new project"
+                                icon={homeIcon("\uf15b")}
+                                label={isChinese ? "新建" : "New"}
+                                title={isChinese ? "新建项目" : "Create a new project"}
                                 selected={homeTabStore.activeTab == "create"}
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "create";
-                                })}
+                                onClick={action(() => { homeTabStore.activeTab = "create"; })}
+                            />
+                            <HomeNavigationItem
+                                icon={homeIcon("\uf07c")}
+                                label={isChinese ? "导入" : "Import"}
+                                title={isChinese ? "打开本地项目" : "Open a local project"}
+                                onClick={() => { ipcRenderer.send("open-project"); }}
                             />
                         </div>
                         <div className="EezStudio_HomeTab_NavigationGroup">
-                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
-                                Resources
-                            </div>
-                            {productConfig.examplesCatalog.enabled && (
-                                <HomeNavigationItem
-                                    icon={HOME_TAB_EXAMPLES_ICON}
-                                    label="Examples"
-                                    title="Example projects ready to run or edit"
-                                    selected={
-                                        homeTabStore.activeTab == "examples"
-                                    }
-                                    onClick={action(() => {
-                                        homeTabStore.activeTab = "examples";
-                                    })}
-                                />
-                            )}
+                            <div className="EezStudio_HomeTab_NavigationGroupTitle">{isChinese ? "系统设置" : "System"}</div>
                             <HomeNavigationItem
-                                icon={HOME_TAB_INSTRUMENTS_ICON}
-                                label="Instruments"
-                                title="Instruments manager"
-                                selected={
-                                    homeTabStore.activeTab == "instruments"
-                                }
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "instruments";
-                                })}
+                                icon={homeIcon("\uf013")}
+                                label={isChinese ? "IDE" : "Settings"}
+                                title={isChinese ? "全局设置" : "Global settings"}
+                                selected={homeTabStore.activeTab == "settings"}
+                                attention={instrumentDatabases.activeDatabase?.isCompactDatabaseAdvisable}
+                                onClick={action(() => { homeTabStore.activeTab = "settings"; })}
                             />
                         </div>
-                        <div className="EezStudio_HomeTab_NavigationGroup">
-                            <div className="EezStudio_HomeTab_NavigationGroupTitle">
-                                System
-                            </div>
-                            {productConfig.extensionsCatalog.enabled && (
-                                <HomeNavigationItem
-                                    icon="material:extension"
-                                    label="Extensions"
-                                    title="Extensions manager"
-                                    selected={
-                                        homeTabStore.activeTab == "extensions"
-                                    }
-                                    attention={
-                                        extensionsManagerStore
-                                            .newVersionsInAllSections.length > 0
-                                    }
-                                    onClick={action(() => {
-                                        homeTabStore.activeTab = "extensions";
-                                    })}
-                                />
-                            )}
-                            <HomeNavigationItem
-                                icon="material:settings"
-                                label="Settings"
-                                title="Global user settings"
-                                selected={
-                                    homeTabStore.activeTab == "settings"
-                                }
-                                attention={
-                                    instrumentDatabases.activeDatabase
-                                        ?.isCompactDatabaseAdvisable
-                                }
-                                onClick={action(() => {
-                                    homeTabStore.activeTab = "settings";
-                                })}
-                            />
-                        </div>
+                        <DigiwiseLoginNav />
                     </aside>
 
                     <div className="EezStudio_HomeTab_Body">
-                        {homeTabStore.activeTab == "open" && <Projects />}
+                        {(homeTabStore.activeTab == "open" ||
+                            homeTabStore.activeTab == "lvgl8" ||
+                            homeTabStore.activeTab == "lvgl9") && (
+                            <div className="EezStudio_HomeTab_Dashboard">
+                                <div className="EezStudio_HomeTab_ProjectWorkspace">
+                                    <div className="EezStudio_HomeTab_ProjectTabs" role="tablist" aria-label={isChinese ? "按 LVGL 版本分类的项目" : "Projects by LVGL version"}>
+                                        <button type="button" role="tab" aria-selected={homeTabStore.activeTab == "open"}
+                                            className={classNames({ selected: homeTabStore.activeTab == "open" })}
+                                            onClick={action(() => { homeTabStore.activeTab = "open"; })}
+                                        >{isChinese ? "最近" : "Recent"}</button>
+                                        <button type="button" role="tab" aria-selected={homeTabStore.activeTab == "lvgl9"}
+                                            className={classNames({ selected: homeTabStore.activeTab == "lvgl9" })}
+                                            onClick={action(() => { homeTabStore.activeTab = "lvgl9"; })}
+                                        >LVGL9</button>
+                                        <button type="button" role="tab" aria-selected={homeTabStore.activeTab == "lvgl8"}
+                                            className={classNames({ selected: homeTabStore.activeTab == "lvgl8" })}
+                                            onClick={action(() => { homeTabStore.activeTab = "lvgl8"; })}
+                                        >LVGL8</button>
+                                    </div>
+                                <Projects
+                                    lvglVersionFilter={
+                                        homeTabStore.activeTab == "lvgl8"
+                                            ? "8"
+                                            : homeTabStore.activeTab == "lvgl9"
+                                              ? "9"
+                                              : undefined
+                                    }
+                                />
+                                </div>
+                                <HomeLatestChangesPanel />
+                            </div>
+                        )}
                         {homeTabStore.activeTab == "create" && (
                             <NewProjectWizard
                                 wizardModel={wizardModelTemplates}
@@ -351,7 +462,9 @@ export const Home = observer(
                             homeTabStore.activeTab == "extensions" && (
                                 <ExtensionsManager />
                             )}
+                        {homeTabStore.activeTab == "account" && <DigiwiseAccount />}
                         {homeTabStore.activeTab == "settings" && <Settings />}
+                    </div>
                     </div>
                 </div>
             );
