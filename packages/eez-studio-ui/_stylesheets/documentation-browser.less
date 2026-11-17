@@ -1,3 +1,72 @@
+#documentation-browser.jsPanel {
+    background: var(--dw-panel-header-bg, @panelHeaderColor) !important;
+    border: 1px solid var(--dw-panel-border, @borderColor) !important;
+
+    .jsPanel-hdr {
+        background: var(--dw-panel-header-bg, @panelHeaderColor) !important;
+        color: var(--dw-text-primary, @textColor) !important;
+        border-bottom: 1px solid var(--dw-panel-border, @borderColor);
+    }
+
+    .jsPanel-title,
+    .jsPanel-controlbar .jsPanel-btn {
+        color: var(--dw-text-primary, @textColor) !important;
+    }
+
+    .jsPanel-title {
+        font-family: var(--dw-ui-font-family, inherit);
+        font-variant: normal;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .jsPanel-controlbar {
+        align-items: center;
+        align-self: center;
+        gap: 2px;
+        margin: 0 6px;
+    }
+
+    .jsPanel-controlbar .jsPanel-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        margin: 0;
+        border-radius: 2px;
+        color: var(--dw-text-secondary, @textColor) !important;
+
+        svg.jsPanel-icon {
+            display: block;
+            width: 14px !important;
+            height: 14px !important;
+            margin: 0 !important;
+            color: currentColor !important;
+        }
+
+        &:hover,
+        &:focus-visible {
+            background-color: var(--dw-menu-hover-bg, @hoverBackgroundColor);
+            color: var(--dw-text-primary, @textColor) !important;
+        }
+
+        &:focus-visible {
+            outline: 1px solid var(--digi-accent, #ffb500);
+            outline-offset: -1px;
+        }
+    }
+
+    .jsPanel-controlbar .jsPanel-btn-normalize {
+        display: none;
+    }
+
+    .jsPanel-content {
+        background: var(--dw-panel-bg, @backgroundColor);
+    }
+}
+
 .EezStudio_DocumentationBrowser {
     position: absolute;
     left: 0;
@@ -7,15 +76,17 @@
 
     display: flex;
     flex-direction: column;
+    background-color: var(--dw-panel-bg, @backgroundColor);
+    color: var(--dw-text-primary, @textColor);
 
     .EezStudio_DocumentationBrowser_Toolbar {
         flex: 0;
-        background-color: @panelHeaderColor;
-        padding: 10px;
+        background-color: var(--dw-toolbar-bg, @panelHeaderColor);
+        padding: 8px 12px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        border: 1px solid @borderColor;
+        border-bottom: 1px solid var(--dw-panel-border, @borderColor);
 
         & > div {
             display: flex;
@@ -25,15 +96,35 @@
         .form-check {
             margin: 0;
             min-height: 0;
-            margin-right: 10px;
+            margin-right: 12px;
         }
 
         .form-check:last-child {
             margin-right: 0;
         }
 
+        .EezStudio_DocumentationBrowser_ToolbarActions .btn {
+            background-color: var(--dw-tab-bg, @panelHeaderColor);
+            border: 1px solid var(--dw-panel-border, @borderColor);
+            color: var(--dw-text-primary, @textColor);
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 3px;
+
+            &:hover {
+                background-color: var(--dw-tab-hover-bg, @hoverBackgroundColor);
+                border-color: var(--digi-accent, #ffb500);
+                color: var(--digi-accent, #ffb500);
+            }
+
+            &:focus-visible {
+                outline: 1px solid var(--digi-accent, #ffb500);
+                outline-offset: 1px;
+            }
+        }
+
         button {
-            margin-right: 10px;
+            margin-right: 8px;
         }
 
         button:last-child {
@@ -81,14 +172,23 @@
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                gap: 6px;
+
+                & > span:first-child {
+                    display: inline-flex;
+                    align-items: center;
+                    min-width: 0;
+                }
 
                 & > span > img,
-                & > span > svg {
+                & > span > svg,
+                & > span > .EezStudio_Icon {
                     flex-shrink: 0;
                     width: 18px;
                     height: 18px;
                     object-fit: contain;
-                    margin-right: 4px;
+                    margin-right: 6px;
+                    color: var(--dw-text-secondary, @textColor);
                 }
             }
         }

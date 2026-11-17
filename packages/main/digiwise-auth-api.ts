@@ -236,6 +236,68 @@ export class DigiwisePublicApi {
         });
     }
 
+
+    /** Account-only MCP capability, not a project/model permission. */
+    async getMcpPolicy(accessToken: string) {
+        const data = await this.request<unknown>(
+            "mcp/policy", {method: "GET", signal: AbortSignal.timeout(4500)}, accessToken);
+        if (!isObject(data) || typeof data.authorized !== "boolean" ||
+            typeof data.globalEnabled !== "boolean" ||
+            typeof data.accountEnabled !== "boolean" ||
+            !Number.isSafeInteger(data.globalPolicyRevision) ||
+            !Number.isSafeInteger(data.accountPolicyRevision)) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid MCP account authorization status", "mcp-status-contract");
+        }
+        return data as {
+            authorized: boolean; globalEnabled: boolean; accountEnabled: boolean;
+            globalPolicyRevision: number; accountPolicyRevision: number;
+        };
+    }
+
+
+    /** Online MCP account authorization, scoped to one tool request. */
+    async authorizeSimpleMcp(accessToken: string, input: {
+        registryVersion: string; tool: string;
+        clientSessionId: string; parameterDigest: string;
+    }) {
+        const data = await this.request<unknown>("mcp/authorize-simple", {
+            method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(4500)
+        }, accessToken);
+        const expiry = isObject(data) && typeof data.expiresAt === "string"
+            ? Date.parse(data.expiresAt) : NaN;
+        if (!isObject(data) || data.authorized !== true ||
+            data.tool !== input.tool || data.registryVersion !== input.registryVersion ||
+            data.clientSessionId !== input.clientSessionId ||
+            data.parameterDigest !== input.parameterDigest ||
+            !["project.view", "project.edit", "build.run"].includes(String(data.riskGroup)) ||
+            typeof data.decisionId !== "string" ||
+            !/^[0-9a-f-]{36}$/i.test(data.decisionId) ||
+            !Number.isSafeInteger(data.globalPolicyRevision) ||
+            !Number.isSafeInteger(data.accountPolicyRevision) ||
+            !Number.isFinite(expiry) || expiry <= Date.now() ||
+            expiry > Date.now() + 10_000) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid MCP online execution decision", "mcp-simple-contract");
+        }
+        return data as {
+            authorized: true; decisionId: string; tool: string;
+            registryVersion: string; clientSessionId: string; parameterDigest: string;
+            riskGroup: "project.view" | "project.edit" | "build.run";
+            globalPolicyRevision: number; accountPolicyRevision: number;
+            expiresAt: string;
+        };
+    }
+
+    async auditSimpleMcp(accessToken: string, input: {
+        decisionId: string; tool: string;
+        executionResult: "succeeded" | "failed" | "cancelled" | "not_started" | "revoked";
+    }) {
+        return this.request<{recorded: boolean}>("mcp/audit-simple", {
+            method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(4500)
+        }, accessToken);
+    }
+
     /** Checks only live IDE account/model/role grants, NOT local project authorization. */
     async checkMcpModelAccess(accessToken: string, input: DigiwiseMcpModelAccessRequest) {
         const result = await this.request<unknown>(

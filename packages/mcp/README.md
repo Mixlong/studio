@@ -7,23 +7,26 @@ TypeScript SDK v2 Stdio entry.
 
 ## Enable in DigiwiseStudio
 
-1. Open **Settings → Integrations → MCP Server**.
-2. Turn on MCP Server. AI may read the current project and **request edits**.
-   Each write requires explicit confirmation in DigiwiseStudio, either **Allow once**
-   or **Allow for this session**. There is no second write-access switch.
-3. Click **Add to Codex** to append a `digistudio` MCP entry to the
-   Codex user-level `config.toml`. Existing settings and other MCP
-   entries are preserved; a conflicting `digistudio` entry is not replaced.
-4. Restart Codex, open an LVGL project, and use the supported MCP tools.
-   One-click import can migrate the project's earlier development registration
-   to the installed executable after backing up existing Codex configuration.
+1. In Admin → MCP 管理, choose **全局通用** (all active IDE accounts) or
+   **指定账号** (only accounts explicitly switched on). These two paths are
+   alternatives; no model ID, per-tool rule or project binding is required.
+2. Sign in to DigiwiseStudio. Only a Java-authorized IDE account sees
+   **Settings → Integrations → MCP Server**. Starting the local MCP server checks
+   the Java account policy and keeps an in-memory grant for this IDE login.
+3. Click **Add to Codex**, restart Codex, and open a saved LVGL project.
+4. Read/edit/Check/Build tools then execute locally **without a Java request
+   per tool**. Main checks the active editor project and Renderer rejects
+   tab/path switches. Writes still require local Main confirmation.
 
-MCP requests also require an **active DigiwiseStudio/迪太云 IDE login**.
-When signed out, disabled, or expired, Main rejects both reads and writes with
-`AUTH_REQUIRED`, including Main-owned `create_project`; no project is written.
-Signing out invalidates in-memory session grants, and signing in again requires
-new consent even for the same user. A login change while the approval dialog is
-open cancels that write rather than forwarding it.
+An already-authorized session keeps running if Java becomes temporarily
+unreachable. Admin permission changes take effect when Settings checks the
+policy again or on IDE restart; **they do not immediately block the next tool**.
+Logout, switching accounts or disabling MCP immediately ends the local bridge.
+The in-memory grant is not persisted across app restarts.
+
+MCP never offers instrument programming. External `create_project` remains
+blocked: create or open LVGL projects through the ordinary IDE project wizard.
+Switching accounts or signing out invalidates local session consent.
 
 Main and Renderer use a version-checked readiness handshake. Until the actual
 MCP renderer agent registers, Main returns `IPC_UNAVAILABLE` promptly instead of
@@ -34,6 +37,12 @@ and 37 write.
 The MCP server enabled switch persists between launches, but **write approval
 and all session grants reset on every IDE restart**. Turning the server off
 immediately revokes its grants and stops the bridge, without removing Codex.
+
+MCP exposes no instrument programming, SCPI, flashing or firmware download
+capabilities. The 19 read and 37 write tools are for LVGL projects, local
+preview, Check and Build only. Admin revocation is picked up on the next
+Settings permission check or IDE restart, not on each MCP tool request.
+Older IDE builds need upgrading to use this simpler authorization model.
 
 Approval uses a **Main-owned, sandboxed, theme-aware DigiwiseStudio modal**, not
 an Electron system MessageBox or a project-controlled renderer dialog. It displays
@@ -195,12 +204,12 @@ code are not exposed in this restricted safe property API.
 
 ## Controlled write tools
 
-Existing-project edits require **expectedProjectPath**, the saved path from
-`get_current_project`. If the active tab changes, the request fails instead of
-editing a different project. The new `create_project` tool does not require an
-active project, because it creates a separate file from a bundled UI template.
+Existing-project edits require **expectedProjectPath**, the path from
+`get_current_project`. Switching the active project rejects the edit.
+The `create_project` MCP registry command is intentionally blocked; create
+projects with the normal IDE wizard rather than an MCP client.
 
-- `create_project({ projectPath, lvglVersion?, flowSupport?, displayWidth?, displayHeight?, openWhenDone? })` — creates an independent LVGL project using the same EmptyUI template as the GUI wizard. The destination must be an absolute `.eez-project` filename in an **existing local directory**. It never overwrites existing files. By default, the editor receives an open-project request after creation.
+- `create_project(...)` — not executable through MCP; returns `PROJECT_UNBOUND`.
 - `create_page({ expectedProjectPath, name, width?, height? })`
 - `rename_page({ expectedProjectPath, pageName, pageId, name })` — renames a user page, updates ClassInfo-backed references and initial page; one Undo transaction.
 - `delete_page({ expectedProjectPath, pageName, pageId })` — refuses the last page, initial page or referenced pages; one Undo transaction.
@@ -268,9 +277,9 @@ For packaged Windows clients, click **Add to Codex** from the installed
 DigiwiseStudio app (not the development build). The configured executable
 and ASAR script path are then derived from the running installation.
 
-Security: read access exposes the current project to authorized local
-clients. Write access is OFF on every application launch and must be
-re-enabled manually. This is a local, single-user MCP service; it does not
-support remote access, multi-user authorization, or arbitrary project writes.
+Security: MCP exposes only the open LVGL project to locally connected clients.
+Every operation checks the live account grant. The IDE switch and session-scoped
+write confirmation never override backend revocation. The server has no model
+binding, instrument programming, remote or multi-user sharing capabilities.
 The renderer bridge is compiled by the main application build, so source
 separation does not yet imply independent TypeScript compilation.

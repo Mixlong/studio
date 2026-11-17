@@ -9,9 +9,10 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const Module = require("node:module");
 const net = require("node:net");
-const { randomBytes } = require("node:crypto");
+const { randomBytes, randomUUID } = require("node:crypto");
 
 const dir = mkdtempSync(join(tmpdir(), "digi-mcp-ipc-"));
+const boundProjectPath = "C:\\test\\safe.eez-project";
 const ipcMain = new EventEmitter();
 const app = new EventEmitter();
 app.getPath = type => {
@@ -66,7 +67,10 @@ webContents.send = (channel, request) => {
     setImmediate(() => ipcMain.emit("digi:mcp:response", {
         sender: webContents,
         senderFrame: webContents.mainFrame
-    }, { id: request.id, ok: true, result: { tool: request.tool, accepted: true } }));
+    }, { id: request.id, ok: true, result: {
+        tool: request.tool, accepted: true,
+        ...(request.tool === "get_current_project" ? {path:boundProjectPath} : {})
+    } }));
 };
 const win = new EventEmitter();
 let visible = true;
@@ -96,6 +100,28 @@ try {
         require(join(__dirname, "../../build/mcp/main-server.js")));
 } finally { Module._load = original; }
 
+const policy = {
+    authorizeDiscovery: async () => {},
+    authorizeProjectTool: async (projectPath, tool, parameterDigest, clientSessionId) => {
+        assert.equal(projectPath, boundProjectPath,
+            "Main must derive path from actual renderer, not MCP args");
+        assert.match(parameterDigest, /^[a-f0-9]{64}$/);
+        return {
+            bindingId: "trusted-binding", modelId: 350,
+            accountGeneration: authGeneration,
+            globalPolicyRevision: 1, accountPolicyRevision: 1,
+            requestId: randomUUID(), decisionId: randomUUID(),
+            clientSessionId, parameterDigest, projectFingerprint: "a".repeat(64),
+            projectRevision: 1, riskGroup: tool === "start_project_build" ||
+                tool === "start_project_check" ? "build.run" :
+                tool === "create_page" ? "project.edit" : "project.view",
+            expiresAt: new Date(Date.now() + 4000).toISOString()
+        };
+    },
+    auditExecution: async () => {},
+    afterAuthorizedSave: () => true
+};
+
 (async () => {
     const { callBridge } = await import("./bridge-client.mjs");
     const session = join(dir, "mcp-session.json");
@@ -104,7 +130,7 @@ try {
         expectedProjectPath: "C:\\test\\safe.eez-project", name: "TestPage"
     });
     try {
-        assert.equal(await startMcpServer(win), true);
+        assert.equal(await startMcpServer(win, policy), true);
         assert.equal(existsSync(session), true);
         assert.equal(isMcpWriteAllowed(), true, "MCP enabled must allow write requests to reach approval");
         // Main is not safe to use until renderer registered its actual agent.
@@ -179,12 +205,11 @@ try {
         approval = "deny";
         await request();
         assert.equal(prompts, beforeSessionPrompt + 1);
-        const createResult = await callBridge("create_project", {
+        await assert.rejects(callBridge("create_project", {
             projectPath: "C:\\test\\new-project.eez-project",
             lvglVersion: "8.4.0", displayWidth: 800, displayHeight: 480
-        });
-        assert.equal(createResult.created, true);
-        assert.equal(projectCreates, 1);
+        }), error => error.code === "PROJECT_UNBOUND");
+        assert.equal(projectCreates, 0, "External MCP project creation must be denied");
         assert.equal(prompts, beforeSessionPrompt + 1);
         // Logout immediately gates reads AND writes and invalidates the
         // previous approval even if the same user logs in again.
@@ -204,7 +229,7 @@ try {
         stopMcpServer();
         assert.equal(isMcpWriteAllowed(), false);
         assert.equal(existsSync(session), false);
-        assert.equal(await startMcpServer(win), true);
+        assert.equal(await startMcpServer(win, policy), true);
         assert.equal(isMcpWriteAllowed(), true);
         advertiseReady();
         await assert.rejects(request(), err => err.code === "WRITE_REJECTED");
@@ -284,17 +309,17 @@ try {
         await assert.rejects(callBridge("get_current_project", {}));
         // A renderer crash / main window destruction must revoke the pipe
         // and all session grants without waiting for Electron app.quit().
-        assert.equal(await startMcpServer(win), true);
+        assert.equal(await startMcpServer(win, policy), true);
         advertiseReady();
         webContents.emit("render-process-gone", {}, { reason: "crashed" });
         assert.equal(isMcpWriteAllowed(), false);
         assert.equal(existsSync(session), false);
-        assert.equal(await startMcpServer(win), true);
+        assert.equal(await startMcpServer(win, policy), true);
         advertiseReady();
         win.emit("closed");
         assert.equal(isMcpWriteAllowed(), false);
         assert.equal(existsSync(session), false);
-        console.log("PASS: MCP local approval/session security, hidden-window fast failure, renderer crash/window close cleanup");
+        console.log("PASS: MCP Main v3 online policy + local approval, hidden window, disconnect, crash and cleanup");
     } finally {
         stopMcpServer();
         rmSync(dir, { recursive: true, force: true });

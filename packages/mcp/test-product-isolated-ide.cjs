@@ -209,12 +209,27 @@ async function run() {
         const stopped=spawnSync("taskkill",["/PID",String(child.pid),"/T","/F"],{
             windowsHide:true,encoding:"utf8",timeout:12000
         });
+        // Windows taskkill /T sometimes returns 255 when the process tree
+        // exits during enumeration, even though every PID was terminated.
+        // Verify the test-owned PIDs are gone instead of trusting that status.
+        const taskkillOutput = (stopped.stdout || "") + "\n" + (stopped.stderr || "");
+        // Taskkill's translated output also includes a PARENT PID.
+        // Only the first PID per line belongs to the killed process tree.
+        const observedPids = taskkillOutput.split(/\r?\n/)
+            .map(line => line.match(/\bPID\s+(\d+)\b/i))
+            .filter(Boolean).map(match => Number(match[1]));
+        const pids = [...new Set([child.pid, ...observedPids])];
+        const remainingPids = pids.filter(pid => {
+            try { process.kill(pid, 0); return true; }
+            catch (error) { return error?.code !== "ESRCH"; }
+        });
         result.cleanup={
             isolatedPid:child.pid,exitCode:stopped.status,
-            details:(stopped.stdout||stopped.stderr||"").slice(0,300)
+            observedPids:pids,remainingPids,
+            details:taskkillOutput.slice(0,300)
         };
-        if(stopped.status!==0 && child.exitCode===null){
-            console.error("WARN: Unable to close only isolated test process",result.cleanup);
+        if(remainingPids.length || (stopped.status !== 0 && observedPids.length === 0)){
+            console.error("WARN: Unable to verify isolated test process cleanup",result.cleanup);
             process.exitCode=1;
         }
     }

@@ -30,7 +30,7 @@ interface BridgeRequest {
     args: unknown;
 }
 
-/** Mandatory Main-only live Java authority; absence fails closed. */
+/** Main-local tool access after the IDE checks Java account entitlement at startup. */
 export interface McpCentralExecutionPolicy {
     authorizeDiscovery: () => Promise<void>;
     authorizeProjectTool: (
@@ -52,6 +52,7 @@ export interface McpCentralExecutionPolicy {
         expiresAt: string;
     }>;
     auditExecution: (input: {
+        tool: string;
         requestId: string;
         decisionId: string;
         bindingId: string;
@@ -87,7 +88,7 @@ export async function startMcpServer(
     window: BrowserWindow,
     centralPolicy: McpCentralExecutionPolicy
 ): Promise<boolean> {
-    // Never start a fallback, locally authorized MCP server without Java enforcement.
+    // A Java account grant must first be obtained by the Settings integration.
     if (!centralPolicy) return false;
     // The Settings integration explicitly controls startup. No listener
     // exists until the user opts in or enables the developer environment flag.
@@ -313,6 +314,7 @@ export async function startMcpServer(
                 errorCode?: string) => {
                 try {
                     await centralPolicy.auditExecution({
+                        tool: input.tool,
                         requestId: grant.requestId, decisionId: grant.decisionId,
                         bindingId: grant.bindingId, clientSessionId: grant.clientSessionId,
                         parameterDigest: grant.parameterDigest, localConfirmation,
@@ -362,7 +364,7 @@ export async function startMcpServer(
                             !path.isAbsolute(project.path) ||
                             !/\.eez-project$/i.test(project.path)) {
                             throw mcpReadError("PROJECT_UNBOUND",
-                                "Select a saved, centrally bound LVGL project");
+                                "Select a saved LVGL project in the editor");
                         }
                         authorizedPath = project.path;
                         if (centralLastProjectPath &&
@@ -454,8 +456,8 @@ export async function startMcpServer(
                 }
                 if (authorizedPath) {
                     try {
-                        // Native consent may take 125 seconds; a 5-second
-                        // server decision from BEFORE consent cannot be reused.
+                        // Recheck Main's in-memory login grant after consent;
+                        // this does not contact Java per operation.
                         const fresh = await centralPolicy.authorizeProjectTool(
                             authorizedPath, input.tool, parameterDigest, clientSessionId
                         );
@@ -468,7 +470,7 @@ export async function startMcpServer(
                     } catch (_error) {
                         writeApprovalPending = false;
                         send(socket,{ok:false,error:mcpReadError("MCP_POLICY_UNAVAILABLE",
-                            "Central MCP permission changed or is unavailable after local approval")});
+                            "IDE account changed or MCP server stopped after local approval")});
                         return;
                     }
                 }

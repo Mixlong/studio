@@ -1088,7 +1088,7 @@ const TemplateSettings = observer(
 ////////////////////////////////////////////////////////////////////////////////
 
 interface McpSettingsState {
-    modelId: string;
+    allowed: boolean;
     enabled: boolean;
     loading: boolean;
     busy: boolean;
@@ -1096,9 +1096,10 @@ interface McpSettingsState {
     error: boolean;
 }
 
+/** This entire control is hidden unless Java grants MCP to the signed-in IDE account. */
 class McpSettings extends React.Component<{}, McpSettingsState> {
     state: McpSettingsState = {
-        modelId: "",
+        allowed: false,
         enabled: false,
         loading: true,
         busy: false,
@@ -1108,114 +1109,77 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
 
     private mounted = false;
 
-    componentDidMount() {
-        this.mounted = true;
+    private refreshPermission = () => {
         void ipcRenderer.invoke("digistudio:mcp:status").then(
-            (status: { enabled: boolean }) => {
-                if (this.mounted) {
-                    this.setState({ enabled: status.enabled, loading: false });
-                }
+            (status: { enabled: boolean; allowed: boolean }) => {
+                if (this.mounted) this.setState({
+                    allowed: status.allowed === true,
+                    enabled: status.allowed === true && status.enabled === true,
+                    loading: false,
+                    error: false
+                });
             },
-            (error: Error) => {
-                if (this.mounted) {
-                    this.setState({
-                        loading: false,
-                        error: true,
-                        message: error.message
-                    });
-                }
+            () => {
+                if (this.mounted) this.setState({
+                    allowed: false, enabled: false, loading: false
+                });
             }
         );
+    };
+
+    componentDidMount() {
+        this.mounted = true;
+        this.refreshPermission();
+        ipcRenderer.on("digistudio:mcp:policy-changed", this.refreshPermission);
     }
 
     componentWillUnmount() {
         this.mounted = false;
+        ipcRenderer.removeListener("digistudio:mcp:policy-changed", this.refreshPermission);
     }
 
     setEnabled = async (enabled: boolean) => {
-        if (this.state.busy || this.state.loading) return;
+        if (this.state.busy || this.state.loading || !this.state.allowed) return;
         this.setState({ busy: true, message: "", error: false });
         try {
-            const status: { enabled: boolean } = await ipcRenderer.invoke(
-                "digistudio:mcp:toggle",
-                enabled
-            );
-            if (this.mounted) {
-                this.setState({
-                    enabled: status.enabled,
-                    message: isChineseLocale()
-                        ? status.enabled ? "MCP 服务已开启；AI 修改操作需要确认。" : "MCP 服务已关闭"
-                        : status.enabled ? "MCP server started; AI edits require confirmation." : "MCP server stopped"
-                });
-            }
-        } catch (error) {
-            if (this.mounted) {
-                this.setState({
-                    error: true,
-                    message: (error as Error).message
-                });
-            }
+            const status: { enabled: boolean; allowed: boolean } = await ipcRenderer.invoke(
+                "digistudio:mcp:toggle", enabled);
+            if (this.mounted) this.setState({
+                enabled: status.enabled,
+                allowed: status.allowed,
+                message: isChineseLocale()
+                    ? status.enabled ? "MCP 已启动；工程修改需要确认。" : "MCP 已关闭"
+                    : status.enabled ? "MCP started; project edits require confirmation." : "MCP stopped"
+            });
+        } catch (_error) {
+            if (this.mounted) this.setState({
+                error: true,
+                message: isChineseLocale() ? "MCP 操作失败，请检查账号授权或网络。" :
+                    "MCP operation failed; check account permission or network."
+            });
         } finally {
             if (this.mounted) this.setState({ busy: false });
+            this.refreshPermission();
         }
     };
 
     addToCodex = async () => {
-        if (this.state.busy || !this.state.enabled) return;
+        if (this.state.busy || !this.state.enabled || !this.state.allowed) return;
         this.setState({ busy: true, message: "", error: false });
         try {
-            const result: {
-                alreadyInstalled: boolean;
-                configPath: string;
-            } = await ipcRenderer.invoke("digistudio:mcp:install-codex");
-            if (this.mounted) {
-                this.setState({
-                    message: isChineseLocale()
-                        ? result.alreadyInstalled
-                            ? "Codex 已存在相同的 DigiStudio MCP 配置"
-                            : "已添加至 Codex。重新打开 Codex 即可使用。"
-                        : result.alreadyInstalled
-                          ? "DigiStudio MCP is already configured in Codex"
-                          : "Added to Codex. Restart Codex to load the MCP server."
-                });
-            }
-        } catch (error) {
-            if (this.mounted) {
-                this.setState({
-                    error: true,
-                    message: (error as Error).message
-                });
-            }
-        } finally {
-            if (this.mounted) this.setState({ busy: false });
-        }
-    };
-
-    createBoundProject = async () => {
-        const modelId = Number(this.state.modelId);
-        if (this.state.busy || !this.state.enabled ||
-            !Number.isSafeInteger(modelId) || modelId <= 0) {
-            this.setState({
+            const result: { alreadyInstalled: boolean; configPath: string } =
+                await ipcRenderer.invoke("digistudio:mcp:install-codex");
+            if (this.mounted) this.setState({
+                message: isChineseLocale()
+                    ? result.alreadyInstalled ? "Codex 中已有 DigiStudio MCP 配置" :
+                        "已添加至 Codex，请重新打开 Codex。"
+                    : result.alreadyInstalled ? "DigiStudio MCP is already in Codex." :
+                        "Added to Codex. Restart Codex."
+            });
+        } catch (_error) {
+            if (this.mounted) this.setState({
                 error: true,
-                message: isChineseLocale() ? "请输入已授权的有效型号 ID" :
-                    "Enter a valid authorized model ID"
-            });
-            return;
-        }
-        this.setState({ busy: true, message: "", error: false });
-        try {
-            const result: { created?: boolean; canceled?: boolean; projectPath?: string } =
-                await ipcRenderer.invoke("digistudio:mcp:create-bound-project", modelId);
-            if (this.mounted) this.setState({
-                message: result.created
-                    ? (isChineseLocale()
-                        ? "工程已创建并绑定；每次 MCP 操作都需后台在线授权。"
-                        : "New project bound; every MCP operation requires online authorization.")
-                    : (isChineseLocale() ? "已取消创建工程" : "Project creation canceled")
-            });
-        } catch (error) {
-            if (this.mounted) this.setState({
-                error: true, message: (error as Error).message
+                message: isChineseLocale() ? "添加 Codex 配置失败" : "Could not configure Codex"
             });
         } finally {
             if (this.mounted) this.setState({ busy: false });
@@ -1223,76 +1187,50 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
     };
 
     render() {
+        if (!this.state.allowed || this.state.loading) return null;
         const isChinese = isChineseLocale();
-        const { enabled, loading, busy, message, error } = this.state;
+        const { enabled, busy, message, error } = this.state;
         return (
-            <div className="settings-field-group">
+            <div className="settings-card">
+                <div className="settings-card-header">
+                    <Icon icon="material:extension" size={20} className="settings-card-icon" />
+                    <h4 className="settings-card-title">{isChinese ? "集成" : "Integrations"}</h4>
+                </div>
+                <div className="settings-card-body">
+                    <div className="settings-field-group">
                 <div className="settings-field-header">
                     <span className="settings-field-title">MCP Server</span>
                     <span className={classNames(
                         "settings-status-badge",
                         enabled ? "badge-success" : "badge-danger"
                     )}>
-                        {loading
-                            ? (isChinese ? "加载中" : "Loading")
-                            : enabled
-                              ? (isChinese ? "已开启" : "Enabled")
-                              : (isChinese ? "已关闭" : "Disabled")}
+                        {enabled ? (isChinese ? "已启动" : "Running") :
+                            (isChinese ? "未启动" : "Stopped")}
                     </span>
                 </div>
                 <label className="settings-switch-label">
-                    <input
-                        type="checkbox"
-                        checked={enabled}
-                        disabled={loading || busy}
-                        onChange={event => void this.setEnabled(event.target.checked)}
-                    />
-                    <span>
-                        {isChinese
-                            ? "允许外部 AI 访问当前 LVGL 工程（修改时需确认）"
-                            : "Allow external AI access to the active LVGL project (confirm edits)"}
-                    </span>
+                    <input type="checkbox" checked={enabled} disabled={busy}
+                        onChange={event => void this.setEnabled(event.target.checked)} />
+                    <span>{isChinese ? "启动 MCP 服务" : "Start MCP server"}</span>
                 </label>
                 <div className="settings-input-with-button">
-                    <button
-                        type="button"
-                        className="settings-action-btn"
-                        disabled={!enabled || busy || loading}
-                        onClick={this.addToCodex}
-                    >
+                    <button type="button" className="settings-action-btn"
+                        disabled={!enabled || busy} onClick={this.addToCodex}>
                         {isChinese ? "一键添加到 Codex" : "Add to Codex"}
-                    </button>
-                </div>
-                <div className="settings-input-with-button">
-                    <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={this.state.modelId}
-                        disabled={loading || busy}
-                        placeholder={isChinese ? "已授权型号 ID" : "Authorized model ID"}
-                        aria-label={isChinese ? "已授权型号 ID" : "Authorized model ID"}
-                        onChange={event => this.setState({ modelId: event.target.value })}
-                    />
-                    <button
-                        type="button"
-                        className="settings-action-btn"
-                        disabled={!enabled || busy || loading}
-                        onClick={this.createBoundProject}
-                    >
-                        {isChinese ? "创建并绑定新工程" : "Create and bind new project"}
                     </button>
                 </div>
                 <p className="settings-mcp-hint">
                     {isChinese
-                        ? "须先在后台开启 MCP、配置账号读/写/构建权限和型号授权，再用上方按钮创建可信绑定工程。每次工具执行均联网校验；离线、撤权或切换工程会拒绝执行。MCP 不支持仪器烧录。"
-                        : "Enable MCP and grant the account/model permissions in Admin, then create a trusted bound project here. Each tool invocation is checked online, and offline or revoked access is denied. Instrument programming is not exposed via MCP."}
+                        ? "启用 MCP 时检查账号授权，本次登录内工具直接使用；修改工程仍需确认。"
+                        : "Account permission is checked on enable; tools run locally until sign-out. Confirm edits."}
                 </p>
                 {message && (
                     <p className={classNames("settings-mcp-feedback", { "is-error": error })} role="status">
                         {message}
                     </p>
                 )}
+                    </div>
+                </div>
             </div>
         );
     }
@@ -1409,16 +1347,8 @@ export const Settings = observer(
                                 </div>
                             </div>
 
-                            {/* Integrations: one opt-in read-only MCP server. */}
-                            <div className="settings-card">
-                                <div className="settings-card-header">
-                                    <Icon icon="material:extension" size={20} className="settings-card-icon" />
-                                    <h4 className="settings-card-title">{isChinese ? "集成" : "Integrations"}</h4>
-                                </div>
-                                <div className="settings-card-body">
-                                    <McpSettings />
-                                </div>
-                            </div>
+                            {/* Only an authorized IDE account sees the MCP integration card. */}
+                            <McpSettings />
                         </div>
 
                         {/* Right column */}

@@ -7,6 +7,7 @@ const {mkdtempSync, readFileSync, existsSync, rmSync} = require("node:fs");
 const {tmpdir} = require("node:os");
 const {join} = require("node:path");
 const Module = require("node:module");
+const crypto = require("node:crypto");
 
 const dir = mkdtempSync(join(tmpdir(),"digi-mcp-central-main-"));
 const pageA = join(dir,"BC350.eez-project");
@@ -17,7 +18,9 @@ app.getPath = p => p==="userData"?dir:undefined;
 const ipcMain = new EventEmitter();
 let generation=5,authenticated=true,approved="deny",prompts=0;
 let writeCount=0,readCount=0,probes=0,centralChecks=0;
-let online=true,discoverable=true;
+let accountPolicyRevision=7;
+let online=true,discoverable=true,revoked=false;
+let auditCalls=[];
 let overrideDecision=null;
 let resolveApproval=null;
 const dialog = async (_window,tool,args,isChinese,signal) => {
@@ -85,18 +88,27 @@ const policy={
     authorizeDiscovery:async()=>{
         if(!discoverable)throw new Error("Global MCP disabled");
     },
-    authorizeProjectTool:async(path,tool)=>{
+    authorizeProjectTool:async(path,tool,parameterDigest,clientSessionId)=>{
         centralChecks++;
-        if(!online)throw new Error("Policy denied or backend down");
+        if(!online || revoked)throw new Error("Policy denied or backend down");
+        assert.match(parameterDigest,/^[a-f0-9]{64}$/);
+        assert.match(clientSessionId,/^[A-Za-z0-9_-]{16,128}$/);
         assert.equal(path,activePath,"Main must get path from active renderer tab");
         if(overrideDecision) return overrideDecision(path,tool);
         const bindingId=path===pageA?"binding-A":"binding-B";
         return {
             bindingId,modelId:path===pageA?350:999,
-            globalPolicyRevision:2,accountPolicyRevision:7,
-            accountGeneration:generation
+            globalPolicyRevision:2,accountPolicyRevision,
+            accountGeneration:generation,
+            requestId:crypto.randomUUID(),decisionId:crypto.randomUUID(),
+            clientSessionId,parameterDigest,projectFingerprint:"a".repeat(64),
+            projectRevision:1,riskGroup:tool==="start_project_check"||tool==="start_project_build"
+                ?"build.run":tool==="create_page"?"project.edit":"project.view",
+            expiresAt:new Date(Date.now()+4000).toISOString()
         };
-    }
+    },
+    auditExecution:async audit=>{auditCalls.push(audit);},
+    afterAuthorizedSave:()=>true
 };
 (async()=>{
     const {callBridge}=await import("./bridge-client.mjs");
@@ -137,26 +149,46 @@ const policy={
         approved="deny";
         await write();
         assert.equal(prompts,promptAfterSession,
-            "Same account/project/tool/version may reuse consent after fresh online check");
+            "Same account/project/tool/policy revision may reuse consent after fresh online check");
         assert.equal(writeCount,2);
+
+        // A server-side policy revision bump must invalidate Main's old session consent.
+        accountPolicyRevision++;
+        await assert.rejects(write(),e=>e.code==="WRITE_REJECTED");
+        assert.equal(prompts,promptAfterSession+1,
+            "Policy revision change must require fresh local confirmation");
+        assert.equal(writeCount,2);
+        approved="session";
+        await write();
+        assert.equal(prompts,promptAfterSession+2);
+        assert.equal(writeCount,3);
+        const promptAfterPolicyChange=prompts;
+        approved="deny";
+        await write();
+        assert.equal(prompts,promptAfterPolicyChange,
+            "New consent may be reused only within the new policy revision");
+        assert.equal(writeCount,4);
 
         activePath=pageB;
         await assert.rejects(write(),e=>e.code==="WRITE_REJECTED");
-        assert.equal(prompts,promptAfterSession+1,
+        assert.equal(prompts,promptAfterPolicyChange+1,
             "Switching project invalidates session consent scope");
-        assert.equal(writeCount,2);
+        assert.equal(writeCount,4);
         activePath=pageA;
         await assert.rejects(write(),e=>e.code==="WRITE_REJECTED");
-        assert.equal(prompts,promptAfterSession+2,
+        assert.equal(prompts,promptAfterPolicyChange+2,
             "Returning to a previously authorized project must require new consent");
-        online=false;
+        revoked=true;
         await assert.rejects(write(),e=>e.code==="MCP_POLICY_UNAVAILABLE");
-        assert.equal(writeCount,2,"Backend revoke must stop a granted session write");
+        assert.equal(writeCount,4,"Backend revoke must stop a granted session write");
+        revoked=false;
+        online=false;
+        await assert.rejects(callBridge("list_pages",{}),e=>e.code==="MCP_POLICY_UNAVAILABLE");
         online=true;
         await assert.rejects(callBridge("create_project",{
             projectPath:join(dir,"unauthorized.eez-project")
         }),e=>e.code==="PROJECT_UNBOUND");
-        assert.equal(writeCount,2);
+        assert.equal(writeCount,4);
 
         // Native confirmation may be long, server decision must be rechecked
         // after clicking, preventing revoke-during-prompt race.
@@ -170,12 +202,16 @@ const policy={
         online=false;
         resolveApproval(1);
         await assert.rejects(awaiting,e=>e.code==="MCP_POLICY_UNAVAILABLE");
-        assert.equal(writeCount,2);
+        assert.equal(writeCount,4);
         online=true;
         authenticated=false;
         await assert.rejects(callBridge("list_pages",{}),
             e=>e.code==="AUTH_REQUIRED");
-        console.log("PASS: staged Main socket online auth: discovery, private active-path probe, offline fail-closed, scoped consent, project switch, revoked-during-dialog, unbound create");
+        assert.ok(auditCalls.some(row=>row.executionResult==="succeeded"),
+            "Each authorized successful operation must report audit");
+        assert.ok(auditCalls.some(row=>row.localConfirmation==="cancelled"),
+            "Denied write confirmation must be recorded");
+        console.log("PASS: Main socket online v3 auth, revocation, private project probe, scoped consent, audit and offline fail-closed");
     } finally {
         stopMcpServer();
         delete process.env.DIGISTUDIO_MCP_SESSION_FILE;

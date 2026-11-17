@@ -178,7 +178,7 @@
         flex: 0 0 52px;
         width: 100%;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         min-width: 0;
         padding: 0 20px;
         color: @textColor;
@@ -1746,13 +1746,13 @@ body {
             width: max-content;
 
             .create-btn {
-                background-color: #383838cc;
-                border: 1px solid #55555580;
+                background-color: var(--digi-accent, #ffb500);
+                border: 1px solid var(--digi-accent, #ffb500);
                 padding: 0 12px;
                 height: 32px;
                 line-height: 30px;
                 box-sizing: border-box;
-                color: #b9b9b9;
+                color: #171717;
                 cursor: pointer;
                 border-radius: 2px;
                 font-size: 14px;
@@ -1774,8 +1774,9 @@ body {
                 }
 
                 &:hover {
-                    background-color: #ffb500;
-                    color: #000000;
+                    background-color: var(--digi-accent-dark, #d49b05);
+                    border-color: var(--digi-accent-dark, #d49b05);
+                    color: #171717;
                 }
 
                 &.disabled {
@@ -3397,6 +3398,7 @@ body {
     .EezStudio_HomeTab_Header {
         flex-basis: var(--digi-home-header-height);
         height: var(--digi-home-header-height);
+        justify-content: flex-start;
         padding-right: 20px;
         background: var(--digi-canvas);
         border-bottom: 1px solid var(--digi-border);

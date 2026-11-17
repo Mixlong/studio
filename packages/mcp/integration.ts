@@ -1,23 +1,22 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import * as fs from "fs";
 import * as path from "path";
+import { createHash, randomUUID } from "crypto";
 import {
-    startMcpServer,
-    stopMcpServer,
-    isMcpServerRunning,
+    startMcpServer, stopMcpServer, isMcpServerRunning,
     McpCentralExecutionPolicy
 } from "./main-server";
-import { getDigiwiseAuthGuard, callDigiwisePublicApiWithSession } from "main/digiwise-auth";
-import { MCP_TOOL_REGISTRY_VERSION } from "./protocol";
-import { createMcpProject } from "./create-project";
-import { McpProjectBindingStore } from "./project-binding-store";
-import { McpCentralAuthorizationGate } from "./central-authorization";
+import {
+    getDigiwiseAuthGuard, callDigiwisePublicApiWithSession,
+    onDigiwiseAuthSessionChanged
+} from "main/digiwise-auth";
+import { isReadTool } from "./validator";
 import { addDigiStudioToCodex } from "./codex-import";
 
 const STATUS_CHANNEL = "digistudio:mcp:status";
 const TOGGLE_CHANNEL = "digistudio:mcp:toggle";
 const CODEX_CHANNEL = "digistudio:mcp:install-codex";
-const BIND_CHANNEL = "digistudio:mcp:create-bound-project";
+const POLICY_CHANGED_CHANNEL = "digistudio:mcp:policy-changed";
 
 interface McpPreferences {
     enabled: boolean;
@@ -30,9 +29,7 @@ function preferencesPath() {
 function readPreferences(): McpPreferences | undefined {
     try {
         const json = JSON.parse(fs.readFileSync(preferencesPath(), "utf8"));
-        if (typeof json?.enabled === "boolean") {
-            return { enabled: json.enabled };
-        }
+        if (typeof json?.enabled === "boolean") return { enabled: json.enabled };
     } catch (_error) {}
     return undefined;
 }
@@ -43,8 +40,7 @@ function savePreferences(enabled: boolean) {
     const tempFile = `${filePath}.${process.pid}.tmp`;
     try {
         fs.writeFileSync(tempFile, JSON.stringify({ enabled }), {
-            encoding: "utf8",
-            mode: 0o600
+            encoding: "utf8", mode: 0o600
         });
         fs.renameSync(tempFile, filePath);
     } finally {
@@ -54,152 +50,109 @@ function savePreferences(enabled: boolean) {
 
 let initialized = false;
 
-/** A local IDE preference never bypasses Java's live policy, even in packaged builds. */
-function bindingStore() {
-    return new McpProjectBindingStore(app.getPath("userData"), {
-        isAvailable: () => safeStorage.isEncryptionAvailable(),
-        encrypt: text => safeStorage.encryptString(text),
-        decrypt: bytes => safeStorage.decryptString(bytes)
-    });
-}
+// Java is checked when IDE Settings loads or the user enables MCP.
+// Individual tool requests only use this Main-owned in-memory login grant.
+let sessionGrant: {
+    userId: string;
+    generation: number;
+    globalRevision: number;
+    accountRevision: number;
+} | null = null;
+let policyCheckSequence = 0;
 
-function centralExecutionPolicy(store: McpProjectBindingStore): McpCentralExecutionPolicy {
-    const gate = new McpCentralAuthorizationGate(store, getDigiwiseAuthGuard,
-        async input => {
-            const response = await callDigiwisePublicApiWithSession(
-                (api, accessToken) => api.authorizeMcpExecution(accessToken, {
-                    registryVersion: MCP_TOOL_REGISTRY_VERSION, ...input
-                })
-            );
-            if (!response.ok) throw new Error("Online MCP policy denied");
-            return response.data;
-        });
-    return {
-        authorizeDiscovery: async () => {
-            const result = await callDigiwisePublicApiWithSession(
-                (api, accessToken) => api.checkMcpModelAccess(accessToken, {
-                    registryVersion: MCP_TOOL_REGISTRY_VERSION,
-                    tool: "get_mcp_capabilities",
-                    modelId: null
-                })
-            );
-            if (!result.ok || result.data.scope !== "DISCOVERY_ONLY" ||
-                !result.data.mcpUseGranted) {
-                throw new Error("MCP discovery denied");
-            }
-        },
-        authorizeProjectTool: (projectPath, tool, parameterDigest, clientSessionId) =>
-            gate.authorizeProjectTool(projectPath, tool, parameterDigest, clientSessionId),
-        auditExecution: async input => {
-            const result = await callDigiwisePublicApiWithSession(
-                (api, accessToken) => api.auditMcpExecution(accessToken, input)
-            );
-            if (!result.ok) throw new Error("MCP execution audit failed");
-        },
-        afterAuthorizedSave: (projectPath, bindingId) => {
-            const account = getDigiwiseAuthGuard();
-            return !!account.authenticated && !!account.userId &&
-                store.refreshAfterAuthorizedSave(projectPath, account.userId, bindingId);
-        }
-    };
-}
-
-/** A human-operated IDE settings command creates only a NEW bound project. */
-async function createBoundProject(window: BrowserWindow, store: McpProjectBindingStore,
-                                  modelId: number) {
-    const before = getDigiwiseAuthGuard();
-    if (!before.authenticated || !before.userId ||
-        !Number.isSafeInteger(modelId) || modelId <= 0) {
-        throw new Error("Sign in and choose an authorized model ID");
+async function accountAuthorized(): Promise<boolean> {
+    const guard = getDigiwiseAuthGuard();
+    const seq = ++policyCheckSequence;
+    if (!guard.authenticated || !guard.userId) {
+        sessionGrant = null;
+        return false;
     }
-    if (!safeStorage.isEncryptionAvailable()) {
-        throw new Error("OS secure storage is unavailable");
-    }
-    const selection = await dialog.showSaveDialog(window, {
-        title: "Create MCP-bound LVGL project",
-        defaultPath: "New-LVGL.eez-project",
-        filters: [{ name: "EEZ project", extensions: ["eez-project"] }],
-        properties: ["createDirectory", "showOverwriteConfirmation"]
-    });
-    if (selection.canceled || !selection.filePath) return { canceled: true };
-    const projectPath = path.resolve(selection.filePath);
-    if (path.extname(projectPath).toLowerCase() !== ".eez-project") {
-        throw new Error("Select an .eez-project destination");
-    }
-    const assertSameLogin = () => {
-        const now = getDigiwiseAuthGuard();
-        if (!now.authenticated || now.userId !== before.userId ||
-            now.generation !== before.generation) {
-            throw new Error("IDE account changed while creating MCP project");
-        }
-    };
-    assertSameLogin();
-    const issue = await callDigiwisePublicApiWithSession(
-        (api, token) => api.issueMcpProjectBinding(token, {
-            registryVersion: MCP_TOOL_REGISTRY_VERSION, modelId
-        })
+    const result = await callDigiwisePublicApiWithSession(
+        (api, token) => api.getMcpPolicy(token)
     );
-    if (!issue.ok) throw new Error("Java refused the MCP project binding");
-    const credential = issue.data;
-    let created = false;
-    try {
-        assertSameLogin();
-        await createMcpProject({ projectPath, openWhenDone: false }, window);
-        created = true;
-        const projectFingerprint =
-            store.fingerprintForNewProject(projectPath, credential.bindingId);
-        const confirm = await callDigiwisePublicApiWithSession(
-            (api, token) => api.confirmMcpProjectBinding(token, {
-                bindingId: credential.bindingId,
-                bindingSecret: credential.bindingSecret,
-                projectFingerprint, projectRevision: 1
-            })
-        );
-        if (!confirm.ok) throw new Error("Java did not confirm the MCP project");
-        assertSameLogin();
-        store.bindNewProject(projectPath, before.userId, credential);
-        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-            window.webContents.send("open-project", projectPath, false);
-        }
-        return { created: true, modelId, projectPath };
-    } catch (error) {
-        try {
-            await callDigiwisePublicApiWithSession(
-                (api, token) => api.revokeMcpBinding(token, {
-                    bindingId: credential.bindingId,
-                    bindingSecret: credential.bindingSecret
-                })
-            );
-        } catch (revokeError) {
-            console.warn("[mcp] Could not revoke failed provisioning", revokeError);
-        }
-        if (created) {
-            try { fs.unlinkSync(projectPath); } catch {}
-        }
-        throw error;
+    const after = getDigiwiseAuthGuard();
+    if (seq !== policyCheckSequence) return false;
+    if (result.ok && result.data.authorized === true &&
+        after.authenticated && after.userId === guard.userId &&
+        after.generation === guard.generation) {
+        sessionGrant = {
+            userId: guard.userId, generation: guard.generation,
+            globalRevision: result.data.globalPolicyRevision,
+            accountRevision: result.data.accountPolicyRevision
+        };
+        return true;
     }
+    sessionGrant = null;
+    return false;
+}
+
+function currentGrant() {
+    const guard = getDigiwiseAuthGuard();
+    if (!sessionGrant || !guard.authenticated ||
+        guard.userId !== sessionGrant.userId ||
+        guard.generation !== sessionGrant.generation) {
+        throw new Error("MCP is not authorized for the current IDE account");
+    }
+    return sessionGrant;
+}
+
+function centralExecutionPolicy(): McpCentralExecutionPolicy {
+    return {
+        // The Java policy is checked only when starting MCP or opening Settings.
+        authorizeDiscovery: async () => {
+            currentGrant();
+        },
+        authorizeProjectTool: async (projectPath, tool, parameterDigest, clientSessionId) => {
+            const grant = currentGrant();
+            if (!path.isAbsolute(projectPath) || !/\.eez-project$/i.test(projectPath) ||
+                !/^[a-f0-9]{64}$/.test(parameterDigest) ||
+                !/^[A-Za-z0-9_-]{16,128}$/.test(clientSessionId)) {
+                throw new Error("Invalid IDE MCP request context");
+            }
+            const riskGroup = tool === "start_project_check" ||
+                tool === "start_project_build" ? "build.run" :
+                isReadTool(tool) ? "project.view" : "project.edit";
+            const decisionId = randomUUID();
+            return {
+                bindingId: `account:${grant.userId}`, modelId: 0,
+                accountGeneration: grant.generation,
+                globalPolicyRevision: grant.globalRevision,
+                accountPolicyRevision: grant.accountRevision,
+                requestId: decisionId, decisionId,
+                clientSessionId, parameterDigest,
+                projectFingerprint: createHash("sha256").update(path.resolve(projectPath)).digest("hex"),
+                projectRevision: 0, riskGroup,
+                expiresAt: new Date(Date.now() + 5000).toISOString()
+            };
+        },
+        auditExecution: async input => {
+            // Local summary only: no Java call after tool execution.
+            console.info("[mcp] Tool", input.tool, input.executionResult);
+        },
+        afterAuthorizedSave: () => true
+    };
 }
 
 export async function registerMcpIntegration(window: BrowserWindow) {
     if (initialized) return;
     initialized = true;
-
-    const store = bindingStore();
-    const centralPolicy = centralExecutionPolicy(store);
+    const centralPolicy = centralExecutionPolicy();
     const checkSender = (event: Electron.IpcMainInvokeEvent) => {
-        if (
-            window.isDestroyed() ||
-            window.webContents.isDestroyed() ||
+        if (window.isDestroyed() || window.webContents.isDestroyed() ||
             event.sender !== window.webContents ||
-            event.senderFrame !== window.webContents.mainFrame
-        ) {
+            event.senderFrame !== window.webContents.mainFrame) {
             throw new Error("Unauthorized MCP settings request");
         }
     };
+    const status = async () => {
+        const allowed = await accountAuthorized();
+        if (!allowed) stopMcpServer();
+        return { enabled: allowed && isMcpServerRunning(), allowed };
+    };
 
-    ipcMain.handle(STATUS_CHANNEL, event => {
+    ipcMain.handle(STATUS_CHANNEL, async event => {
         checkSender(event);
-        return { enabled: isMcpServerRunning() };
+        return status();
     });
 
     let transition = Promise.resolve();
@@ -210,42 +163,54 @@ export async function registerMcpIntegration(window: BrowserWindow) {
         }
         const change = transition.then(async () => {
             if (desired) {
-                if (!(await startMcpServer(window, centralPolicy))) {
-                    throw new Error("Could not start MCP. Check the application log.");
+                if (!await accountAuthorized()) {
+                    stopMcpServer();
+                    throw new Error("This IDE account has not been authorized for MCP");
+                }
+                if (!await startMcpServer(window, centralPolicy)) {
+                    throw new Error("Unable to start the MCP server");
                 }
             } else {
                 stopMcpServer();
             }
             savePreferences(desired);
-            return { enabled: isMcpServerRunning() };
+            return desired ? { enabled: isMcpServerRunning(), allowed: true } :
+                { enabled: false, allowed: await accountAuthorized() };
         });
         transition = change.then(() => {}, () => {});
         return change;
     });
 
-    ipcMain.handle(BIND_CHANNEL, async (event, modelId: unknown) => {
+    ipcMain.handle(CODEX_CHANNEL, async event => {
         checkSender(event);
-        return createBoundProject(window, store, modelId as number);
-    });
-
-    ipcMain.handle(CODEX_CHANNEL, event => {
-        checkSender(event);
+        if (!await accountAuthorized()) {
+            throw new Error("MCP is not authorized for this IDE account");
+        }
         return addDigiStudioToCodex();
     });
 
-    const cleanup = () => {
+    const unsubscribe = onDigiwiseAuthSessionChanged(() => {
+        ++policyCheckSequence;
+        sessionGrant = null;
         stopMcpServer();
-        for (const channel of [STATUS_CHANNEL, TOGGLE_CHANNEL, CODEX_CHANNEL, BIND_CHANNEL]) {
+        if (!window.webContents.isDestroyed()) {
+            window.webContents.send(POLICY_CHANGED_CHANNEL);
+        }
+    });
+    const cleanup = () => {
+        unsubscribe();
+        ++policyCheckSequence;
+        sessionGrant = null;
+        stopMcpServer();
+        for (const channel of [STATUS_CHANNEL, TOGGLE_CHANNEL, CODEX_CHANNEL]) {
             ipcMain.removeHandler(channel);
         }
         initialized = false;
     };
     window.webContents.once("destroyed", cleanup);
 
-    // A saved user choice takes precedence over the legacy developer flag.
-    const enabled = readPreferences()?.enabled ??
-        (process.env.DIGISTUDIO_ENABLE_MCP === "1");
-    if (enabled) {
+    // Restore the local preference only after a one-time account check.
+    if (readPreferences()?.enabled && await accountAuthorized()) {
         await startMcpServer(window, centralPolicy);
     }
 }

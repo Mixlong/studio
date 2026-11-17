@@ -51,7 +51,7 @@ assert.ok(policyService.includes("digi_ide_mcp_control") &&
     policyService.includes("digi_ide_mcp_policy"));
 assert.ok(ddl.includes("enabled TINYINT NOT NULL DEFAULT 0"));
 assert.ok(ddl.includes("SELECT 1, 0, 1"), "Global MCP must default disabled");
-assert.ok(policyService.includes('"TOOL_DISABLED"'));
+assert.ok(policyService.includes('"MCP_DISABLED"'), "Unlicensed accounts must be denied");
 assert.ok(bindingDdl.includes("digi_ide_mcp_project_binding"));
 assert.ok(bindingDdl.includes("secret_hash CHAR(64)"));
 assert.ok(bindingService.includes("MessageDigest.isEqual("));

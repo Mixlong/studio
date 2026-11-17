@@ -140,9 +140,9 @@ export const DocumentationBrowser = observer(
                             </div>
                         )}
                         {isDev && (
-                            <div>
+                            <div className="EezStudio_DocumentationBrowser_ToolbarActions">
                                 <button
-                                    className="btn btn-success"
+                                    className="btn btn-secondary"
                                     onClick={() =>
                                         generateMarkdownFilesForAllComponents()
                                     }
@@ -150,7 +150,7 @@ export const DocumentationBrowser = observer(
                                     Generate Markdown Files
                                 </button>
                                 <button
-                                    className="btn btn-success"
+                                    className="btn btn-secondary"
                                     onClick={() =>
                                         generateHTMLFilesForAllComponents()
                                     }
@@ -158,7 +158,7 @@ export const DocumentationBrowser = observer(
                                     Generate HTML Files
                                 </button>
                                 <button
-                                    className="btn btn-success"
+                                    className="btn btn-secondary"
                                     onClick={() =>
                                         generateODTFilesForAllComponents()
                                     }
