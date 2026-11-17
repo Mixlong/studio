@@ -1,0 +1,324 @@
+openapi: 3.1.0
+info:
+  title: Digiwise Public API
+  version: 0.1.0-draft
+  summary: Shared desktop/backend contract; design only, not deployed
+  description: |
+    Canonical draft for DigiwiseStudio Desktop and studio-admin backend agents.
+    This is the PUBLIC business API, never the NocoBase administrator API.
+    No production host or secret is defined here. Trial duration, plans and
+    storage policy are server-side product configuration, not hardcoded in Desktop.
+x-contract-status: DRAFT_NOT_IMPLEMENTED
+x-task-id: AUTH-001
+tags:
+  - name: Auth
+  - name: Entitlements
+  - name: Workspaces
+paths:
+  /v1/auth/email/send-code:
+    post:
+      tags: [Auth]
+      operationId: requestRegistrationCode
+      summary: Request a short-lived single-use email verification code
+      security: []
+      description: Rate limit by identity and network. Never return the code in an API response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, purpose]
+              properties:
+                email: {type: string, format: email}
+                purpose: {type: string, const: register}
+      responses:
+        '202':
+          description: Generic acknowledgment, regardless of delivery/account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Acknowledgment'
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerVerifiedUser
+      security: []
+      summary: Verify email, create a user and assign one-time trial
+      description: |
+        Successful verified registration starts one trial grant exactly once for
+        the identity according to server policy. Re-registration or concurrent
+        requests cannot reset the trial period.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, code, password]
+              properties:
+                email: {type: string, format: email}
+                code: {type: string, minLength: 4, maxLength: 12}
+                password: {type: string, minLength: 8, writeOnly: true}
+      responses:
+        '201':
+          description: Account verified and trial entitlement determined by server
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [userId, accountStatus, trial, serverTime]
+                properties:
+                  userId: {type: string}
+                  accountStatus: {type: string, enum: [active]}
+                  trial: {$ref: '#/components/schemas/Trial'}
+                  serverTime: {type: string, format: date-time}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ValidationError'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      operationId: desktopLogin
+      security: []
+      summary: Authenticate a verified Digiwise account
+      description: Desktop main process must store any long-lived credentials in OS-protected storage; never expose admin keys.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, writeOnly: true}
+      responses:
+        '200':
+          description: Authenticated user session
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TokenResponse'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/me/entitlements:
+    get:
+      tags: [Entitlements]
+      operationId: getEffectiveEntitlements
+      summary: Return effective license and trial status from server
+      description: |
+        Compute from the server clock. Account, trial and license are independent
+        states. Organization grants apply only to an authorized workspace.
+        No fixed trial length or entitlement policy is assumed in this draft.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: false
+          schema: {type: string}
+          description: Optional workspace whose entitlements should be evaluated
+      responses:
+        '200':
+          description: Current entitlements
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EntitlementSnapshot'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/licenses/redeem:
+    post:
+      tags: [Entitlements]
+      operationId: redeemLicenseCode
+      summary: Redeem a license code atomically and idempotently
+      description: |
+        Backend validates issuer, scope, expiry, reuse policy and ownership.
+        No code plaintext is logged. Client never decides success locally.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 12, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: {type: string, minLength: 6}
+      responses:
+        '200':
+          description: Redemption recorded (including safe idempotent replay)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [redemptionId, entitlements]
+                properties:
+                  redemptionId: {type: string}
+                  entitlements: {$ref: '#/components/schemas/EntitlementSnapshot'}
+        '400': {$ref: '#/components/responses/ValidationError'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/workspaces:
+    get:
+      tags: [Workspaces]
+      operationId: listMyWorkspaces
+      summary: List personal and organizational workspaces authorized to the user
+      responses:
+        '200':
+          description: Membership-scoped workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/Workspace'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /v1/me/storage:
+    get:
+      tags: [Workspaces]
+      operationId: getWorkspaceStorage
+      summary: Read storage quota and access policy for authorized workspace
+      description: Cloud files are accessed only through SFTPGo user-level API, never OSS direct URLs.
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Scoped quota snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StorageSnapshot'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Acknowledgment:
+      type: object
+      required: [requestId, accepted]
+      properties:
+        requestId: {type: string}
+        accepted: {type: boolean, const: true}
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId]
+      properties:
+        code:
+          type: string
+          description: Stable identifier, e.g. TRIAL_EXPIRED, LICENSE_INVALID, AUTH_REQUIRED
+        message: {type: string}
+        requestId: {type: string}
+    Trial:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [not_started, active, expired, revoked]
+        startedAt: {type: [string, 'null'], format: date-time}
+        expiresAt: {type: [string, 'null'], format: date-time}
+    License:
+      type: object
+      additionalProperties: false
+      required: [source, status]
+      properties:
+        source: {type: string, enum: [none, trial, code, enterprise, admin]}
+        status: {type: string, enum: [inactive, active, expired, revoked, suspended]}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        organizationId: {type: [string, 'null']}
+    EntitlementSnapshot:
+      type: object
+      additionalProperties: false
+      required: [serverTime, accountStatus, trial, license, capabilities]
+      properties:
+        serverTime: {type: string, format: date-time}
+        accountStatus: {type: string, enum: [active, suspended, disabled]}
+        workspaceId: {type: [string, 'null']}
+        trial: {$ref: '#/components/schemas/Trial'}
+        license: {$ref: '#/components/schemas/License'}
+        capabilities:
+          type: array
+          items: {type: string}
+          description: Effective server-validated capability identifiers, not client-supplied flags
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken: {type: string, writeOnly: true}
+        tokenType: {type: string, const: Bearer}
+        expiresIn: {type: integer, minimum: 1, description: Seconds until expiry}
+        refreshToken: {type: string, writeOnly: true}
+    Workspace:
+      type: object
+      additionalProperties: false
+      required: [id, kind, displayName, role, status]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [personal, organization]}
+        displayName: {type: string}
+        role: {type: string}
+        status: {type: string, enum: [active, suspended]}
+    StorageSnapshot:
+      type: object
+      additionalProperties: false
+      required: [workspaceId, serverTime, quotaBytes, usedBytes, canRead, canWrite]
+      properties:
+        workspaceId: {type: string}
+        serverTime: {type: string, format: date-time}
+        quotaBytes: {type: integer, minimum: 0}
+        usedBytes: {type: integer, minimum: 0}
+        canRead: {type: boolean}
+        canWrite: {type: boolean}
+  responses:
+    Unauthorized:
+      description: Authentication required or invalid
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Forbidden:
+      description: Insufficient workspace or operation permission
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    Conflict:
+      description: Account, code, or state conflict
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    ValidationError:
+      description: Invalid or expired input
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
+    TooManyRequests:
+      description: Client must slow down
+      headers:
+        Retry-After:
+          schema: {type: integer, minimum: 1}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ApiError'}
