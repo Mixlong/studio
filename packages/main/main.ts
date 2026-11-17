@@ -103,6 +103,9 @@ app.on("ready", async function () {
     if (!buildProjectFilePath) {
         var gotTheLock = app.requestSingleInstanceLock();
         if (!gotTheLock) {
+            console.log(
+                "[startup] DigiwiseStudio is already running; focusing the existing window."
+            );
             app.quit();
             return;
         }

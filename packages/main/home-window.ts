@@ -17,11 +17,21 @@ export function openHomeWindow(params?: Partial<IWindowParams>) {
 }
 
 export function bringHomeWindowToFocus() {
-    let homeWindow = findWindowByParams(HOME_WINDOW_PARAMS);
-    if (homeWindow) {
-        homeWindow.browserWindow.show();
+    const homeWindow = findWindowByParams(HOME_WINDOW_PARAMS);
+    if (homeWindow && !homeWindow.browserWindow.isDestroyed()) {
+        const browserWindow = homeWindow.browserWindow;
+        // A second npm start must reveal an already-running IDE window.
+        if (browserWindow.isMinimized()) {
+            browserWindow.restore();
+        }
+        browserWindow.show();
+        browserWindow.focus();
+        if (process.platform === "win32") {
+            browserWindow.moveTop();
+        }
     } else {
-        openHomeWindow();
+        const browserWindow = openHomeWindow();
+        browserWindow.focus();
     }
 }
 
