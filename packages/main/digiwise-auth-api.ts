@@ -31,8 +31,18 @@ import type {
     DigiwiseChangelog,
     DigiwiseChangelogLanguage
 } from "eez-studio-shared/digiwise-changelog";
+import type { DigiwiseCategory, DigiwiseBspVersion } from "eez-studio-shared/digiwise-bsp-catalog";
 
 type JsonObject = Record<string, unknown>;
+
+const MAX_PUBLIC_API_RESPONSE_BYTES = 1024 * 1024;
+const MAX_CATEGORY_ITEMS = 200;
+const MAX_BSP_ITEMS = 200;
+const MAX_CATALOG_STRING_LENGTH = 256;
+const MAX_BSP_FILE_NAME_LENGTH = 512;
+const MAX_BSP_FILE_SIZE = 4 * 1024 * 1024 * 1024;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const PUBLISHED_AT_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T| )\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?$/;
 
 export class DigiwisePublicApiError extends Error {
     readonly status: number;
@@ -54,6 +64,84 @@ function isObject(value: unknown): value is JsonObject {
 
 function readString(value: unknown) {
     return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function invalidResponse(message: string, requestId: string): DigiwisePublicApiError {
+    return new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", message, requestId);
+}
+
+function boundedString(value: unknown, maxLength: number) {
+    return typeof value === "string" && value.length > 0 && value.length <= maxLength;
+}
+
+function validPublishedAt(value: unknown) {
+    return value === null || (
+        typeof value === "string" &&
+        value.length <= 64 &&
+        PUBLISHED_AT_PATTERN.test(value) &&
+        Number.isFinite(Date.parse(value))
+    );
+}
+
+async function readCappedResponseText(response: Response): Promise<string> {
+    const responseWithOptionalBody = response as Response & {
+        text?: () => Promise<string>;
+    };
+    const contentLength = typeof response.headers?.get === "function"
+        ? response.headers.get("content-length")
+        : null;
+    if (contentLength !== null) {
+        const declaredLength = Number(contentLength);
+        if (!Number.isSafeInteger(declaredLength) || declaredLength < 0 || declaredLength > MAX_PUBLIC_API_RESPONSE_BYTES) {
+            throw invalidResponse("The Digiwise IDE Public API response is too large", "response-too-large");
+        }
+    }
+
+    const body = response.body as ReadableStream<Uint8Array> | null | undefined;
+    if (body && typeof body.getReader === "function") {
+        const reader = body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+            while (true) {
+                const result = await reader.read();
+                if (result.done) break;
+                const chunk = result.value;
+                total += chunk.byteLength;
+                if (total > MAX_PUBLIC_API_RESPONSE_BYTES) {
+                    await reader.cancel();
+                    throw invalidResponse("The Digiwise IDE Public API response is too large", "response-too-large");
+                }
+                chunks.push(chunk);
+            }
+
+        } catch (error) {
+            if (error instanceof DigiwisePublicApiError) throw error;
+            throw invalidResponse("The Digiwise IDE Public API response could not be read", "response-read-failed");
+        }
+
+        const bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        return new TextDecoder().decode(bytes);
+    }
+
+    if (typeof responseWithOptionalBody.text !== "function") {
+        throw invalidResponse("The Digiwise IDE Public API response could not be read", "response-read-failed");
+    }
+    try {
+        const text = await responseWithOptionalBody.text();
+        if (new TextEncoder().encode(text).byteLength > MAX_PUBLIC_API_RESPONSE_BYTES) {
+            throw invalidResponse("The Digiwise IDE Public API response is too large", "response-too-large");
+        }
+        return text;
+    } catch (error) {
+        if (error instanceof DigiwisePublicApiError) throw error;
+        throw invalidResponse("The Digiwise IDE Public API response could not be read", "response-read-failed");
+    }
 }
 
 function errorCode(value: unknown, status: number) {
@@ -176,7 +264,13 @@ export class DigiwisePublicApi {
             );
         }
 
-        const text = await response.text();
+        let text: string;
+        try {
+            text = await readCappedResponseText(response);
+        } catch (error) {
+            if (error instanceof DigiwisePublicApiError) throw error;
+            throw invalidResponse("The Digiwise IDE Public API response could not be read", "response-read-failed");
+        }
         let payload: unknown;
         try {
             payload = text ? JSON.parse(text) : undefined;
@@ -532,6 +626,46 @@ export class DigiwisePublicApi {
             { method: "POST", body: JSON.stringify(input) },
             accessToken
         );
+    }
+
+    async listCategories(accessToken: string): Promise<DigiwiseCategory[]> {
+        const data = await this.request<unknown>("categories", { method: "GET" }, accessToken);
+        if (!Array.isArray(data) || data.length > MAX_CATEGORY_ITEMS || !data.every(item =>
+            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
+            [item.modelCode, item.categoryCode, item.modelName, item.categoryName].every(v => boundedString(v, MAX_CATALOG_STRING_LENGTH)) &&
+            (item.chipFamily === null || boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
+            (item.productType === null || (Number.isSafeInteger(item.productType) && (item.productType as number) > 0)) &&
+            (item.externalId === null || boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
+        )) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid category catalog", "category-contract");
+        }
+        return data.map(({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }) =>
+            ({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }));
+    }
+
+    async listBspVersions(accessToken: string, categoryCode?: string): Promise<DigiwiseBspVersion[]> {
+        if (categoryCode !== undefined && (typeof categoryCode !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(categoryCode))) {
+            throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid category code", "local-validation");
+        }
+        const query = categoryCode === undefined ? "" : `?${new URLSearchParams({ categoryCode })}`;
+        const data = await this.request<unknown>(`bsp${query}`, { method: "GET" }, accessToken);
+        if (!Array.isArray(data) || data.length > MAX_BSP_ITEMS || !data.every(item =>
+            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
+            Number.isSafeInteger(item.modelId) && (item.modelId as number) > 0 &&
+            Number.isSafeInteger(item.fileSize) && (item.fileSize as number) >= 0 && (item.fileSize as number) <= MAX_BSP_FILE_SIZE &&
+            boundedString(item.modelCode, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.categoryCode, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.modelName, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.categoryName, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.version, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.fileName, MAX_BSP_FILE_NAME_LENGTH) &&
+            typeof item.sha256 === "string" && SHA256_PATTERN.test(item.sha256) &&
+            validPublishedAt(item.publishedAt)
+        )) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP catalog", "bsp-contract");
+        }
+        return data.map(({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }) =>
+            ({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }));
     }
 
     listTemplates(accessToken: string, page: number, pageSize: number) {
