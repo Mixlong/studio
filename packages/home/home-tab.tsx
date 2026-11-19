@@ -35,6 +35,7 @@ import {
     DigiwiseAccount,
     DigiwiseLoginNav
 } from "home/digiwise-account";
+import { BspCatalogView } from "home/digiwise-bsp-catalog-ui";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -49,6 +50,7 @@ type HomeTabId =
     | "run"
     | "instruments"
     | "extensions"
+    | "bsp"
     | "account"
     | "settings";
 
@@ -62,6 +64,7 @@ function normalizeHomeTabId(value: unknown): HomeTabId {
         "run",
         "instruments",
         "extensions",
+        "bsp",
         "account",
         "settings"
     ];
@@ -346,6 +349,8 @@ export const Home = observer(
                       ? isChinese ? "账号与授权" : "Account and license"
                     : homeTabStore.activeTab == "create"
                       ? isChinese ? "新建" : "New"
+                    : homeTabStore.activeTab == "bsp"
+                      ? isChinese ? "BSP 版本" : "BSP Versions"
                       : isChinese ? "首页" : "Home";
 
             return (
@@ -396,6 +401,13 @@ export const Home = observer(
                                 selected={homeTabStore.activeTab == "settings"}
                                 attention={instrumentDatabases.activeDatabase?.isCompactDatabaseAdvisable}
                                 onClick={action(() => { homeTabStore.activeTab = "settings"; })}
+                            />
+                            <HomeNavigationItem
+                                icon={homeIcon("\\uf1c0")}
+                                label={isChinese ? "BSP" : "BSP"}
+                                title={isChinese ? "BSP 版本目录" : "BSP version catalog"}
+                                selected={homeTabStore.activeTab == "bsp"}
+                                onClick={action(() => { homeTabStore.activeTab = "bsp"; })}
                             />
                         </div>
                         <DigiwiseLoginNav />
@@ -464,6 +476,7 @@ export const Home = observer(
                             )}
                         {homeTabStore.activeTab == "account" && <DigiwiseAccount />}
                         {homeTabStore.activeTab == "settings" && <Settings />}
+                        {homeTabStore.activeTab == "bsp" && <BspCatalogView />}
                     </div>
                     </div>
                 </div>

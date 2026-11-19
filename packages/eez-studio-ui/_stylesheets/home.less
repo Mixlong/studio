@@ -3920,3 +3920,213 @@ body {
     }
 }
 // [WORKSPACE-MENU-POPUP-WHITE:END]
+
+.DigiwiseBspCatalog {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 26px 30px;
+    overflow: auto;
+    color: @textColor;
+    background: @backgroundColor;
+
+    .DigiwiseBspCatalog_Header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 22px;
+
+        h2,
+        p {
+            margin: 0;
+        }
+
+        h2 {
+            font-size: 22px;
+            font-weight: 650;
+        }
+
+        p {
+            max-width: 720px;
+            margin-top: 7px;
+            color: var(--bs-secondary-color);
+        }
+
+        button,
+        button:disabled {
+            flex: 0 0 auto;
+            padding: 7px 12px;
+            color: @textColor;
+            background: transparent;
+            border: 1px solid @borderColor;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover,
+        button:focus-visible {
+            border-color: @selectionBackgroundColor;
+            outline: none;
+        }
+
+        button:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+    }
+
+    .DigiwiseBspCatalog_Columns {
+        display: grid;
+        grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.6fr);
+        gap: 18px;
+        min-height: 0;
+    }
+
+    .DigiwiseBspCatalog_Categories,
+    .DigiwiseBspCatalog_Versions {
+        min-width: 0;
+        padding: 16px;
+        background: var(--bs-tertiary-bg);
+        border: 1px solid @borderColor;
+        border-radius: 6px;
+
+        > h3 {
+            margin: 0 0 12px;
+            font-size: 14px;
+            font-weight: 650;
+        }
+    }
+
+    .DigiwiseBspCatalog_CategoryList,
+    .DigiwiseBspCatalog_VersionList {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+
+        button {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+            width: 100%;
+            padding: 10px 11px;
+            color: @textColor;
+            text-align: left;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+
+            &:hover,
+            &:focus-visible,
+            &.selected {
+                background: fade(@selectionBackgroundColor, 12%);
+                border-color: fade(@selectionBackgroundColor, 55%);
+                outline: none;
+            }
+
+            strong {
+                font-size: 13px;
+                font-weight: 650;
+            }
+
+            span {
+                color: var(--bs-secondary-color);
+                font-size: 12px;
+            }
+        }
+    }
+
+    .DigiwiseBspCatalog_State {
+        padding: 28px 12px;
+        color: var(--bs-secondary-color);
+        text-align: center;
+    }
+
+    .DigiwiseBspCatalog_Error {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        color: @textColor;
+        background: fade(@errorColor, 10%);
+        border: 1px solid fade(@errorColor, 35%);
+        border-radius: 4px;
+
+        span {
+            color: var(--bs-secondary-color);
+            font-size: 12px;
+        }
+
+        button {
+            align-self: flex-start;
+            padding: 4px 9px;
+            color: @textColor;
+            background: transparent;
+            border: 1px solid @borderColor;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+    }
+
+    .DigiwiseBspCatalog_Details {
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid @borderColor;
+
+        h4 {
+            margin: 0 0 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 14px;
+        }
+
+        dl {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 18px;
+            margin: 0 0 14px;
+        }
+
+        dt {
+            color: var(--bs-secondary-color);
+            font-size: 11px;
+        }
+
+        dd {
+            margin: 2px 0 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 12px;
+        }
+
+        .DigiwiseBspCatalog_Checksum {
+            font-family: monospace;
+        }
+
+        > button {
+            padding: 7px 12px;
+            color: @textColor;
+            background: @panelHeaderColor;
+            border: 1px solid @borderColor;
+            border-radius: 4px;
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    }
+}
+
+@media (max-width: 800px) {
+    .DigiwiseBspCatalog {
+        padding: 18px;
+
+        .DigiwiseBspCatalog_Columns {
+            grid-template-columns: 1fr;
+        }
+    }
+}
