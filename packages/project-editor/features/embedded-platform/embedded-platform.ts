@@ -87,6 +87,10 @@ function isValidWebSocketEndpoint(value: string) {
 
 export class EmbeddedBsp extends EezObject {
     name: string;
+    bspId: number;
+    categoryCode: string;
+    version: string;
+    sha256: string;
     rootPath: string;
     cmakeListsPath: string;
     toolchainFile: string;
@@ -101,6 +105,10 @@ export class EmbeddedBsp extends EezObject {
         label: () => "BSP",
         properties: [
             { name: "name", type: PropertyType.String },
+            { name: "bspId", displayName: "Managed BSP ID", type: PropertyType.Number },
+            { name: "categoryCode", displayName: "BSP category", type: PropertyType.String },
+            { name: "version", displayName: "BSP version", type: PropertyType.String },
+            { name: "sha256", displayName: "BSP SHA-256", type: PropertyType.String },
             { name: "rootPath", displayName: "BSP root", type: PropertyType.RelativeFolder },
             { name: "cmakeListsPath", displayName: "CMakeLists", type: PropertyType.RelativeFile },
             { name: "toolchainFile", displayName: "Toolchain file", type: PropertyType.RelativeFile },
@@ -113,6 +121,10 @@ export class EmbeddedBsp extends EezObject {
         ],
         defaultValue: {
             name: "Generic BSP",
+            bspId: 0,
+            categoryCode: "",
+            version: "",
+            sha256: "",
             rootPath: "",
             cmakeListsPath: "",
             toolchainFile: "",
@@ -122,6 +134,12 @@ export class EmbeddedBsp extends EezObject {
             ramSize: 0,
             flashSize: 0,
             serialPortCount: 0
+        },
+        beforeLoadHook: (_object: EmbeddedBsp, jsObject: Partial<EmbeddedBsp>) => {
+            if (jsObject.bspId === undefined) jsObject.bspId = 0;
+            if (jsObject.categoryCode === undefined) jsObject.categoryCode = "";
+            if (jsObject.version === undefined) jsObject.version = "";
+            if (jsObject.sha256 === undefined) jsObject.sha256 = "";
         },
         check: (object: EmbeddedBsp, messages: IMessage[]) => {
             if (!object.name) {
@@ -142,6 +160,10 @@ export class EmbeddedBsp extends EezObject {
         super.makeEditable();
         makeObservable(this, {
             name: observable,
+            bspId: observable,
+            categoryCode: observable,
+            version: observable,
+            sha256: observable,
             rootPath: observable,
             cmakeListsPath: observable,
             toolchainFile: observable,
@@ -154,6 +176,11 @@ export class EmbeddedBsp extends EezObject {
         });
     }
 }
+
+export {
+    applyManagedBspToEmbeddedBsp,
+    restoreManagedBspOnOpen
+} from "eez-studio-shared/digiwise-bsp-catalog";
 
 registerClass("EmbeddedBsp", EmbeddedBsp);
 
