@@ -30,14 +30,20 @@ function isSafeSegment(value: unknown): value is string {
     return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value);
 }
 
+function isPrivateLanHost(hostname: string): boolean {
+    if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") return true;
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+    const m172 = hostname.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+    if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
+    return false;
+}
+
 function isAllowedDownloadUrl(url: URL): boolean {
     if (url.username || url.password) return false;
     if (url.protocol === "https:") return true;
-    // Allow plain HTTP only for local loopback development servers.
-    return (
-        url.protocol === "http:" &&
-        (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1")
-    );
+    // Allow plain HTTP only for loopback or private RFC1918 LAN deployments.
+    return url.protocol === "http:" && isPrivateLanHost(url.hostname);
 }
 
 function bspStoreRoot(): string {
