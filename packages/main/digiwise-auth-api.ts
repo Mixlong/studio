@@ -637,10 +637,18 @@ export class DigiwisePublicApi {
                     [item.modelCode, item.categoryCode, item.modelName, item.categoryName].every(v =>
                         boundedString(v, MAX_CATALOG_STRING_LENGTH)
                     ) &&
-                    (item.chipFamily === null || boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
-                    (item.productType === null ||
-                        (Number.isSafeInteger(item.productType) && (item.productType as number) > 0)) &&
-                    (item.externalId === null || boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
+                    (item.chipFamily === undefined ||
+                        item.chipFamily === null ||
+                        item.chipFamily === "" ||
+                        boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
+                    (item.productType === undefined ||
+                        item.productType === null ||
+                        item.productType === "" ||
+                        Number.isSafeInteger(Number(item.productType))) &&
+                    (item.externalId === undefined ||
+                        item.externalId === null ||
+                        item.externalId === "" ||
+                        boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
             )
         ) {
             throw new DigiwisePublicApiError(
@@ -650,18 +658,19 @@ export class DigiwisePublicApi {
                 "category-contract"
             );
         }
-        return data.map(
-            ({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }) => ({
-                id,
-                modelCode,
-                categoryCode,
-                modelName,
-                categoryName,
-                chipFamily,
-                externalId,
-                productType
-            })
-        );
+        return data.map(item => ({
+            id: item.id as number,
+            modelCode: item.modelCode as string,
+            categoryCode: item.categoryCode as string,
+            modelName: item.modelName as string,
+            categoryName: item.categoryName as string,
+            chipFamily: typeof item.chipFamily === "string" && item.chipFamily ? item.chipFamily : null,
+            externalId: typeof item.externalId === "string" && item.externalId ? item.externalId : null,
+            productType:
+                item.productType === undefined || item.productType === null || item.productType === ""
+                    ? null
+                    : Number(item.productType)
+        }));
     }
 
     async listBspVersions(accessToken: string, categoryCode?: string): Promise<DigiwiseBspVersion[]> {
