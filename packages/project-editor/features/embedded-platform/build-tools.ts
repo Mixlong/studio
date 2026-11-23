@@ -30,6 +30,17 @@ import {
     type EmbeddedTransformModel,
     type EmbeddedTransformType
 } from "project-editor/features/embedded-platform/embedded-protocol";
+import { digiwiseLocalPipeline } from "home/digiwise-local-pipeline";
+
+function hasManagedBspBinding(platform: EmbeddedPlatform): boolean {
+    return (
+        Number.isSafeInteger(platform.bsp.bspId) &&
+        platform.bsp.bspId > 0 &&
+        Boolean(platform.bsp.categoryCode?.trim()) &&
+        Boolean(platform.bsp.version?.trim()) &&
+        /^[0-9a-f]{64}$/i.test(platform.bsp.sha256 || "")
+    );
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -875,6 +886,57 @@ export async function runEmbeddedBuild(
     const outputDirectory = getOutputDirectory(projectStore, platform);
     const sourceDirectory = getBspSourceDirectory(projectStore, platform);
     const cwd = projectDirectory(projectStore);
+
+    // Managed BSP local build path (T04-LB02 -> LB03 -> LB04 in Electron Main)
+    if (hasManagedBspBinding(platform)) {
+        const unsubscribe = digiwiseLocalPipeline.onLocalBuildLog(ev => {
+            const msgType =
+                ev.stream === "error"
+                    ? MessageType.ERROR
+                    : ev.stream === "stderr"
+                      ? MessageType.WARNING
+                      : MessageType.INFO;
+            output(projectStore, msgType, `[${ev.stage}] ${ev.line}`);
+            options.onLog?.(ev.line);
+            if (ev.progress !== undefined) {
+                options.onProgress?.(ev.progress);
+            }
+        });
+        try {
+            const assetDir = projectStore.getAbsoluteFilePath(
+                projectStore.project.settings.build.destinationFolder || "."
+            );
+            const result = await digiwiseLocalPipeline.runLocalBuild({
+                projectDir: cwd,
+                outputDir: outputDirectory,
+                generatedUiSourceDir: fs.existsSync(assetDir) ? assetDir : undefined,
+                binding: {
+                    bspId: platform.bsp.bspId,
+                    categoryCode: platform.bsp.categoryCode,
+                    version: platform.bsp.version,
+                    sha256: platform.bsp.sha256
+                }
+            });
+            if (!result.ok) {
+                const message = `${result.error.code}: ${result.error.message}`;
+                output(projectStore, MessageType.ERROR, message);
+                return { success: false, message, outputDirectory };
+            }
+            const primaryFirmware =
+                result.data.artifacts.find(a => a.role === "firmware") || result.data.artifacts[0];
+            options.onProgress?.(100);
+            const message = `Managed local firmware build completed (${result.data.artifacts.length} artifact(s)).`;
+            output(projectStore, MessageType.INFO, message);
+            return {
+                success: true,
+                message,
+                outputDirectory,
+                firmwarePath: primaryFirmware?.path
+            };
+        } finally {
+            unsubscribe();
+        }
+    }
 
     try {
         if (platform.build.scriptPath) {
