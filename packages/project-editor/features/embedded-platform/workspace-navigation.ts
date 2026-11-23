@@ -1,4 +1,5 @@
 export type EmbeddedWorkspaceId =
+    | "local-pipeline"
     | "target"
     | "protocols"
     | "resources"
@@ -13,6 +14,12 @@ export interface EmbeddedWorkspaceItem {
 }
 
 const WORKSPACES: Record<EmbeddedWorkspaceId, EmbeddedWorkspaceItem> = {
+    "local-pipeline": {
+        id: "local-pipeline",
+        icon: "material:rocket_launch",
+        label: "Local Pipeline",
+        advanced: false
+    },
     target: {
         id: "target",
         icon: "material:memory",
@@ -46,6 +53,7 @@ const WORKSPACES: Record<EmbeddedWorkspaceId, EmbeddedWorkspaceItem> = {
 };
 
 const LOCAL_ORDER: EmbeddedWorkspaceId[] = [
+    "local-pipeline",
     "target",
     "protocols",
     "resources",
@@ -54,6 +62,7 @@ const LOCAL_ORDER: EmbeddedWorkspaceId[] = [
 ];
 
 const REMOTE_ORDER: EmbeddedWorkspaceId[] = [
+    "local-pipeline",
     "connection",
     "components",
     "target",

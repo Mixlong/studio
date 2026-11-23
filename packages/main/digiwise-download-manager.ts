@@ -732,13 +732,15 @@ export function registerDigiwiseDownloadIpc(
         typeof windowOrResolver === "function" ? windowOrResolver() : windowOrResolver;
 
     const checkSender = (event: Electron.IpcMainInvokeEvent) => {
-        const window = resolveWindow();
-        if (
-            window.isDestroyed() ||
-            window.webContents.isDestroyed() ||
-            event.sender !== window.webContents ||
-            event.senderFrame !== window.webContents.mainFrame
-        ) {
+        const windows = electron.BrowserWindow.getAllWindows();
+        const allowed = windows.some(
+            w =>
+                !w.isDestroyed() &&
+                !w.webContents.isDestroyed() &&
+                event.sender === w.webContents &&
+                event.senderFrame === w.webContents.mainFrame
+        );
+        if (!allowed) {
             throw new Error("Unauthorized download request");
         }
     };
