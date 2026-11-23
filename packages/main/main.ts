@@ -182,6 +182,11 @@ app.on("ready", async function () {
     );
     registerDigiwiseToolchainIpc(() => homeWindow);
 
+    const { registerDigiwiseBuildIpc } = await import(
+        "main/digiwise-build-engine"
+    );
+    registerDigiwiseBuildIpc(() => homeWindow);
+
     // MCP settings are registered here; the read-only bridge remains off
     // unless explicitly enabled in Settings or by the developer environment.
     if (!buildProjectFilePath) {
