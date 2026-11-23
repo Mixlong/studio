@@ -1148,8 +1148,12 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
                 enabled: status.enabled,
                 allowed: status.allowed,
                 message: isChineseLocale()
-                    ? status.enabled ? "MCP 已启动；工程修改需要确认。" : "MCP 已关闭"
-                    : status.enabled ? "MCP started; project edits require confirmation." : "MCP stopped"
+                    ? status.enabled
+                        ? "MCP 已接入；每次调用实时校验权限，已开放工具静默执行。"
+                        : "MCP 已断开"
+                    : status.enabled
+                        ? "MCP connected; each call verifies live permission and allowed tools run silently."
+                        : "MCP disconnected"
             });
         } catch (_error) {
             if (this.mounted) this.setState({
@@ -1204,14 +1208,14 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
                         "settings-status-badge",
                         enabled ? "badge-success" : "badge-danger"
                     )}>
-                        {enabled ? (isChinese ? "已启动" : "Running") :
-                            (isChinese ? "未启动" : "Stopped")}
+                        {enabled ? (isChinese ? "已接入" : "Connected") :
+                            (isChinese ? "未接入" : "Disconnected")}
                     </span>
                 </div>
                 <label className="settings-switch-label">
                     <input type="checkbox" checked={enabled} disabled={busy}
                         onChange={event => void this.setEnabled(event.target.checked)} />
-                    <span>{isChinese ? "启动 MCP 服务" : "Start MCP server"}</span>
+                    <span>{isChinese ? "接入 MCP 服务" : "Connect MCP server"}</span>
                 </label>
                 <div className="settings-input-with-button">
                     <button type="button" className="settings-action-btn"
@@ -1221,8 +1225,8 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
                 </div>
                 <p className="settings-mcp-hint">
                     {isChinese
-                        ? "启用 MCP 时检查账号授权，本次登录内工具直接使用；修改工程仍需确认。"
-                        : "Account permission is checked on enable; tools run locally until sign-out. Confirm edits."}
+                        ? "账号授权仅提供接入资格，不会自动连接。主动接入后每次工具调用均实时校验权限，已开放编辑/删除/保存工具静默执行；退出或切换账号自动断开。"
+                        : "Authorization grants eligibility only and never auto-connects. Once connected, each tool call verifies live permission and allowed edit/delete/save tools run silently; sign-out or account switch disconnects immediately."}
                 </p>
                 {message && (
                     <p className={classNames("settings-mcp-feedback", { "is-error": error })} role="status">

@@ -211,7 +211,54 @@ const policy={
             "Each authorized successful operation must report audit");
         assert.ok(auditCalls.some(row=>row.localConfirmation==="cancelled"),
             "Denied write confirmation must be recorded");
-        console.log("PASS: Main socket online v3 auth, revocation, private project probe, scoped consent, audit and offline fail-closed");
+
+        // MCP-03: Silent write execution when backend returns localConfirmationRequired: false.
+        authenticated=true;
+        online=true;
+        revoked=false;
+        approved="deny";
+        const promptsBeforeSilent=prompts;
+        const writesBeforeSilent=writeCount;
+        const auditBeforeSilent=auditCalls.length;
+        overrideDecision=(projectPath,tool)=>({
+            bindingId:"account:321",modelId:0,
+            globalPolicyRevision:2,accountPolicyRevision,
+            accountGeneration:generation,
+            requestId:crypto.randomUUID(),decisionId:crypto.randomUUID(),
+            clientSessionId:"silentSession1234567890",parameterDigest:null,
+            projectFingerprint:"a".repeat(64),projectRevision:0,
+            riskGroup:tool==="start_project_check"||tool==="start_project_build"
+                ?"build.run":tool==="create_page"||tool==="save_project"||tool==="undo"
+                ?"project.edit":"project.view",
+            expiresAt:new Date(Date.now()+4000).toISOString(),
+            localConfirmationRequired:false,silentExecution:true
+        });
+        const origAuthorize=policy.authorizeProjectTool;
+        policy.authorizeProjectTool=async(p,t,digest,sid)=>{
+            const g=await origAuthorize(p,t,digest,sid);
+            g.parameterDigest=digest;
+            g.clientSessionId=sid;
+            return g;
+        };
+        await write();
+        await write();
+        assert.equal(prompts,promptsBeforeSilent,
+            "Silent-write authorization must not trigger per-call showMcpApproval dialogs");
+        assert.equal(writeCount,writesBeforeSilent+2,
+            "Consecutive silent writes must execute without confirmation queue");
+        const silentAudits=auditCalls.slice(auditBeforeSilent);
+        assert.equal(silentAudits.length,2);
+        assert.ok(silentAudits.every(a=>a.localConfirmation==="not_required" && a.executionResult==="succeeded"),
+            "Silent writes must audit localConfirmation=not_required without fabricating confirmed");
+        // Revoking permission immediately rejects subsequent silent writes without replay.
+        revoked=true;
+        await assert.rejects(write(),e=>e.code==="MCP_POLICY_UNAVAILABLE");
+        assert.equal(writeCount,writesBeforeSilent+2);
+        revoked=false;
+        overrideDecision=null;
+        policy.authorizeProjectTool=origAuthorize;
+
+        console.log("PASS: Main socket online v3 auth, silent-write execution, revocation, private project probe, scoped consent, audit and offline fail-closed");
     } finally {
         stopMcpServer();
         delete process.env.DIGISTUDIO_MCP_SESSION_FILE;

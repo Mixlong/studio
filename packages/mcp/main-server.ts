@@ -30,7 +30,7 @@ interface BridgeRequest {
     args: unknown;
 }
 
-/** Main-local tool access after the IDE checks Java account entitlement at startup. */
+/** Online per-call authorization & sanitized audit policy owned by Electron Main. */
 export interface McpCentralExecutionPolicy {
     authorizeDiscovery: () => Promise<void>;
     authorizeProjectTool: (
@@ -50,6 +50,8 @@ export interface McpCentralExecutionPolicy {
         projectRevision: number;
         riskGroup: "project.view" | "project.edit" | "build.run";
         expiresAt: string;
+        localConfirmationRequired?: boolean;
+        silentExecution?: boolean;
     }>;
     auditExecution: (input: {
         tool: string;
@@ -86,7 +88,8 @@ export function isMcpWriteAllowed() {
  */
 export async function startMcpServer(
     window: BrowserWindow,
-    centralPolicy: McpCentralExecutionPolicy
+    centralPolicy: McpCentralExecutionPolicy,
+    sessionId?: string
 ): Promise<boolean> {
     // A Java account grant must first be obtained by the Settings integration.
     if (!centralPolicy) return false;
@@ -96,7 +99,10 @@ export async function startMcpServer(
 
     const token = randomBytes(32).toString("hex");
     const nonce = randomBytes(16).toString("hex");
-    const clientSessionId = randomBytes(24).toString("base64url");
+    const clientSessionId =
+        typeof sessionId === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(sessionId)
+            ? sessionId
+            : randomBytes(24).toString("base64url");
     const socketPath = process.platform === "win32"
         ? `\\\\.\\pipe\\digistudio-mcp-${nonce}`
         : path.join(os.tmpdir(), `digistudio-mcp-${nonce}.sock`);
@@ -400,6 +406,7 @@ export async function startMcpServer(
             }
 
             const isWrite = isWriteTool(input.tool);
+            const silentAuthorized = isWrite && centralGrant?.localConfirmationRequired === false;
             if (isWrite) {
                 if (!isMcpWriteAllowed()) {
                     send(socket, { ok: false, error: mcpReadError(
@@ -407,77 +414,91 @@ export async function startMcpServer(
                     ) });
                     return;
                 }
-                if (writeApprovalPending) {
-                    send(socket, { ok: false, error: mcpReadError(
-                        "INVALID_STATE", "Another write request is awaiting approval"
-                    ) });
-                    return;
-                }
-                writeApprovalPending = true;
-                let approved = !!centralGrant &&
-                    centralWriteGrantKey === centralKey(centralGrant);
-                let grantSession = false;
-                if (!approved) {
-                    socket.setTimeout(PROMPT_TIMEOUT_MS);
-                    const currentApproval = new AbortController();
-                    const revoke = () => currentApproval.abort();
-                    // Closing the MCP client socket must immediately dismiss
-                    // the matching authorization UI. A dead client may never
-                    // receive/consume a grant, so never persist it.
-                    socket.once("close", revoke);
-                    approvalAbort.signal.addEventListener("abort", revoke, { once: true });
-                    const approvalDeadline = setTimeout(revoke, PROMPT_TIMEOUT_MS - 3_000);
-                    try {
-                        const isChinese = getLocale().toLowerCase().startsWith("zh");
-                        const choice = await showMcpApproval(
-                            window, input.tool, input.args, isChinese,
-                            currentApproval.signal, settings.isDarkTheme
-                        );
-                        approved = choice === 1 || choice === 2;
-                        grantSession = choice === 2;
-                    } catch (error) {
-                        console.error("[mcp] Write approval dialog error", error);
-                    } finally {
-                        clearTimeout(approvalDeadline);
-                        socket.removeListener("close", revoke);
-                        approvalAbort.signal.removeEventListener("abort", revoke);
-                    }
-                }
-                const authAfterApproval = getDigiwiseAuthGuard();
-                if (!approved || !authAfterApproval.authenticated ||
-                    authAfterApproval.generation !== auth.generation ||
-                    !isMcpWriteAllowed() || stopped || socket.destroyed) {
-                    writeApprovalPending = false;
-                    if (centralGrant) await audit(centralGrant, "cancelled", "not_started");
-                    send(socket, { ok: false, error: mcpReadError(
-                        "WRITE_REJECTED", "Write request was denied or cancelled"
-                    ) });
-                    return;
-                }
-                if (authorizedPath) {
-                    try {
-                        // Recheck Main's in-memory login grant after consent;
-                        // this does not contact Java per operation.
-                        const fresh = await centralPolicy.authorizeProjectTool(
-                            authorizedPath, input.tool, parameterDigest, clientSessionId
-                        );
-                        if (!centralGrant || centralGrant.bindingId !== fresh.bindingId ||
-                            centralGrant.modelId !== fresh.modelId ||
-                            fresh.accountGeneration !== auth.generation) {
-                            throw new Error("Central binding changed during local consent");
-                        }
-                        centralGrant = fresh;
-                    } catch (_error) {
-                        writeApprovalPending = false;
-                        send(socket,{ok:false,error:mcpReadError("MCP_POLICY_UNAVAILABLE",
-                            "IDE account changed or MCP server stopped after local approval")});
+                if (silentAuthorized) {
+                    const authAfterGrant = getDigiwiseAuthGuard();
+                    if (!authAfterGrant.authenticated ||
+                        authAfterGrant.generation !== auth.generation ||
+                        !isMcpWriteAllowed() || stopped || socket.destroyed) {
+                        if (centralGrant) await audit(centralGrant, "not_required", "revoked");
+                        send(socket, { ok: false, error: mcpReadError(
+                            "AUTH_REQUIRED", "IDE login or MCP session changed before silent execution"
+                        ) });
                         return;
                     }
+                    socket.setTimeout(WRITE_TIMEOUT_MS + 3_000);
+                } else {
+                    if (writeApprovalPending) {
+                        send(socket, { ok: false, error: mcpReadError(
+                            "INVALID_STATE", "Another write request is awaiting approval"
+                        ) });
+                        return;
+                    }
+                    writeApprovalPending = true;
+                    let approved = !!centralGrant &&
+                        centralWriteGrantKey === centralKey(centralGrant);
+                    let grantSession = false;
+                    if (!approved) {
+                        socket.setTimeout(PROMPT_TIMEOUT_MS);
+                        const currentApproval = new AbortController();
+                        const revoke = () => currentApproval.abort();
+                        // Closing the MCP client socket must immediately dismiss
+                        // the matching authorization UI. A dead client may never
+                        // receive/consume a grant, so never persist it.
+                        socket.once("close", revoke);
+                        approvalAbort.signal.addEventListener("abort", revoke, { once: true });
+                        const approvalDeadline = setTimeout(revoke, PROMPT_TIMEOUT_MS - 3_000);
+                        try {
+                            const isChinese = getLocale().toLowerCase().startsWith("zh");
+                            const choice = await showMcpApproval(
+                                window, input.tool, input.args, isChinese,
+                                currentApproval.signal, settings.isDarkTheme
+                            );
+                            approved = choice === 1 || choice === 2;
+                            grantSession = choice === 2;
+                        } catch (error) {
+                            console.error("[mcp] Write approval dialog error", error);
+                        } finally {
+                            clearTimeout(approvalDeadline);
+                            socket.removeListener("close", revoke);
+                            approvalAbort.signal.removeEventListener("abort", revoke);
+                        }
+                    }
+                    const authAfterApproval = getDigiwiseAuthGuard();
+                    if (!approved || !authAfterApproval.authenticated ||
+                        authAfterApproval.generation !== auth.generation ||
+                        !isMcpWriteAllowed() || stopped || socket.destroyed) {
+                        writeApprovalPending = false;
+                        if (centralGrant) await audit(centralGrant, "cancelled", "not_started");
+                        send(socket, { ok: false, error: mcpReadError(
+                            "WRITE_REJECTED", "Write request was denied or cancelled"
+                        ) });
+                        return;
+                    }
+                    if (authorizedPath) {
+                        try {
+                            // Recheck authorization after interactive consent to
+                            // prevent revoke-during-prompt races.
+                            const fresh = await centralPolicy.authorizeProjectTool(
+                                authorizedPath, input.tool, parameterDigest, clientSessionId
+                            );
+                            if (!centralGrant || centralGrant.bindingId !== fresh.bindingId ||
+                                centralGrant.modelId !== fresh.modelId ||
+                                fresh.accountGeneration !== auth.generation) {
+                                throw new Error("Central binding changed during local consent");
+                            }
+                            centralGrant = fresh;
+                        } catch (_error) {
+                            writeApprovalPending = false;
+                            send(socket,{ok:false,error:mcpReadError("MCP_POLICY_UNAVAILABLE",
+                                "IDE account changed or MCP server stopped after local approval")});
+                            return;
+                        }
+                    }
+                    if (grantSession) {
+                        if (centralGrant) centralWriteGrantKey = centralKey(centralGrant);
+                    }
+                    socket.setTimeout(WRITE_TIMEOUT_MS + 3_000);
                 }
-                if (grantSession) {
-                    if (centralGrant) centralWriteGrantKey = centralKey(centralGrant);
-                }
-                socket.setTimeout(WRITE_TIMEOUT_MS + 3_000);
             }
             const request: McpRendererRequest = {
                 id: input.id,
@@ -535,13 +556,14 @@ export async function startMcpServer(
                             };
                         }
                     }
-                    await audit(centralGrant, isWrite ? "confirmed" : "not_required",
+                    await audit(centralGrant,
+                        !isWrite || silentAuthorized ? "not_required" : "confirmed",
                         reply.ok ? "succeeded" : "failed",
                         reply.ok ? undefined : reply.error.code);
                 }
                 send(socket, reply);
             }).finally(() => {
-                if (isWrite) writeApprovalPending = false;
+                if (isWrite && !silentAuthorized) writeApprovalPending = false;
             });
         });
     });

@@ -251,10 +251,63 @@ export class DigiwisePublicApi {
         }
         return data as {
             authorized: boolean; globalEnabled: boolean; accountEnabled: boolean;
+            accessMode?: "disabled" | "all_active_users" | "selected_users";
+            authorizationMode?: string;
+            authorizationReason?: string;
+            localConfirmationRequired?: boolean;
+            registryVersion?: string;
             globalPolicyRevision: number; accountPolicyRevision: number;
         };
     }
 
+    /** Explicit user-initiated MCP connect; requires live backend authorization. */
+    async connectMcp(accessToken: string, input: {
+        registryVersion: string;
+        clientSessionId: string;
+    }) {
+        const data = await this.request<unknown>("mcp/connect", {
+            method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(4500)
+        }, accessToken);
+        if (!isObject(data) || data.connected !== true ||
+            data.clientSessionId !== input.clientSessionId ||
+            data.registryVersion !== input.registryVersion ||
+            !Number.isSafeInteger(data.globalPolicyRevision) ||
+            !Number.isSafeInteger(data.accountPolicyRevision)) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid MCP connect response", "mcp-connect-contract");
+        }
+        return data as {
+            connected: true;
+            requestId?: string;
+            clientSessionId: string;
+            registryVersion: string;
+            accessMode?: string;
+            globalPolicyRevision: number;
+            accountPolicyRevision: number;
+            localConfirmationRequired?: boolean;
+            silentExecution?: boolean;
+        };
+    }
+
+    /** Explicit user-initiated MCP disconnect or account-switch cleanup. */
+    async disconnectMcp(accessToken: string, input: {
+        registryVersion: string;
+        clientSessionId: string;
+    }) {
+        const data = await this.request<unknown>("mcp/disconnect", {
+            method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(4500)
+        }, accessToken);
+        if (!isObject(data) || data.disconnected !== true) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid MCP disconnect response", "mcp-disconnect-contract");
+        }
+        return data as {
+            disconnected: true;
+            requestId?: string;
+            clientSessionId?: string;
+            revokedDecisions?: number;
+        };
+    }
 
     /** Online MCP account authorization, scoped to one tool request. */
     async authorizeSimpleMcp(accessToken: string, input: {
@@ -281,19 +334,30 @@ export class DigiwisePublicApi {
                 "Invalid MCP online execution decision", "mcp-simple-contract");
         }
         return data as {
-            authorized: true; decisionId: string; tool: string;
+            authorized: true; requestId?: string; decisionId: string; tool: string;
             registryVersion: string; clientSessionId: string; parameterDigest: string;
             riskGroup: "project.view" | "project.edit" | "build.run";
+            accessMode?: string;
             globalPolicyRevision: number; accountPolicyRevision: number;
             expiresAt: string;
+            localConfirmationRequired?: boolean;
+            silentExecution?: boolean;
         };
     }
 
     async auditSimpleMcp(accessToken: string, input: {
-        decisionId: string; tool: string;
+        requestId?: string;
+        decisionId: string;
+        tool: string;
+        clientSessionId?: string;
+        parameterDigest?: string;
+        localConfirmation?: "not_required" | "confirmed" | "cancelled" | "offline";
         executionResult: "succeeded" | "failed" | "cancelled" | "not_started" | "revoked";
+        errorCode?: string;
+        durationMs?: number;
     }) {
-        return this.request<{recorded: boolean}>("mcp/audit-simple", {
+        return this.request<{recorded: boolean; requestId?: string; decisionId?: string;
+            localConfirmation?: string; deduplicated?: boolean}>("mcp/audit-simple", {
             method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(4500)
         }, accessToken);
     }
