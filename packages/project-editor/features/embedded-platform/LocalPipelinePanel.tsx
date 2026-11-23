@@ -1,12 +1,12 @@
 import React from "react";
 import { makeObservable, observable, runInAction } from "mobx";
 import { observer } from "mobx-react";
+import { dialog, getCurrentWindow } from "@electron/remote";
 import path from "path";
 
-import { ButtonAction } from "eez-studio-ui/action";
+import { showDialog } from "eez-studio-ui/dialog";
 import { Icon } from "eez-studio-ui/icon";
 import { ProjectContext } from "project-editor/project/context";
-import { Panel } from "project-editor/ui-components/Panel";
 import { digiwiseLocalPipeline } from "home/digiwise-local-pipeline";
 import {
     applyManagedBspToEmbeddedBsp,
@@ -19,8 +19,146 @@ import type { ToolchainEnvironmentReport } from "eez-studio-shared/digiwise-tool
 import type { LocalBuildRecord } from "eez-studio-shared/digiwise-build";
 import type { LocalDownloadRecord, LocalProbeDetectResult } from "eez-studio-shared/digiwise-download";
 
+type StepTone = "idle" | "active" | "ok" | "warn" | "error";
+
+const TONE_COLOR: Record<StepTone, string> = {
+    idle: "#6c757d",
+    active: "#3b82f6",
+    ok: "#22c55e",
+    warn: "#f59e0b",
+    error: "#ef4444"
+};
+
+const cardStyle: React.CSSProperties = {
+    background: "#1c1e22",
+    border: "1px solid #2f333b",
+    borderRadius: 8,
+    padding: "10px 12px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8
+};
+
+function btnStyle(
+    variant: "primary" | "success" | "secondary" | "danger",
+    disabled = false
+): React.CSSProperties {
+    const bg =
+        variant === "primary"
+            ? "#2563eb"
+            : variant === "success"
+              ? "#16a34a"
+              : variant === "danger"
+                ? "#dc2626"
+                : "#2b3038";
+    const border =
+        variant === "secondary" ? "1px solid #404652" : "1px solid transparent";
+    return {
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        padding: "5px 10px",
+        fontSize: 12,
+        fontWeight: 500,
+        lineHeight: "16px",
+        color: "#f3f4f6",
+        background: bg,
+        border,
+        borderRadius: 6,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+        whiteSpace: "nowrap"
+    };
+}
+
+function StepBadge(props: { num: number; tone: StepTone; title: string; subtitle?: string }) {
+    const color = TONE_COLOR[props.tone];
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <span
+                style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: color,
+                    color: "#fff",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0
+                }}
+            >
+                {props.tone === "ok" ? "✓" : props.num}
+            </span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                    style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#f3f4f6",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap"
+                    }}
+                >
+                    {props.title}
+                </div>
+                {props.subtitle && (
+                    <div
+                        style={{
+                            fontSize: 11,
+                            color: "#9ca3af",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap"
+                        }}
+                    >
+                        {props.subtitle}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ProgressBar(props: { percent: number; color?: string }) {
+    const pct = Math.max(0, Math.min(100, Math.round(props.percent)));
+    return (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+                style={{
+                    flex: 1,
+                    height: 6,
+                    background: "#2b3038",
+                    borderRadius: 999,
+                    overflow: "hidden"
+                }}
+            >
+                <div
+                    style={{
+                        width: `${pct}%`,
+                        height: "100%",
+                        background: props.color || "#3b82f6",
+                        transition: "width 180ms ease"
+                    }}
+                />
+            </div>
+            <span style={{ fontSize: 11, color: "#9ca3af", minWidth: 32, textAlign: "right" }}>
+                {pct}%
+            </span>
+        </div>
+    );
+}
+
+interface LocalPipelinePanelProps {
+    wideMode?: boolean;
+}
+
 export const LocalPipelinePanel = observer(
-    class LocalPipelinePanel extends React.Component {
+    class LocalPipelinePanel extends React.Component<LocalPipelinePanelProps> {
         static contextType = ProjectContext;
         declare context: React.ContextType<typeof ProjectContext>;
 
@@ -31,6 +169,7 @@ export const LocalPipelinePanel = observer(
         installedBsps: DigiwiseInstalledBspRecord[] = [];
         downloadProgress: DigiwiseBspDownloadProgress | null = null;
         bspMessage = "";
+        bspTone: StepTone = "idle";
         bspBusy = false;
 
         // LB03 state
@@ -54,7 +193,7 @@ export const LocalPipelinePanel = observer(
 
         private unsubscribers: Array<() => void> = [];
 
-        constructor(props: any) {
+        constructor(props: LocalPipelinePanelProps) {
             super(props);
             makeObservable(this, {
                 categories: observable,
@@ -63,6 +202,7 @@ export const LocalPipelinePanel = observer(
                 installedBsps: observable,
                 downloadProgress: observable,
                 bspMessage: observable,
+                bspTone: observable,
                 bspBusy: observable,
                 customEnvRoot: observable,
                 toolchainReport: observable,
@@ -118,6 +258,28 @@ export const LocalPipelinePanel = observer(
             this.unsubscribers = [];
         }
 
+        openWideWindow = () => {
+            showDialog(
+                <ProjectContext.Provider value={this.context}>
+                    <LocalPipelinePanel wideMode={true} />
+                </ProjectContext.Provider>,
+                {
+                    jsPanel: {
+                        id: "digiwise-local-pipeline-wide",
+                        title: "DigiwiseStudio · 本地编译与烧录控制台（LB02～LB05）",
+                        width: 1080,
+                        height: 740,
+                        headerControls: {
+                            minimize: "remove",
+                            maximize: "remove",
+                            smallify: "remove"
+                        },
+                        modeless: true
+                    }
+                }
+            );
+        };
+
         refreshInitialState = async () => {
             const [instRes, cfgRes] = await Promise.all([
                 digiwiseLocalPipeline.listInstalledBsps(),
@@ -134,13 +296,15 @@ export const LocalPipelinePanel = observer(
         refreshCatalog = async () => {
             runInAction(() => {
                 this.bspBusy = true;
-                this.bspMessage = "正在从 Java 后台拉取已授权品类与 BSP 列表...";
+                this.bspTone = "active";
+                this.bspMessage = "正在拉取已授权品类与 BSP 列表...";
             });
             try {
                 const catRes = await digiwiseLocalPipeline.listCategories();
                 if (!catRes.ok) {
                     runInAction(() => {
-                        this.bspMessage = `拉取品类失败（${catRes.error.code}）：${catRes.error.message}`;
+                        this.bspTone = "error";
+                        this.bspMessage = `${catRes.error.code}: ${catRes.error.message}`;
                     });
                     return;
                 }
@@ -154,9 +318,11 @@ export const LocalPipelinePanel = observer(
                     this.selectedCategory = firstCat;
                     if (verRes.ok) this.remoteVersions = verRes.data;
                     if (instRes.ok) this.installedBsps = instRes.data;
-                    this.bspMessage = `已加载 ${catRes.data.length} 个授权品类、${
-                        verRes.ok ? verRes.data.length : 0
-                    } 个已发布 BSP 版本。`;
+                    this.bspTone = catRes.data.length > 0 ? "ok" : "warn";
+                    this.bspMessage =
+                        catRes.data.length > 0
+                            ? `已加载 ${catRes.data.length} 个授权品类，${verRes.ok ? verRes.data.length : 0} 个已发布 BSP。`
+                            : "当前账号暂无授权品类，请在 Java 管理后台分配品类并发布 BSP。";
                 });
             } finally {
                 runInAction(() => {
@@ -175,8 +341,10 @@ export const LocalPipelinePanel = observer(
                 runInAction(() => {
                     if (verRes.ok) {
                         this.remoteVersions = verRes.data;
-                        this.bspMessage = `${categoryCode} 下有 ${verRes.data.length} 个已发布 BSP。`;
+                        this.bspTone = verRes.data.length > 0 ? "ok" : "warn";
+                        this.bspMessage = `${categoryCode} 下共有 ${verRes.data.length} 个已发布 BSP。`;
                     } else {
+                        this.bspTone = "error";
                         this.bspMessage = `${verRes.error.code}: ${verRes.error.message}`;
                     }
                 });
@@ -190,13 +358,15 @@ export const LocalPipelinePanel = observer(
         downloadAndBind = async (bspId: number) => {
             runInAction(() => {
                 this.bspBusy = true;
+                this.bspTone = "active";
                 this.bspMessage = `正在受控下载并校验 BSP #${bspId}...`;
             });
             try {
                 const res = await digiwiseLocalPipeline.downloadAndInstallBsp(bspId);
                 if (!res.ok) {
                     runInAction(() => {
-                        this.bspMessage = `下载/安装失败（${res.error.code}）：${res.error.message}`;
+                        this.bspTone = "error";
+                        this.bspMessage = `${res.error.code}: ${res.error.message}`;
                     });
                     return;
                 }
@@ -204,7 +374,8 @@ export const LocalPipelinePanel = observer(
                 const instRes = await digiwiseLocalPipeline.listInstalledBsps();
                 runInAction(() => {
                     if (instRes.ok) this.installedBsps = instRes.data;
-                    this.bspMessage = `已安装并绑定 ${res.data.categoryCode}@${res.data.version}（SHA-256 校验通过）。`;
+                    this.bspTone = "ok";
+                    this.bspMessage = `已安装并绑定 ${res.data.categoryCode}@${res.data.version}（SHA-256 校验通过）`;
                 });
             } finally {
                 runInAction(() => {
@@ -233,8 +404,22 @@ export const LocalPipelinePanel = observer(
                 });
             }
             runInAction(() => {
-                this.bspMessage = `工程已绑定受控 BSP：${rec.categoryCode}@${rec.version}`;
+                this.bspTone = "ok";
+                this.bspMessage = `已绑定受控 BSP：${rec.categoryCode}@${rec.version}`;
             });
+        };
+
+        chooseEnvFolder = async () => {
+            const result = await dialog.showOpenDialog(getCurrentWindow(), {
+                title: "选择本地离线工具链目录（如 __ENV__）",
+                properties: ["openDirectory"]
+            });
+            if (!result.canceled && result.filePaths[0]) {
+                runInAction(() => {
+                    this.customEnvRoot = result.filePaths[0];
+                });
+                await this.saveCustomEnvAndInspect();
+            }
         };
 
         getBoundInstalledRecord(): DigiwiseInstalledBspRecord | undefined {
@@ -251,7 +436,7 @@ export const LocalPipelinePanel = observer(
         saveCustomEnvAndInspect = async () => {
             runInAction(() => {
                 this.toolchainBusy = true;
-                this.toolchainMessage = "正在检测本地编译工具链...";
+                this.toolchainMessage = "正在检测工具链...";
             });
             try {
                 const roots = this.customEnvRoot.trim() ? [this.customEnvRoot.trim()] : [];
@@ -271,7 +456,14 @@ export const LocalPipelinePanel = observer(
                     build: {
                         system: "cmake" as const,
                         sourceDir: ".",
-                        artifacts: [{ role: "firmware" as const, format: "bin" as const, path: "build/HMI_MH2457.bin", required: true }]
+                        artifacts: [
+                            {
+                                role: "firmware" as const,
+                                format: "bin" as const,
+                                path: "build/HMI_MH2457.bin",
+                                required: true
+                            }
+                        ]
                     },
                     toolchain: {
                         compiler: { id: "arm-none-eabi-gcc", version: "14.3.rel1" },
@@ -291,8 +483,8 @@ export const LocalPipelinePanel = observer(
                     if (res.ok) {
                         this.toolchainReport = res.data;
                         this.toolchainMessage = res.data.ready
-                            ? "所有必需工具链已就绪（隔离 PATH 模式）。"
-                            : `存在 ${res.data.blockingIssues.length} 项工具链缺失或版本不符。`;
+                            ? "所有必需工具链已就绪（隔离 PATH）。"
+                            : `缺少或版本不符：${res.data.blockingIssues.length} 项`;
                     } else {
                         this.toolchainMessage = `${res.error.code}: ${res.error.message}`;
                     }
@@ -308,19 +500,19 @@ export const LocalPipelinePanel = observer(
             const bsp = this.context.project.embeddedPlatform.bsp;
             if (!this.context.filePath) {
                 runInAction(() => {
-                    this.buildLogs = ["请先保存工程文件后再执行本地编译。"];
+                    this.buildLogs = ["请先保存工程文件（Ctrl+S）后再执行本地编译。"];
                 });
                 return;
             }
             if (!bsp.bspId || !bsp.categoryCode || !bsp.version || !bsp.sha256) {
                 runInAction(() => {
-                    this.buildLogs = ["请先在上方第 1 步选择并绑定一个受控 BSP。"];
+                    this.buildLogs = ["请先在第 1 步拉取并绑定一个受控 BSP。"];
                 });
                 return;
             }
             runInAction(() => {
                 this.buildRunning = true;
-                this.buildProgress = 0;
+                this.buildProgress = 5;
                 this.buildLogs = [];
                 this.buildRecord = null;
             });
@@ -357,6 +549,7 @@ export const LocalPipelinePanel = observer(
             runInAction(() => {
                 if (res.ok) {
                     this.probeResult = res.data;
+                    this.downloadLogs.push(`[detect] ${res.data.message}`);
                 } else {
                     this.downloadLogs.push(`[ERROR] ${res.error.code}: ${res.error.message}`);
                 }
@@ -374,7 +567,7 @@ export const LocalPipelinePanel = observer(
             }
             runInAction(() => {
                 this.downloadRunning = true;
-                this.downloadProgressPct = 0;
+                this.downloadProgressPct = 10;
                 this.downloadLogs = [];
                 this.downloadRecord = null;
             });
@@ -401,261 +594,482 @@ export const LocalPipelinePanel = observer(
             }
         };
 
-        override render() {
+        renderStepCards() {
             const bsp = this.context.project.embeddedPlatform.bsp;
-            const boundLabel =
-                bsp.bspId > 0
-                    ? `${bsp.categoryCode}@${bsp.version} (ID #${bsp.bspId}, sha256=${(bsp.sha256 || "").slice(0, 12)}...)`
-                    : "尚未绑定受控 BSP";
+            const hasBound = bsp.bspId > 0 && Boolean(bsp.categoryCode);
+            const step1Tone: StepTone = this.bspBusy ? "active" : hasBound ? "ok" : this.bspTone;
+            const step2Tone: StepTone = this.toolchainBusy
+                ? "active"
+                : this.toolchainReport
+                  ? this.toolchainReport.ready
+                      ? "ok"
+                      : "error"
+                  : "idle";
+            const step3Tone: StepTone = this.buildRunning
+                ? "active"
+                : this.buildRecord
+                  ? "ok"
+                  : this.buildLogs.some(l => l.includes("[ERROR]"))
+                    ? "error"
+                    : "idle";
+            const step4Tone: StepTone = this.downloadRunning
+                ? "active"
+                : this.downloadRecord
+                  ? "ok"
+                  : this.probeResult
+                    ? this.probeResult.connected
+                        ? "ok"
+                        : "warn"
+                    : "idle";
+
+            const dlPct =
+                this.downloadProgress && this.downloadProgress.totalBytes > 0
+                    ? (this.downloadProgress.receivedBytes / this.downloadProgress.totalBytes) * 100
+                    : 0;
 
             return (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 8, overflow: "auto" }}>
-                    {/* Step 1: LB02 Managed BSP */}
-                    <Panel
-                        id="local-pipeline-bsp"
-                        title="1. 受控 BSP 下载、校验与工程绑定（LB02）"
-                        body={
-                            <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                    <Icon icon="material:memory" size={18} />
-                                    <strong>当前工程绑定：</strong>
-                                    <code>{boundLabel}</code>
-                                    <ButtonAction
-                                        text="拉取授权 BSP 列表"
-                                        icon="material:cloud_download"
-                                        title="从 Java 后台刷新已授权品类与 BSP"
-                                        onClick={this.refreshCatalog}
-                                        enabled={!this.bspBusy}
-                                    />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {/* Step 1: LB02 */}
+                    <div style={cardStyle}>
+                        <StepBadge
+                            num={1}
+                            tone={step1Tone}
+                            title="受控 BSP（LB02）"
+                            subtitle={hasBound ? `${bsp.categoryCode}@${bsp.version} (#${bsp.bspId})` : "尚未绑定受控 BSP"}
+                        />
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button
+                                type="button"
+                                style={btnStyle("primary", this.bspBusy)}
+                                disabled={this.bspBusy}
+                                onClick={this.refreshCatalog}
+                            >
+                                <Icon icon="material:cloud_download" size={14} />
+                                <span>{this.bspBusy ? "拉取中..." : "拉取授权 BSP"}</span>
+                            </button>
+                            {this.categories.length > 0 && (
+                                <select
+                                    style={{
+                                        flex: 1,
+                                        minWidth: 110,
+                                        background: "#141619",
+                                        color: "#f3f4f6",
+                                        border: "1px solid #3c424d",
+                                        borderRadius: 6,
+                                        padding: "4px 6px",
+                                        fontSize: 12
+                                    }}
+                                    value={this.selectedCategory}
+                                    onChange={e => void this.onSelectCategory(e.target.value)}
+                                >
+                                    {this.categories.map(c => (
+                                        <option key={c.id} value={c.categoryCode}>
+                                            {c.categoryCode} · {c.categoryName}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                        {this.remoteVersions.map(v => (
+                            <div
+                                key={v.id}
+                                style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 4,
+                                    padding: "6px 8px",
+                                    background: "#141619",
+                                    border: "1px solid #2f333b",
+                                    borderRadius: 6
+                                }}
+                            >
+                                <div style={{ fontSize: 12, color: "#e5e7eb", wordBreak: "break-all" }}>
+                                    <strong>{v.categoryCode}</strong> v{v.version} · {Math.max(1, Math.round(v.fileSize / 1024))} KB
                                 </div>
-                                {this.categories.length > 0 && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                        <span>授权品类：</span>
-                                        <select
-                                            value={this.selectedCategory}
-                                            onChange={e => void this.onSelectCategory(e.target.value)}
-                                        >
-                                            {this.categories.map(c => (
-                                                <option key={c.id} value={c.categoryCode}>
-                                                    {c.categoryCode} - {c.categoryName}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
-                                {this.remoteVersions.length > 0 && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        {this.remoteVersions.map(v => (
-                                            <div
-                                                key={v.id}
-                                                style={{
-                                                    display: "flex",
-                                                    justifyContent: "space-between",
-                                                    alignItems: "center",
-                                                    padding: "6px 8px",
-                                                    border: "1px solid var(--bs-border-color, #444)",
-                                                    borderRadius: 4
-                                                }}
-                                            >
-                                                <span>
-                                                    <strong>{v.categoryCode}</strong> v{v.version} ({v.fileName},{" "}
-                                                    {Math.round(v.fileSize / 1024)} KB)
-                                                </span>
-                                                <ButtonAction
-                                                    text="下载并绑定"
-                                                    icon="material:download"
-                                                    title="受控下载、SHA-256 校验、安装并绑定到工程"
-                                                    onClick={() => void this.downloadAndBind(v.id)}
-                                                    enabled={!this.bspBusy}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {this.installedBsps.length > 0 && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        <small>本机已安装缓存（不可变版本目录）：</small>
-                                        {this.installedBsps.map(item => (
-                                            <div
-                                                key={`${item.categoryCode}@${item.version}`}
-                                                style={{
-                                                    display: "flex",
-                                                    justifyContent: "space-between",
-                                                    alignItems: "center",
-                                                    padding: "4px 8px",
-                                                    border: "1px dashed var(--bs-border-color, #555)",
-                                                    borderRadius: 4
-                                                }}
-                                            >
-                                                <span>
-                                                    {item.categoryCode}@{item.version} ({item.sha256.slice(0, 12)}…)
-                                                </span>
-                                                <ButtonAction
-                                                    text="绑定此版本"
-                                                    icon="material:link"
-                                                    title="绑定到当前工程"
-                                                    onClick={() => this.bindInstalledBsp(item)}
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {this.downloadProgress && (
-                                    <small>
-                                        下载阶段：{this.downloadProgress.stage} ({this.downloadProgress.receivedBytes} /{" "}
-                                        {this.downloadProgress.totalBytes} bytes)
-                                    </small>
-                                )}
-                                {this.bspMessage && <div style={{ opacity: 0.9 }}>{this.bspMessage}</div>}
+                                <div>
+                                    <button
+                                        type="button"
+                                        style={btnStyle("success", this.bspBusy)}
+                                        disabled={this.bspBusy}
+                                        onClick={() => void this.downloadAndBind(v.id)}
+                                    >
+                                        <Icon icon="material:download" size={14} />
+                                        <span>下载并绑定</span>
+                                    </button>
+                                </div>
                             </div>
-                        }
-                    />
+                        ))}
+                        {this.installedBsps.length > 0 && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                                <div style={{ fontSize: 11, color: "#9ca3af" }}>本机缓存：</div>
+                                {this.installedBsps.map(item => (
+                                    <div
+                                        key={`${item.categoryCode}@${item.version}`}
+                                        style={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                            alignItems: "center",
+                                            gap: 6,
+                                            padding: "5px 8px",
+                                            background: "#141619",
+                                            border: "1px dashed #3c424d",
+                                            borderRadius: 6,
+                                            fontSize: 12
+                                        }}
+                                    >
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {item.categoryCode}@{item.version}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            style={btnStyle("secondary")}
+                                            onClick={() => this.bindInstalledBsp(item)}
+                                        >
+                                            绑定
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {this.downloadProgress && this.downloadProgress.stage !== "completed" && (
+                            <ProgressBar percent={dlPct} />
+                        )}
+                        {this.bspMessage && (
+                            <div style={{ fontSize: 11, color: TONE_COLOR[this.bspTone], lineHeight: "16px", wordBreak: "break-word" }}>
+                                {this.bspMessage}
+                            </div>
+                        )}
+                    </div>
 
-                    {/* Step 2: LB03 Toolchain Manager */}
-                    <Panel
-                        id="local-pipeline-toolchain"
-                        title="2. 本地工具链就绪检查（LB03 · 隔离 PATH 不改系统环境）"
-                        body={
-                            <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                                    <span>本地离线环境目录（可选）：</span>
-                                    <input
-                                        style={{ flex: 1, minWidth: 240 }}
-                                        value={this.customEnvRoot}
-                                        placeholder="例如 D:\桌面文件归档\__ENV__（留空则使用软件私有工具链目录）"
-                                        onChange={e =>
-                                            runInAction(() => {
-                                                this.customEnvRoot = e.target.value;
-                                            })
-                                        }
-                                    />
-                                    <ButtonAction
-                                        text="检测工具链"
-                                        icon="material:build_circle"
-                                        title="按 BSP manifest 检测本地工具链版本"
-                                        onClick={this.saveCustomEnvAndInspect}
-                                        enabled={!this.toolchainBusy}
-                                    />
-                                </div>
-                                {this.toolchainMessage && <div>{this.toolchainMessage}</div>}
-                                {this.toolchainReport && (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                        {this.toolchainReport.tools.map(t => (
-                                            <div
-                                                key={t.id}
-                                                style={{
-                                                    display: "flex",
-                                                    justifyContent: "space-between",
-                                                    padding: "4px 8px",
-                                                    border: "1px solid var(--bs-border-color, #444)",
-                                                    borderRadius: 4
-                                                }}
-                                            >
-                                                <span>
-                                                    <strong>{t.displayName}</strong> [{t.category}] · 要求{" "}
-                                                    <code>{t.expectedVersion}</code>
+                    {/* Step 2: LB03 */}
+                    <div style={cardStyle}>
+                        <StepBadge
+                            num={2}
+                            tone={step2Tone}
+                            title="本地工具链（LB03）"
+                            subtitle="隔离 PATH · 不改系统环境"
+                        />
+                        <div style={{ display: "flex", gap: 6 }}>
+                            <input
+                                style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    background: "#141619",
+                                    color: "#f3f4f6",
+                                    border: "1px solid #3c424d",
+                                    borderRadius: 6,
+                                    padding: "5px 8px",
+                                    fontSize: 12
+                                }}
+                                value={this.customEnvRoot}
+                                placeholder="离线目录（如 D:\桌面文件归档\__ENV__）"
+                                onChange={e =>
+                                    runInAction(() => {
+                                        this.customEnvRoot = e.target.value;
+                                    })
+                                }
+                            />
+                            <button
+                                type="button"
+                                style={btnStyle("secondary", this.toolchainBusy)}
+                                disabled={this.toolchainBusy}
+                                title="浏览文件夹"
+                                onClick={this.chooseEnvFolder}
+                            >
+                                <Icon icon="material:folder_open" size={14} />
+                            </button>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button
+                                type="button"
+                                style={btnStyle("primary", this.toolchainBusy)}
+                                disabled={this.toolchainBusy}
+                                onClick={this.saveCustomEnvAndInspect}
+                            >
+                                <Icon icon="material:build_circle" size={14} />
+                                <span>{this.toolchainBusy ? "检测中..." : "检测工具链"}</span>
+                            </button>
+                            {this.toolchainMessage && (
+                                <span
+                                    style={{
+                                        fontSize: 11,
+                                        color: this.toolchainReport?.ready ? "#22c55e" : "#f59e0b",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap"
+                                    }}
+                                >
+                                    {this.toolchainMessage}
+                                </span>
+                            )}
+                        </div>
+                        {this.toolchainReport && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                                {this.toolchainReport.tools.map(t => {
+                                    const ok = t.status === "ready";
+                                    return (
+                                        <div
+                                            key={t.id}
+                                            title={t.executablePath || t.recoveryHint || t.message}
+                                            style={{
+                                                padding: "6px 8px",
+                                                background: "#141619",
+                                                border: `1px solid ${ok ? "#1f4d36" : "#4d2326"}`,
+                                                borderRadius: 6,
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: 2
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                                                <span style={{ fontSize: 12, fontWeight: 600, color: "#e5e7eb" }}>
+                                                    {t.id}
                                                 </span>
                                                 <span
                                                     style={{
-                                                        color: t.status === "ready" ? "#2ecc71" : "#e74c3c",
-                                                        fontWeight: 600
+                                                        fontSize: 10,
+                                                        fontWeight: 600,
+                                                        padding: "1px 6px",
+                                                        borderRadius: 999,
+                                                        background: ok ? "rgba(34,197,94,0.16)" : "rgba(239,68,68,0.16)",
+                                                        color: ok ? "#4ade80" : "#f87171"
                                                     }}
                                                 >
-                                                    {t.status === "ready"
-                                                        ? `就绪 (${t.detectedVersion} · ${t.source})`
-                                                        : `${t.status}: ${t.message}`}
+                                                    {ok ? `就绪 ${t.detectedVersion || ""}` : t.status === "vendor-driver-required" ? "缺厂商驱动" : "缺失"}
                                                 </span>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        }
-                    />
-
-                    {/* Step 3: LB04 Local Build */}
-                    <Panel
-                        id="local-pipeline-build"
-                        title="3. 本地受控编译与固件产物（LB04）"
-                        body={
-                            <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <ButtonAction
-                                        text="一键本地 Build"
-                                        icon="material:play_arrow"
-                                        title="先做在线授权校验，再在隔离目录执行本地编译"
-                                        onClick={this.startLocalBuild}
-                                        enabled={!this.buildRunning}
-                                    />
-                                    <span>进度：{this.buildProgress}%</span>
-                                </div>
-                                {this.buildRecord && (
-                                    <div style={{ padding: 8, border: "1px solid #2ecc71", borderRadius: 4 }}>
-                                        <div>
-                                            <strong>编译成功</strong>（耗时 {this.buildRecord.durationMs} ms）
-                                        </div>
-                                        {this.buildRecord.artifacts.map(a => (
-                                            <div key={a.path}>
-                                                产物：<code>{path.basename(a.path)}</code> · {a.fileSize} bytes ·
-                                                SHA-256 <code>{a.sha256.slice(0, 16)}…</code>
+                                            <div style={{ fontSize: 11, color: "#9ca3af", lineHeight: "15px", wordBreak: "break-word" }}>
+                                                {ok ? `来源: ${t.source}` : t.recoveryHint || t.message}
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                                {this.buildLogs.length > 0 && (
-                                    <pre style={{ maxHeight: 160, overflow: "auto", fontSize: 12, margin: 0 }}>
-                                        {this.buildLogs.join("\n")}
-                                    </pre>
-                                )}
+                                        </div>
+                                    );
+                                })}
                             </div>
-                        }
-                    />
+                        )}
+                    </div>
 
-                    {/* Step 4: LB05 Local Download */}
-                    <Panel
-                        id="local-pipeline-download"
-                        title="4. 本地探针检测与固件烧录（LB05）"
-                        body={
-                            <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <ButtonAction
-                                        text="检测烧录探针"
-                                        icon="material:usb"
-                                        title="检测 J-Link / pyOCD 探针连接状态"
-                                        onClick={this.detectProbe}
-                                        enabled={!this.downloadRunning}
-                                    />
-                                    <ButtonAction
-                                        text="烧录到开发板"
-                                        icon="material:system_update_alt"
-                                        title="核验固件 SHA-256 后烧录并回读校验"
-                                        onClick={this.startLocalDownload}
-                                        enabled={!this.downloadRunning}
-                                    />
-                                    <span>进度：{this.downloadProgressPct}%</span>
-                                </div>
-                                {this.probeResult && (
-                                    <div>
-                                        探针状态：
-                                        <strong style={{ color: this.probeResult.connected ? "#2ecc71" : "#f39c12" }}>
-                                            {this.probeResult.message}
-                                        </strong>
+                    {/* Step 3: LB04 */}
+                    <div style={cardStyle}>
+                        <StepBadge
+                            num={3}
+                            tone={step3Tone}
+                            title="本地受控编译（LB04）"
+                            subtitle={this.buildRecord ? `耗时 ${this.buildRecord.durationMs} ms · ${this.buildRecord.artifacts.length} 个产物` : "先过在线门禁再隔离编译"}
+                        />
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <button
+                                type="button"
+                                style={btnStyle("success", this.buildRunning)}
+                                disabled={this.buildRunning}
+                                onClick={this.startLocalBuild}
+                            >
+                                <Icon icon="material:play_arrow" size={14} />
+                                <span>{this.buildRunning ? "编译中..." : "一键本地 Build"}</span>
+                            </button>
+                        </div>
+                        <ProgressBar percent={this.buildProgress} color={this.buildRecord ? "#22c55e" : "#3b82f6"} />
+                        {this.buildRecord && (
+                            <div
+                                style={{
+                                    padding: "6px 8px",
+                                    background: "rgba(34,197,94,0.1)",
+                                    border: "1px solid #1f4d36",
+                                    borderRadius: 6,
+                                    fontSize: 11,
+                                    color: "#d1fae5",
+                                    wordBreak: "break-all"
+                                }}
+                            >
+                                {this.buildRecord.artifacts.map(a => (
+                                    <div key={a.path}>
+                                        ✓ {path.basename(a.path)} ({a.fileSize} B · {a.sha256.slice(0, 12)}…)
                                     </div>
-                                )}
-                                {this.downloadRecord && (
-                                    <div style={{ padding: 8, border: "1px solid #2ecc71", borderRadius: 4 }}>
-                                        烧录完成（探针校验：{this.downloadRecord.verifiedByProbe ? "通过" : "未确认"}
-                                        ，实板启动运行需人工目视确认）。
-                                    </div>
-                                )}
-                                {this.downloadLogs.length > 0 && (
-                                    <pre style={{ maxHeight: 140, overflow: "auto", fontSize: 12, margin: 0 }}>
-                                        {this.downloadLogs.join("\n")}
-                                    </pre>
-                                )}
+                                ))}
                             </div>
-                        }
-                    />
+                        )}
+                        {!this.props.wideMode && this.buildLogs.length > 0 && (
+                            <pre
+                                style={{
+                                    maxHeight: 96,
+                                    overflow: "auto",
+                                    fontSize: 11,
+                                    lineHeight: "15px",
+                                    padding: 6,
+                                    background: "#111316",
+                                    borderRadius: 6,
+                                    margin: 0,
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word"
+                                }}
+                            >
+                                {this.buildLogs.slice(-12).join("\n")}
+                            </pre>
+                        )}
+                    </div>
+
+                    {/* Step 4: LB05 */}
+                    <div style={cardStyle}>
+                        <StepBadge
+                            num={4}
+                            tone={step4Tone}
+                            title="本地探针与烧录（LB05）"
+                            subtitle="核验 SHA-256 + 探针读回校验"
+                        />
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button
+                                type="button"
+                                style={btnStyle("secondary", this.downloadRunning)}
+                                disabled={this.downloadRunning}
+                                onClick={this.detectProbe}
+                            >
+                                <Icon icon="material:usb" size={14} />
+                                <span>检测探针</span>
+                            </button>
+                            <button
+                                type="button"
+                                style={btnStyle("primary", this.downloadRunning)}
+                                disabled={this.downloadRunning}
+                                onClick={this.startLocalDownload}
+                            >
+                                <Icon icon="material:system_update_alt" size={14} />
+                                <span>{this.downloadRunning ? "烧录中..." : "烧录到开发板"}</span>
+                            </button>
+                        </div>
+                        <ProgressBar percent={this.downloadProgressPct} color={this.downloadRecord ? "#22c55e" : "#3b82f6"} />
+                        {this.probeResult && (
+                            <div
+                                style={{
+                                    fontSize: 11,
+                                    lineHeight: "15px",
+                                    color: this.probeResult.connected ? "#4ade80" : "#fbbf24",
+                                    wordBreak: "break-word"
+                                }}
+                            >
+                                {this.probeResult.message}
+                            </div>
+                        )}
+                        {this.downloadRecord && (
+                            <div
+                                style={{
+                                    padding: "6px 8px",
+                                    background: "rgba(34,197,94,0.1)",
+                                    border: "1px solid #1f4d36",
+                                    borderRadius: 6,
+                                    fontSize: 11,
+                                    color: "#d1fae5"
+                                }}
+                            >
+                                ✓ 烧录完成（探针校验：{this.downloadRecord.verifiedByProbe ? "通过" : "未确认"}；实板启动需人工目视确认）
+                            </div>
+                        )}
+                        {!this.props.wideMode && this.downloadLogs.length > 0 && (
+                            <pre
+                                style={{
+                                    maxHeight: 88,
+                                    overflow: "auto",
+                                    fontSize: 11,
+                                    lineHeight: "15px",
+                                    padding: 6,
+                                    background: "#111316",
+                                    borderRadius: 6,
+                                    margin: 0,
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word"
+                                }}
+                            >
+                                {this.downloadLogs.slice(-10).join("\n")}
+                            </pre>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        override render() {
+            if (this.props.wideMode) {
+                const combinedLogs = [
+                    ...this.buildLogs.map(l => `[BUILD] ${l}`),
+                    ...this.downloadLogs.map(l => `[FLASH] ${l}`)
+                ];
+                return (
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "460px 1fr",
+                            gap: 14,
+                            padding: 14,
+                            height: "100%",
+                            boxSizing: "border-box",
+                            background: "#141619",
+                            color: "#f3f4f6",
+                            overflow: "hidden"
+                        }}
+                    >
+                        <div style={{ overflow: "auto", paddingRight: 4 }}>{this.renderStepCards()}</div>
+                        <div
+                            style={{
+                                ...cardStyle,
+                                height: "100%",
+                                minHeight: 0,
+                                overflow: "hidden"
+                            }}
+                        >
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#f3f4f6" }}>
+                                实时编译与烧录终端日志
+                            </div>
+                            <pre
+                                style={{
+                                    flex: 1,
+                                    minHeight: 0,
+                                    overflow: "auto",
+                                    margin: 0,
+                                    padding: 10,
+                                    background: "#0d0f12",
+                                    border: "1px solid #262a31",
+                                    borderRadius: 6,
+                                    fontSize: 12,
+                                    lineHeight: "18px",
+                                    color: "#d1d5db",
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word"
+                                }}
+                            >
+                                {combinedLogs.length
+                                    ? combinedLogs.join("\n")
+                                    : "等待执行本地 Build 或 Download，日志将在此实时流式输出..."}
+                            </pre>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                        padding: "8px 10px 16px 10px",
+                        height: "100%",
+                        overflow: "auto",
+                        boxSizing: "border-box"
+                    }}
+                >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#d1d5db" }}>
+                            本地编译烧录向导
+                        </span>
+                        <button
+                            type="button"
+                            style={btnStyle("secondary")}
+                            onClick={this.openWideWindow}
+                            title="在独立宽窗口中打开（带实时终端日志面板）"
+                        >
+                            <Icon icon="material:open_in_new" size={13} />
+                            <span>大窗口</span>
+                        </button>
+                    </div>
+                    {this.renderStepCards()}
                 </div>
             );
         }
