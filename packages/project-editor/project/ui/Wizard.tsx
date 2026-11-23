@@ -40,9 +40,11 @@ import {
     createDigiwiseTemplate,
     listDigiwiseTemplates
 } from "home/digiwise-templates";
+import { listDigiwiseCategories } from "home/digiwise-bsp-catalog";
 import { productConfig } from "eez-studio-shared/product-config";
 import { resolveProjectTemplateFile } from "eez-studio-shared/project-templates";
 import type { DigiwiseTemplateItem } from "eez-studio-shared/digiwise-templates";
+import type { DigiwiseCategory } from "eez-studio-shared/digiwise-bsp-catalog";
 
 import {
     DASHBOARD_PROJECT_ICON,
@@ -318,6 +320,8 @@ export class WizardModel {
 
     templateProjects: TemplateProject[] = [];
     digiwiseTemplates: DigiwiseTemplateItem[] = [];
+    digiwiseCategories: DigiwiseCategory[] = [];
+    selectedCategoryCode: string | null = null;
     templateListLoading = false;
     templateListError: string | undefined;
     private templateListRequestId = 0;
@@ -371,6 +375,8 @@ export class WizardModel {
             projectVersion: observable,
             templateProjects: observable,
             digiwiseTemplates: observable,
+            digiwiseCategories: observable,
+            selectedCategoryCode: observable,
             templateListLoading: observable,
             templateListError: observable,
             projectCreationError: observable,
@@ -608,10 +614,27 @@ export class WizardModel {
         });
 
         try {
-            const result = await listDigiwiseTemplates();
+            const [result, categoriesResult] = await Promise.all([
+                listDigiwiseTemplates(),
+                listDigiwiseCategories().catch(() => ({ ok: false as const, error: { status: 502, code: "PUBLIC_API_UNAVAILABLE", message: "Unavailable", requestId: "local" } }))
+            ]);
             if (requestId !== this.templateListRequestId) {
                 return;
             }
+
+            runInAction(() => {
+                this.digiwiseCategories = categoriesResult.ok
+                    ? categoriesResult.data
+                    : [];
+                if (
+                    this.selectedCategoryCode &&
+                    !this.digiwiseCategories.some(
+                        cat => cat.categoryCode === this.selectedCategoryCode
+                    )
+                ) {
+                    this.selectedCategoryCode = null;
+                }
+            });
 
             if (!result.ok) {
                 runInAction(() => {
@@ -3298,12 +3321,20 @@ export const NewProjectWizard = observer(
             const { tempType, templateFilterType, templateFilterName } = this.state;
             const isChinese = settingsController.locale.toLowerCase().startsWith("zh");
 
-            // Filter applications by category and search name
+            // Filter applications by backend category, template sub-category and search name
             const allApps = wizardModel.projectTypes;
+            const backendCategories = wizardModel.digiwiseCategories;
+            const activeBackendCategory = wizardModel.selectedCategoryCode;
+            const categoryScopedApps = activeBackendCategory
+                ? allApps.filter(p =>
+                      !p.remoteTemplate ||
+                      p.remoteTemplate.modelCode === activeBackendCategory
+                  )
+                : allApps;
             const templateCategories = Array.from(
-                new Set(allApps.map(getTemplateCategory))
+                new Set(categoryScopedApps.map(getTemplateCategory))
             );
-            const filteredApps = allApps.filter(p => {
+            const filteredApps = categoryScopedApps.filter(p => {
                 if (templateFilterType && templateFilterType !== "All") {
                     const cat = getTemplateCategory(p);
                     if (cat !== templateFilterType) return false;
@@ -3328,19 +3359,41 @@ export const NewProjectWizard = observer(
                         disabled: wizardModel.createProjectInProgress
                     })}
                 >
-                    {/* Top tab list: LVGL version switcher (Step 1) or current LVGL version display (Step 2) */}
+                    {/* Top tab list: backend-configured categories (or LVGL version fallback) */}
                     <div className="tab-list">
                         <div className="version-tabs">
-                            {selectedApp?.remoteTemplate ? (
+                            {tempType === "create" ? (
                                 <span className="active static-title">
-                                    {remoteLvglVersion
-                                        ? `LVGL ${remoteLvglVersion}`
-                                        : labels.templateVersion}
+                                    {selectedApp?.remoteTemplate
+                                        ? (remoteLvglVersion
+                                              ? `LVGL ${remoteLvglVersion}`
+                                              : labels.templateVersion)
+                                        : (isV9 ? "LVGL9" : "LVGL8")}
                                 </span>
-                            ) : tempType === "create" ? (
-                                <span className="active static-title">
-                                    {isV9 ? "LVGL9" : "LVGL8"}
-                                </span>
+                            ) : backendCategories.length > 0 ? (
+                                <>
+                                    <span
+                                        className={activeBackendCategory === null ? "active" : ""}
+                                        onClick={action(() => {
+                                            wizardModel.selectedCategoryCode = null;
+                                            this.setState({ templateFilterType: "All" });
+                                        })}
+                                    >
+                                        {isChinese ? "全部" : "All"}
+                                    </span>
+                                    {backendCategories.map(cat => (
+                                        <span
+                                            key={cat.categoryCode}
+                                            className={activeBackendCategory === cat.categoryCode ? "active" : ""}
+                                            onClick={action(() => {
+                                                wizardModel.selectedCategoryCode = cat.categoryCode;
+                                                this.setState({ templateFilterType: "All" });
+                                            })}
+                                        >
+                                            {cat.categoryName || cat.categoryCode}
+                                        </span>
+                                    ))}
+                                </>
                             ) : (
                                 <>
                                     <span
