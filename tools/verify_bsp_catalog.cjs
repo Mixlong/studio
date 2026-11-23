@@ -93,24 +93,18 @@ const { DigiwisePublicApi } = require('../packages/main/digiwise-auth-api.ts');
             : Promise.resolve({ok:false, error:{code:'AUTH_REQUIRED'}})
     };
     Module._load = function(request, ...args) {
-        if (request === 'electron') return {ipcMain:{handle: (name, handler) => { assert(!handlers.has(name)); handlers.set(name, handler); }}};
+        if (request === 'electron') return {app:{getPath: () => require('node:os').tmpdir()}, ipcMain:{handle: (name, handler) => { assert(!handlers.has(name)); handlers.set(name, handler); }}};
         if (request === 'main/digiwise-auth') return auth;
         return load.call(this, request, ...args);
     };
-    const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../packages/main/digiwise-bsp-catalog.ts'), 'utf8');
-    const stripped = Module.stripTypeScriptTypes(source)
-        .replace('import { ipcMain, BrowserWindow } from "electron";', 'const { ipcMain } = require("electron");')
-        .replace('import { callDigiwisePublicApiWithSession, getDigiwiseAuthGuard } from "main/digiwise-auth";', 'const { callDigiwisePublicApiWithSession, getDigiwiseAuthGuard } = require("main/digiwise-auth");')
-        .replace('export function registerDigiwiseBspCatalogIpc', 'function registerDigiwiseBspCatalogIpc') + '\nmodule.exports = {registerDigiwiseBspCatalogIpc};';
-    const testModule = new Module('catalog-test', module);
-    testModule._compile(stripped, 'catalog-test.js');
-    const { registerDigiwiseBspCatalogIpc } = testModule.exports;
+    const { registerDigiwiseBspCatalogIpc } = require('../build/main/digiwise-bsp-catalog.js');
     Module._load = load;
     const sender = {mainFrame:{}, isDestroyed:() => false};
     let activeWindow = {webContents:sender, isDestroyed:() => false};
     registerDigiwiseBspCatalogIpc(() => activeWindow);
     registerDigiwiseBspCatalogIpc(() => activeWindow);
-    assert.equal(handlers.size, 2);
+    assert.equal(handlers.size, 5);
+    assert.ok(handlers.has('digistudio:bsp:categories') && handlers.has('digistudio:bsp:versions') && handlers.has('digistudio:bsp:installed') && handlers.has('digistudio:bsp:download') && handlers.has('digistudio:bsp:remove'));
     const handler = handlers.get('digistudio:bsp:categories');
     assert.throws(() => handler({sender, senderFrame:{}}), /Unauthorized/);
     assert.throws(() => handler({sender:{}, senderFrame:sender.mainFrame}), /Unauthorized/);

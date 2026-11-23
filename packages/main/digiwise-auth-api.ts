@@ -31,7 +31,7 @@ import type {
     DigiwiseChangelog,
     DigiwiseChangelogLanguage
 } from "eez-studio-shared/digiwise-changelog";
-import type { DigiwiseCategory, DigiwiseBspVersion } from "eez-studio-shared/digiwise-bsp-catalog";
+import type { DigiwiseCategory, DigiwiseBspVersion, DigiwiseBspDownloadMeta } from "eez-studio-shared/digiwise-bsp-catalog";
 
 type JsonObject = Record<string, unknown>;
 
@@ -666,6 +666,48 @@ export class DigiwisePublicApi {
         }
         return data.map(({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }) =>
             ({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }));
+    }
+
+    async prepareBspDownload(accessToken: string, bspId: number): Promise<DigiwiseBspDownloadMeta> {
+        if (!Number.isSafeInteger(bspId) || bspId <= 0) {
+            throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid BSP id", "local-validation");
+        }
+        const data = await this.request<unknown>(`bsp/${bspId}/download`, { method: "GET" }, accessToken);
+        const expiresMs = isObject(data) && typeof data.expiresAt === "string"
+            ? Date.parse(data.expiresAt)
+            : NaN;
+        if (
+            !isObject(data) ||
+            typeof data.downloadUrl !== "string" ||
+            !data.downloadUrl.trim() ||
+            !Number.isFinite(expiresMs) ||
+            expiresMs <= Date.now() ||
+            !boundedString(data.fileName, MAX_BSP_FILE_NAME_LENGTH) ||
+            !Number.isSafeInteger(data.fileSize) ||
+            (data.fileSize as number) <= 0 ||
+            (data.fileSize as number) > MAX_BSP_FILE_SIZE ||
+            typeof data.sha256 !== "string" ||
+            !SHA256_PATTERN.test(data.sha256) ||
+            !boundedString(data.version, MAX_CATALOG_STRING_LENGTH) ||
+            !boundedString(data.modelCode, MAX_CATALOG_STRING_LENGTH) ||
+            !boundedString(data.categoryCode, MAX_CATALOG_STRING_LENGTH) ||
+            (data.bspId !== undefined && (!Number.isSafeInteger(data.bspId) || (data.bspId as number) !== bspId)) ||
+            (data.modelId !== undefined && (!Number.isSafeInteger(data.modelId) || (data.modelId as number) <= 0))
+        ) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP download metadata", "bsp-download-contract");
+        }
+        return {
+            ...(data.bspId !== undefined ? { bspId: data.bspId as number } : {}),
+            ...(data.modelId !== undefined ? { modelId: data.modelId as number } : {}),
+            downloadUrl: data.downloadUrl as string,
+            expiresAt: data.expiresAt as string,
+            fileName: data.fileName as string,
+            fileSize: data.fileSize as number,
+            sha256: (data.sha256 as string).toLowerCase(),
+            version: data.version as string,
+            modelCode: data.modelCode as string,
+            categoryCode: data.categoryCode as string
+        };
     }
 
     listTemplates(accessToken: string, page: number, pageSize: number) {

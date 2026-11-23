@@ -188,6 +188,16 @@ function validateProjectName(name: string) {
     return trimmed;
 }
 
+function isAllowedDownloadProtocol(url: URL) {
+    if (url.protocol === "https:") return true;
+    return (
+        url.protocol === "http:" &&
+        (url.hostname === "127.0.0.1" ||
+            url.hostname === "localhost" ||
+            url.hostname === "::1")
+    );
+}
+
 function validateTemplateDownload(
     value: unknown,
     input: DigiwiseTemplateCreateRequest
@@ -220,7 +230,7 @@ function validateTemplateDownload(
         !Number.isFinite(Date.parse(download.expiresAt)) ||
         Date.parse(download.expiresAt) <= Date.now() ||
         !downloadUrl ||
-        downloadUrl.protocol !== "https:" ||
+        !isAllowedDownloadProtocol(downloadUrl) ||
         downloadUrl.username ||
         downloadUrl.password
     ) {
@@ -237,7 +247,7 @@ async function downloadTemplateFile(
     let currentUrl = url;
     let response: Response | undefined;
     for (let redirectCount = 0; redirectCount <= 3; redirectCount++) {
-        if (currentUrl.protocol !== "https:") {
+        if (!isAllowedDownloadProtocol(currentUrl)) {
             throw templateError(
                 "TEMPLATE_DOWNLOAD_FAILED",
                 "The template download URL must use HTTPS",
@@ -289,7 +299,7 @@ async function downloadTemplateFile(
     }
     if (response.url) {
         try {
-            if (new URL(response.url).protocol !== "https:") {
+            if (!isAllowedDownloadProtocol(new URL(response.url))) {
                 throw new Error("Insecure final URL");
             }
         } catch (_error) {
