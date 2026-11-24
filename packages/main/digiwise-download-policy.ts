@@ -28,11 +28,27 @@ export class DigiwiseDownloadRedirectError extends Error {
 
 function isLoopbackHostname(hostname: string) {
     const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    if (normalized === "localhost" || normalized === "::1") {
+    if (normalized === "localhost" || normalized === "::1" ||
+        normalized === "::") {
         return true;
     }
     if (normalized.startsWith("::ffff:")) {
-        return isLoopbackHostname(normalized.slice("::ffff:".length));
+        const mapped = normalized.slice("::ffff:".length);
+        const decimalOctets = mapped.split(".");
+        if (decimalOctets.length === 4 &&
+            decimalOctets.every(octet => /^\d{1,3}$/.test(octet))) {
+            const values = decimalOctets.map(Number);
+            return values.every(value => value <= 255) &&
+                (values[0] === 127 || values.every(value => value === 0));
+        }
+        const hexWords = mapped.split(":");
+        if (hexWords.length !== 2 ||
+            hexWords.some(word => !/^[0-9a-f]{1,4}$/.test(word))) {
+            return false;
+        }
+        const highWord = Number.parseInt(hexWords[0], 16);
+        const lowWord = Number.parseInt(hexWords[1], 16);
+        return (highWord >>> 8) === 127 || (highWord === 0 && lowWord === 0);
     }
     const octets = normalized.split(".");
     if (octets.length !== 4 ||

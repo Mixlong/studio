@@ -51,6 +51,27 @@ async function main() {
         ),
         /loopback.*external|external.*loopback/i
     );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://[::ffff:127.0.0.1]:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://[::ffff:0.0.0.0]:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://[::]:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
 
     const defaultDevelopment = createDigiwiseDownloadUrlPolicy({
         isPackaged: false,
