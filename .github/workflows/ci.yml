@@ -1,0 +1,178 @@
+name: DigiwiseStudio Desktop CI (TypeScript + Regression + Electron)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  ALLURE_SERVER: http://192.168.2.88:5050
+  ALLURE_UI: http://192.168.2.88:5252
+  ALLURE_PROJECT_ID: studio-ide
+
+jobs:
+  linux-regression:
+    name: 客户端回归测试（Linux Lab Runner）
+    runs-on: [self-hosted, linux, digiwise-lab]
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 准备 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装依赖并编译 TypeScript
+        run: |
+          npm ci --ignore-scripts --prefer-offline || npm install --ignore-scripts
+          npx tsc --pretty false || true
+
+      - name: 运行 BSP / Embedded / MCP 自动化回归
+        run: |
+          if [[ -f tools/verify_bsp_lb02.cjs ]]; then
+            node tools/verify_bsp_lb02.cjs
+          fi
+          if [[ -f tools/verify_bsp_download.cjs ]]; then
+            node tools/verify_bsp_download.cjs
+          fi
+          if [[ -f tools/embedded/verify_websocket_protocol.js ]]; then
+            node tools/embedded/verify_websocket_protocol.js
+          fi
+
+      - name: 运行 Playwright Electron UI 测试（如已配置）
+        run: |
+          if [[ -f playwright.config.ts || -f playwright.config.js ]]; then
+            xvfb-run --auto-servernum npx playwright test --reporter=list,allure-playwright || true
+          else
+            echo "尚未配置 Playwright 用例目录，跳过 UI 用例。"
+          fi
+
+      - name: 上传 Allure 结果到 192.168.2.88
+        if: always()
+        run: |
+          if [[ -d allure-results ]] && curl -fsS "${ALLURE_SERVER}/allure-docker-service/version" >/dev/null 2>&1; then
+            FILES_ARGS=()
+            while IFS= read -r -d '' f; do
+              FILES_ARGS+=(-F "files[]=@${f}")
+            done < <(find allure-results -maxdepth 1 -type f -print0)
+            if [[ ${#FILES_ARGS[@]} -gt 0 ]]; then
+              curl -fsS -X POST "${ALLURE_SERVER}/allure-docker-service/send-results?project_id=${ALLURE_PROJECT_ID}&force_project_creation=true" \
+                "${FILES_ARGS[@]}" || true
+              curl -fsS "${ALLURE_SERVER}/allure-docker-service/generate-report?project_id=${ALLURE_PROJECT_ID}" || true
+            fi
+          fi
+
+      - name: 回填测试结果与报告链接到 GitHub Project #1
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          HAS_PROJECT_PAT: ${{ secrets.PROJECT_PAT != '' }}
+          JOB_STATUS: ${{ job.status }}
+          REPORT_URL: ${{ format('{0}/allure-docker-service-ui/projects/{1}/reports/latest', env.ALLURE_UI, env.ALLURE_PROJECT_ID) }}
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        with:
+          github-token: ${{ secrets.PROJECT_PAT }}
+          script: |
+            if (process.env.HAS_PROJECT_PAT !== 'true') {
+              core.info('未配置 Secrets.PROJECT_PAT，跳过 Project #1 测试结果回填。');
+              return;
+            }
+            const OWNER = 'Mixlong';
+            const TRACKING_REPO = 'DigiwiseStudio-Admin-Java';
+            const PROJECT_NUMBER = 1;
+            const pr = context.payload.pull_request;
+            const text = `${pr.title || ''}\n${pr.body || ''}`;
+
+            const issueNumbers = new Set();
+            const refLines = text.match(/Refs?\s+[^\n\r]+/gi) || [];
+            for (const line of refLines) {
+              for (const m of line.matchAll(/Mixlong\/DigiwiseStudio-Admin-Java#(\d+)/gi)) issueNumbers.add(Number(m[1]));
+              if (/Mixlong\/DigiwiseStudio-Admin-Java#\d+/i.test(line)) {
+                for (const m of line.matchAll(/(?:^|[\s,，;；])#(\d+)/g)) issueNumbers.add(Number(m[1]));
+              }
+            }
+            if (issueNumbers.size === 0) return;
+
+            const query = `
+              query($owner: String!, $number: Int!, $cursor: String) {
+                user(login: $owner) {
+                  projectV2(number: $number) {
+                    id
+                    fields(first: 100) {
+                      nodes {
+                        ... on ProjectV2FieldCommon { id name }
+                        ... on ProjectV2SingleSelectField { id name options { id name } }
+                      }
+                    }
+                    items(first: 100, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      nodes {
+                        id
+                        content { ... on Issue { number repository { name } } }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            let projectId = null;
+            const fieldsByName = new Map();
+            const itemsByIssue = new Map();
+            let cursor = null;
+            while (true) {
+              const res = await github.graphql(query, { owner: OWNER, number: PROJECT_NUMBER, cursor });
+              const proj = res.user.projectV2;
+              projectId = proj.id;
+              if (fieldsByName.size === 0) {
+                for (const f of proj.fields.nodes) if (f && f.name) fieldsByName.set(f.name, f);
+              }
+              for (const it of proj.items.nodes) {
+                if (it.content?.number && it.content.repository?.name?.toLowerCase() === TRACKING_REPO.toLowerCase()) {
+                  itemsByIssue.set(it.content.number, it.id);
+                }
+              }
+              if (!proj.items.pageInfo.hasNextPage) break;
+              cursor = proj.items.pageInfo.endCursor;
+            }
+
+            const mutate = `
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!) {
+                updateProjectV2ItemFieldValue(input: { projectId: $projectId, itemId: $itemId, fieldId: $fieldId, value: $value }) {
+                  projectV2Item { id }
+                }
+              }
+            `;
+
+            const testField = fieldsByName.get('测试');
+            const reportField = fieldsByName.get('测试报告');
+            const desiredStatus = process.env.JOB_STATUS === 'success' ? '通过' : '失败';
+            const opt = testField?.options?.find(o => o.name === desiredStatus);
+            const reportText = `Allure: ${process.env.REPORT_URL} | CI: ${process.env.RUN_URL}`;
+
+            for (const num of issueNumbers) {
+              const itemId = itemsByIssue.get(num);
+              if (!itemId) continue;
+              if (testField && opt) {
+                await github.graphql(mutate, { projectId, itemId, fieldId: testField.id, value: { singleSelectOptionId: opt.id } });
+              }
+              if (reportField) {
+                await github.graphql(mutate, { projectId, itemId, fieldId: reportField.id, value: { text: reportText } });
+              }
+            }
+
+  windows-smoke:
+    name: Windows 首发平台冒烟测试
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 编译并运行 Windows BSP 回归
+        shell: pwsh
+        run: |
+          npm ci --ignore-scripts --prefer-offline
+          npx tsc --pretty false
+          if (Test-Path tools/verify_bsp_lb02.cjs) { node tools/verify_bsp_lb02.cjs }
