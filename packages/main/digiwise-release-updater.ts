@@ -7,6 +7,7 @@ import { join } from "path";
 import {
     callDigiwisePublicApiWithSession,
     getDigiwiseAuthGuard,
+    getDigiwiseDownloadUrlPolicy,
     onDigiwiseAuthSessionChanged
 } from "./digiwise-auth";
 import { compareSemVer, readUpdateReleaseIdentity } from "./update-discovery";
@@ -321,7 +322,11 @@ export function setupDigiwiseReleaseUpdater(
             );
             if (!signed.ok || !validGeneration(generation)) return;
             const download = validateReleaseDownload(
-                signed.data, check.release, targetPlatform, targetArch
+                signed.data,
+                check.release,
+                targetPlatform,
+                targetArch,
+                getDigiwiseDownloadUrlPolicy()
             );
             const feed = await serveAuthorizedUpdate(
                 check.release, download, targetPlatform
