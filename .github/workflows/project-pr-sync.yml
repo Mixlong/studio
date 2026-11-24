@@ -39,7 +39,7 @@ jobs:
         env:
           HAS_PROJECT_PAT: ${{ secrets.PROJECT_PAT != '' }}
         with:
-          github-token: ${{ secrets.PROJECT_PAT }}
+          github-token: ${{ secrets.PROJECT_PAT || github.token }}
           script: |
             if (process.env.HAS_PROJECT_PAT !== 'true') {
               core.warning('未配置 Secrets.PROJECT_PAT，跳过 Project #1 自动回填。');

@@ -24,6 +24,7 @@ jobs:
 
       - name: 安装依赖并编译 TypeScript
         run: |
+          npm config set registry https://registry.npmmirror.com
           npm ci --ignore-scripts --prefer-offline || npm install --ignore-scripts
           npx tsc --pretty false || true
 
@@ -71,7 +72,7 @@ jobs:
           REPORT_URL: ${{ format('{0}/allure-docker-service-ui/projects/{1}/reports/latest', env.ALLURE_UI, env.ALLURE_PROJECT_ID) }}
           RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
         with:
-          github-token: ${{ secrets.PROJECT_PAT }}
+          github-token: ${{ secrets.PROJECT_PAT || github.token }}
           script: |
             if (process.env.HAS_PROJECT_PAT !== 'true') {
               core.info('未配置 Secrets.PROJECT_PAT，跳过 Project #1 测试结果回填。');
