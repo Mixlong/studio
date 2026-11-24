@@ -28,17 +28,52 @@ jobs:
           npm ci --ignore-scripts --prefer-offline || npm install --ignore-scripts
           npx tsc --pretty false || true
 
-      - name: 运行 BSP / Embedded / MCP 自动化回归
+      - name: 运行 BSP / Embedded / MCP 自动化回归并生成 Allure 结果
         run: |
-          if [[ -f tools/verify_bsp_lb02.cjs ]]; then
-            node tools/verify_bsp_lb02.cjs
-          fi
-          if [[ -f tools/verify_bsp_download.cjs ]]; then
-            node tools/verify_bsp_download.cjs
-          fi
-          if [[ -f tools/embedded/verify_websocket_protocol.js ]]; then
-            node tools/embedded/verify_websocket_protocol.js
-          fi
+          mkdir -p allure-results
+          node -e '
+            const fs = require("fs"), cp = require("child_process"), crypto = require("crypto");
+            const tests = [
+              { name: "T04-LB02 BSP 受控下载/校验/绑定/门禁", file: "tools/verify_bsp_lb02.cjs" },
+              { name: "BSP 下载与安全解压回归", file: "tools/verify_bsp_download.cjs" },
+              { name: "嵌入式 WebSocket 协议回归", file: "tools/embedded/verify_websocket_protocol.js" },
+              { name: "字体转换器校验", file: "tools/embedded/verify_font_converter.js" },
+              { name: "自动更新发现校验", file: "tools/verify_update_discovery.cjs" }
+            ];
+            let failed = 0;
+            for (const t of tests) {
+              if (!fs.existsSync(t.file)) continue;
+              const start = Date.now();
+              const r = cp.spawnSync(process.execPath, [t.file], { encoding: "utf8" });
+              const stop = Date.now();
+              const ok = r.status === 0;
+              if (!ok) failed++;
+              console.log((ok ? "PASS" : "FAIL") + ": " + t.file);
+              if (r.stdout) process.stdout.write(r.stdout);
+              if (r.stderr) process.stderr.write(r.stderr);
+              const uuid = crypto.randomUUID();
+              const res = {
+                uuid,
+                historyId: crypto.createHash("md5").update(t.file).digest("hex"),
+                name: t.name,
+                fullName: t.file,
+                status: ok ? "passed" : "failed",
+                stage: "finished",
+                start,
+                stop,
+                labels: [
+                  { name: "suite", value: "DigiwiseStudio Regression" },
+                  { name: "framework", value: "node-assert" }
+                ],
+                statusDetails: {
+                  message: ok ? "Exit code 0" : ("Exit code " + r.status),
+                  trace: ((r.stdout || "") + "\n" + (r.stderr || "")).trim().slice(-4000)
+                }
+              };
+              fs.writeFileSync("allure-results/" + uuid + "-result.json", JSON.stringify(res, null, 2));
+            }
+            if (failed > 0) process.exit(1);
+          '
 
       - name: 运行 Playwright Electron UI 测试（如已配置）
         run: |
