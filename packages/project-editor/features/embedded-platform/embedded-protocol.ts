@@ -6,7 +6,10 @@ export type EmbeddedProtocolCommand =
     | "cmake"
     | "build"
     | "download"
-    | "transform";
+    | "transform"
+    | "cancel";
+
+export type EmbeddedExecutionMode = "real" | "mock";
 
 export type EmbeddedTransformType = "picture" | "font" | "audio";
 export type EmbeddedTransformModel = "rom" | "romxip" | "flashnormal";
@@ -14,6 +17,7 @@ export type EmbeddedTransformModel = "rom" | "romxip" | "flashnormal";
 export interface EmbeddedTestMessage {
     command: "test";
     msg?: string;
+    mode?: EmbeddedExecutionMode;
 }
 
 export interface EmbeddedLogMessage {
@@ -25,12 +29,14 @@ export interface EmbeddedCMakeMessage {
     command: "cmake";
     output_dir: string;
     config_file: string;
+    mode?: EmbeddedExecutionMode;
 }
 
 export interface EmbeddedBuildMessage {
     command: "build";
     src: string;
     dst: string;
+    mode?: EmbeddedExecutionMode;
 }
 
 export interface EmbeddedDownloadMessage {
@@ -41,12 +47,20 @@ export interface EmbeddedDownloadMessage {
     frequency: string;
     firmware: string;
     addr: string;
+    mode?: EmbeddedExecutionMode;
 }
 
 export interface EmbeddedTransformMessage {
     command: "transform";
     type: EmbeddedTransformType;
     model: EmbeddedTransformModel;
+    mode?: EmbeddedExecutionMode;
+}
+
+export interface EmbeddedCancelMessage {
+    command: "cancel";
+    operation: "cmake" | "build" | "download" | "transform";
+    mode?: EmbeddedExecutionMode;
 }
 
 export type EmbeddedOutgoingMessage =
@@ -55,6 +69,7 @@ export type EmbeddedOutgoingMessage =
     | EmbeddedCMakeMessage
     | EmbeddedDownloadMessage
     | EmbeddedTransformMessage
+    | EmbeddedCancelMessage
     | EmbeddedLogMessage;
 
 export interface EmbeddedIncomingMessage {
@@ -105,6 +120,15 @@ function requiredEnum(
     }
 }
 
+function optionalMode(message: Record<string, unknown>, errors: string[]) {
+    if (
+        message.mode !== undefined &&
+        (typeof message.mode !== "string" || !["real", "mock"].includes(message.mode))
+    ) {
+        errors.push("mode must be either real or mock when provided");
+    }
+}
+
 export function validateEmbeddedMessage(message: unknown): string[] {
     if (!isRecord(message)) {
         return ["message must be a JSON object"];
@@ -117,6 +141,7 @@ export function validateEmbeddedMessage(message: unknown): string[] {
 
     switch (message.command) {
         case "test":
+            optionalMode(message, errors);
             if (message.msg !== undefined && typeof message.msg !== "string") {
                 errors.push("msg must be a string when provided");
             }
@@ -125,14 +150,17 @@ export function validateEmbeddedMessage(message: unknown): string[] {
             requiredString(message, "data", errors);
             break;
         case "cmake":
+            optionalMode(message, errors);
             requiredString(message, "output_dir", errors);
             requiredString(message, "config_file", errors);
             break;
         case "build":
+            optionalMode(message, errors);
             requiredString(message, "src", errors);
             requiredString(message, "dst", errors);
             break;
         case "download":
+            optionalMode(message, errors);
             requiredString(message, "target", errors);
             requiredString(message, "pack", errors);
             requiredString(message, "script", errors);
@@ -141,8 +169,13 @@ export function validateEmbeddedMessage(message: unknown): string[] {
             requiredString(message, "addr", errors);
             break;
         case "transform":
+            optionalMode(message, errors);
             requiredEnum(message, "type", ["picture", "font", "audio"], errors);
             requiredEnum(message, "model", ["rom", "romxip", "flashnormal"], errors);
+            break;
+        case "cancel":
+            optionalMode(message, errors);
+            requiredEnum(message, "operation", ["cmake", "build", "download", "transform"], errors);
             break;
         default:
             errors.push(`unsupported command: ${message.command}`);
