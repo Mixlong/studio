@@ -27,7 +27,28 @@ export class DigiwiseDownloadRedirectError extends Error {
 }
 
 function isLoopbackHostname(hostname: string) {
-    return hostname === "localhost" || hostname === "127.0.0.1";
+    const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (normalized === "localhost" || normalized === "::1") {
+        return true;
+    }
+    if (normalized.startsWith("::ffff:")) {
+        return isLoopbackHostname(normalized.slice("::ffff:".length));
+    }
+    const octets = normalized.split(".");
+    if (octets.length !== 4 ||
+        octets.some(octet => !/^\d{1,3}$/.test(octet))) {
+        return false;
+    }
+    const values = octets.map(Number);
+    if (values.some(value => value > 255)) {
+        return false;
+    }
+    return values[0] === 127 || values.every(value => value === 0);
+}
+
+function isAllowedLocalHostname(hostname: string) {
+    const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return normalized === "localhost" || normalized === "127.0.0.1";
 }
 
 function isLoopbackUrl(url: URL) {
@@ -36,7 +57,7 @@ function isLoopbackUrl(url: URL) {
 
 function isLocalHttpUrl(url: URL) {
     return url.protocol === "http:" &&
-        isLoopbackUrl(url) &&
+        isAllowedLocalHostname(url.hostname) &&
         !url.username &&
         !url.password;
 }
@@ -73,6 +94,37 @@ function redirectError(error: unknown) {
     );
 }
 
+function validateTransition(
+    currentUrl: URL,
+    nextUrl: URL,
+    validate: (value: string | URL) => URL,
+    allowLocalHttp: boolean
+) {
+    try {
+        nextUrl = validate(nextUrl);
+    } catch (error) {
+        throw redirectError(error);
+    }
+
+    if (isLoopbackUrl(currentUrl) !== isLoopbackUrl(nextUrl)) {
+        throw new DigiwiseDownloadRedirectError(
+            "Download redirect must remain within the same loopback or external host class"
+        );
+    }
+    if (currentUrl.protocol === "https:" && nextUrl.protocol !== "https:") {
+        throw new DigiwiseDownloadRedirectError(
+            "Download redirect cannot downgrade HTTPS to HTTP"
+        );
+    }
+    if (allowLocalHttp && isLoopbackUrl(currentUrl) &&
+        currentUrl.hostname !== nextUrl.hostname) {
+        throw new DigiwiseDownloadRedirectError(
+            "Download redirect must remain on the same loopback host"
+        );
+    }
+    return nextUrl;
+}
+
 export function createDigiwiseDownloadUrlPolicy(
     options: DigiwiseDownloadUrlPolicyOptions
 ): DigiwiseDownloadUrlPolicy {
@@ -105,30 +157,33 @@ export function createDigiwiseDownloadUrlPolicy(
             throw redirectError(_error);
         }
 
-        try {
-            nextUrl = validate(nextUrl);
-        } catch (error) {
-            throw redirectError(error);
-        }
-
-        if (allowLocalHttp &&
-            isLoopbackUrl(currentUrl) !== isLoopbackUrl(nextUrl)) {
-            throw new DigiwiseDownloadRedirectError(
-                "Download redirect must remain within the same loopback or external host class"
-            );
-        }
-        if (allowLocalHttp && isLoopbackUrl(currentUrl) &&
-            currentUrl.hostname !== nextUrl.hostname) {
-            throw new DigiwiseDownloadRedirectError(
-                "Download redirect must remain on the same loopback host"
-            );
-        }
-        return nextUrl;
+        return validateTransition(
+            currentUrl,
+            nextUrl,
+            validate,
+            allowLocalHttp
+        );
     }
 
     function validateFinal(initial: string | URL, finalUrl: string) {
+        const currentUrl = validate(initial);
+        let absoluteFinalUrl: URL;
         try {
-            return validateRedirect(initial, finalUrl);
+            absoluteFinalUrl = new URL(finalUrl);
+        } catch (error) {
+            throw new DigiwiseDownloadRedirectError(
+                `Download final URL must be absolute${
+                    error instanceof Error ? `: ${error.message}` : ""
+                }`
+            );
+        }
+        try {
+            return validateTransition(
+                currentUrl,
+                absoluteFinalUrl,
+                validate,
+                allowLocalHttp
+            );
         } catch (error) {
             if (error instanceof DigiwiseDownloadRedirectError) {
                 throw new DigiwiseDownloadRedirectError(

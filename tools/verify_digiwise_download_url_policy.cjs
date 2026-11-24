@@ -23,6 +23,34 @@ async function main() {
         () => packaged.validate("https://user:pass@example.com/template.zip"),
         /credentials/
     );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://127.0.0.1:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://[::1]:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://127.0.0.2:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assertRejected(
+        () => packaged.validateRedirect(
+            "https://cdn.example.com/template.zip",
+            "https://0.0.0.0:8443/internal.zip"
+        ),
+        /loopback.*external|external.*loopback/i
+    );
 
     const defaultDevelopment = createDigiwiseDownloadUrlPolicy({
         isPackaged: false,
@@ -34,6 +62,28 @@ async function main() {
     );
     assertRejected(
         () => defaultDevelopment.validate("http://localhost.example.com/template.zip"),
+        /HTTPS or an explicitly allowed local HTTP URL/
+    );
+    assertRejected(
+        () => defaultDevelopment.validate("http://127.0.0.1:18080/template.zip"),
+        /HTTPS or an explicitly allowed local HTTP URL/
+    );
+    assertRejected(
+        () => defaultDevelopment.validate("http://localhost:13080/template.zip"),
+        /HTTPS or an explicitly allowed local HTTP URL/
+    );
+
+    const packagedWithLocalOptions = createDigiwiseDownloadUrlPolicy({
+        isPackaged: true,
+        allowLocalHttp: true,
+        apiBaseUrl: "http://127.0.0.1:18080/api/ide/v1"
+    });
+    assertRejected(
+        () => packagedWithLocalOptions.validate("http://127.0.0.1:18080/template.zip"),
+        /HTTPS or an explicitly allowed local HTTP URL/
+    );
+    assertRejected(
+        () => packagedWithLocalOptions.validate("http://localhost:13080/template.zip"),
         /HTTPS or an explicitly allowed local HTTP URL/
     );
 
@@ -124,6 +174,34 @@ async function main() {
         ),
         /redirect.*loopback|loopback.*redirect/i
     );
+    assertRejected(
+        () => envEnabled.validateFinal(
+            "https://127.0.0.1:18080/template.zip",
+            "http://127.0.0.1:18080/template.zip"
+        ),
+        /HTTPS.*HTTP|protocol|downgrade/i
+    );
+    assertRejected(
+        () => envEnabled.validateFinal(
+            "https://cdn.example.com/template.zip",
+            "/relative/template.zip"
+        ),
+        /absolute|final URL|invalid/i
+    );
+    assertRejected(
+        () => envEnabled.validateRedirect(
+            "http://127.0.0.1:18080/template.zip",
+            "http://localhost:13080/template.zip"
+        ),
+        /same loopback host|loopback/i
+    );
+    assertRejected(
+        () => envEnabled.validateRedirect(
+            "http://127.0.0.1:18080/template.zip",
+            "http://user:pass@127.0.0.1:18080/template.zip"
+        ),
+        /credentials/i
+    );
     assert.equal(
         envEnabled.validateRedirect(
             "https://cdn.example.com/template.zip",
@@ -159,14 +237,134 @@ async function main() {
         fetchDigiwiseDownload(
             localStart,
             envEnabled,
-            async () => new Response(null, {
-                status: 302,
-                headers: { location: "/next.zip" }
-            })
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "/next.zip" }
+                });
+            }
         ),
         /too many redirects/
     );
-    assert.equal(requests.length, 0);
+    assert.equal(requests.length, MAX_DIGIWISE_DOWNLOAD_REDIRECTS + 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            localStart,
+            envEnabled,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, { status: 302 });
+            }
+        ),
+        /redirect.*invalid/i
+    );
+    assert.equal(requests.length, 1);
+
+    requests = [];
+    const threeHopResponse = await fetchDigiwiseDownload(
+        localStart,
+        envEnabled,
+        async (url, init) => {
+            requests.push({ url: String(url), init });
+            if (requests.length <= MAX_DIGIWISE_DOWNLOAD_REDIRECTS) {
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: `/hop-${requests.length}.zip` }
+                });
+            }
+            return new Response("ok", { status: 200 });
+        }
+    );
+    assert.equal(threeHopResponse.status, 200);
+    assert.equal(requests.length, MAX_DIGIWISE_DOWNLOAD_REDIRECTS + 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            localStart,
+            envEnabled,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "https://cdn.example.com/template.zip" }
+                });
+            }
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assert.equal(requests.length, 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            "https://cdn.example.com/template.zip",
+            packaged,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "https://127.0.0.1:8443/internal.zip" }
+                });
+            }
+        ),
+        /loopback.*external|external.*loopback/i
+    );
+    assert.equal(requests.length, 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            "https://127.0.0.1:18080/template.zip",
+            envEnabled,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "http://127.0.0.1:18080/final.zip" }
+                });
+            }
+        ),
+        /HTTPS.*HTTP|protocol|downgrade/i
+    );
+    assert.equal(requests.length, 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            localStart,
+            envEnabled,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "http://localhost:13080/final.zip" }
+                });
+            }
+        ),
+        /same loopback host|loopback/i
+    );
+    assert.equal(requests.length, 1);
+
+    requests = [];
+    await assert.rejects(
+        fetchDigiwiseDownload(
+            localStart,
+            envEnabled,
+            async (url, init) => {
+                requests.push({ url: String(url), init });
+                return new Response(null, {
+                    status: 302,
+                    headers: { location: "http://user:pass@127.0.0.1:18080/final.zip" }
+                });
+            }
+        ),
+        /credentials/i
+    );
+    assert.equal(requests.length, 1);
 
     await assert.rejects(
         fetchDigiwiseDownload(
