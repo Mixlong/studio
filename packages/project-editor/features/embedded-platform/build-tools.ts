@@ -17,6 +17,10 @@ import type {
     ProtocolResource
 } from "project-editor/features/embedded-platform/embedded-platform";
 import {
+    readManagedBspConfiguration,
+    type ManagedBspConfiguration
+} from "project-editor/features/embedded-platform/managed-bsp-manifest";
+import {
     DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY,
     getEmbeddedWebSocketEndpoint
 } from "project-editor/features/embedded-platform/embedded-platform";
@@ -238,6 +242,14 @@ function isWebSocketEnabled(platform: EmbeddedPlatform) {
     return platform.websocket?.enabled === true;
 }
 
+function isMockExecution(platform: EmbeddedPlatform) {
+    return platform.executionMode === "mock";
+}
+
+function executionPrefix(platform: EmbeddedPlatform) {
+    return isMockExecution(platform) ? "[模拟环境 / MOCK] " : "";
+}
+
 function normalizeRemotePath(value: string) {
     return value.trim().replace(/\\/g, "/");
 }
@@ -252,17 +264,6 @@ function getMissingRemoteBuildField(platform: EmbeddedPlatform) {
     }
     if (!build.outputDirectory.trim()) {
         return "Build directory (remote)";
-    }
-    return undefined;
-}
-
-function getMissingRemoteDownloadField(platform: EmbeddedPlatform) {
-    const download = platform.remote.download;
-    if (!download.target.trim()) {
-        return "Target identifier";
-    }
-    if (!download.firmwarePath.trim()) {
-        return "Firmware path (remote)";
     }
     return undefined;
 }
@@ -384,7 +385,20 @@ async function sendEmbeddedWebSocketCommand(
     const completion = command
         ? waitForRemoteCommandCompletion(projectStore, command)
         : undefined;
-    const cancelRemoteCommand = completion ? () => completion.cancel() : undefined;
+    const cancelRemoteCommand = completion
+        ? () => {
+              void client
+                  .send({
+                      command: "cancel",
+                      operation: command!,
+                      mode: isMockExecution(projectStore.project.embeddedPlatform)
+                          ? "mock"
+                          : "real"
+                  })
+                  .catch(() => undefined);
+              completion.cancel();
+          }
+        : undefined;
     if (cancelRemoteCommand) {
         websocketOperationCancellers.set(projectStore, cancelRemoteCommand);
     }
@@ -396,7 +410,11 @@ async function sendEmbeddedWebSocketCommand(
             ? await completion.promise
             : { success: true, message: "" };
         if (!completionResult.success) {
-            output(projectStore, MessageType.ERROR, completionResult.message);
+            output(
+                projectStore,
+                MessageType.ERROR,
+                `${executionPrefix(projectStore.project.embeddedPlatform)}${completionResult.message}`
+            );
             return {
                 success: false,
                 message: completionResult.message,
@@ -410,9 +428,11 @@ async function sendEmbeddedWebSocketCommand(
             options.onProgress?.(100);
         }
 
-        const resultMessage = command
-            ? `WebSocket ${command} command completed.`
-            : `WebSocket ${message.command} command sent.`;
+        const resultMessage = `${executionPrefix(projectStore.project.embeddedPlatform)}${
+            command
+                ? `WebSocket ${command} command completed.`
+                : `WebSocket ${message.command} command sent.`
+        }`;
         output(projectStore, MessageType.INFO, resultMessage);
         return {
             success: true,
@@ -421,7 +441,7 @@ async function sendEmbeddedWebSocketCommand(
         };
     } catch (error) {
         completion?.cancel();
-        const resultMessage = `WebSocket ${message.command} command failed: ${error}`;
+        const resultMessage = `${executionPrefix(projectStore.project.embeddedPlatform)}WebSocket ${message.command} command failed: ${error}`;
         output(projectStore, MessageType.ERROR, resultMessage);
         return {
             success: false,
@@ -571,6 +591,11 @@ export async function synchronizeEmbeddedResources(
     const projectRoot = projectDirectory(projectStore);
     const platform = projectStore.project.embeddedPlatform;
     const outputDirectory = getOutputDirectory(projectStore, platform);
+    const managedBsp = getManagedBspConfiguration(
+        projectStore,
+        platform,
+        outputDirectory
+    );
     const audioDirectory = path.join(projectRoot, "audio");
     const protocolDirectory = path.join(projectRoot, "protocol");
     const assetOutputDirectory = projectStore.getAbsoluteFilePath(
@@ -657,16 +682,20 @@ export async function synchronizeEmbeddedResources(
     const generatedDirectory = path.join(outputDirectory, "generated");
     await fs.promises.mkdir(generatedDirectory, { recursive: true });
 
-    const cmakeListsPath = resolveConfiguredPath(
-        projectStore,
-        platform.bsp.cmakeListsPath ||
-            (platform.bsp.rootPath
-                ? path.join(platform.bsp.rootPath, "CMakeLists.txt")
-                : "")
-    );
-    const bspMakefilePath = platform.bsp.rootPath
-        ? path.join(resolveConfiguredPath(projectStore, platform.bsp.rootPath), "Makefile")
-        : "";
+    const cmakeListsPath =
+        managedBsp?.cmakeListsPath ||
+        resolveConfiguredPath(
+            projectStore,
+            platform.bsp.cmakeListsPath ||
+                (platform.bsp.rootPath
+                    ? path.join(platform.bsp.rootPath, "CMakeLists.txt")
+                    : "")
+        );
+    const bspMakefilePath = managedBsp
+        ? path.join(managedBsp.sourceDirectory, "Makefile")
+        : platform.bsp.rootPath
+          ? path.join(resolveConfiguredPath(projectStore, platform.bsp.rootPath), "Makefile")
+          : "";
     const cmakeBasePath = cmakeListsPath
         ? path.dirname(cmakeListsPath)
         : projectRoot;
@@ -789,7 +818,11 @@ export function stopEmbeddedOperation(projectStore: ProjectStore) {
     if (cancelRemoteCommand) {
         cancelRemoteCommand();
         websocketOperationCancellers.delete(projectStore);
-        output(projectStore, MessageType.WARNING, "Remote embedded operation stopped by user.");
+        output(
+            projectStore,
+            MessageType.WARNING,
+            `${executionPrefix(projectStore.project.embeddedPlatform)}Remote embedded operation stopped by user.`
+        );
         return true;
     }
 
@@ -800,11 +833,36 @@ export function stopEmbeddedOperation(projectStore: ProjectStore) {
 
     process.kill();
     activeProcesses.delete(projectStore);
-    output(projectStore, MessageType.WARNING, "Embedded operation stopped by user.");
+    output(
+        projectStore,
+        MessageType.WARNING,
+        `${executionPrefix(projectStore.project.embeddedPlatform)}Embedded operation stopped by user.`
+    );
     return true;
 }
 
-function getBspSourceDirectory(projectStore: ProjectStore, platform: EmbeddedPlatform) {
+function getManagedBspConfiguration(
+    projectStore: ProjectStore,
+    platform: EmbeddedPlatform,
+    outputDirectory = getOutputDirectory(projectStore, platform)
+): ManagedBspConfiguration | undefined {
+    if (!platform.bsp.rootPath) {
+        return undefined;
+    }
+    return readManagedBspConfiguration(
+        resolveConfiguredPath(projectStore, platform.bsp.rootPath),
+        outputDirectory
+    );
+}
+
+function getBspSourceDirectory(
+    projectStore: ProjectStore,
+    platform: EmbeddedPlatform,
+    managedBsp?: ManagedBspConfiguration
+) {
+    if (managedBsp) {
+        return managedBsp.sourceDirectory;
+    }
     if (platform.bsp.rootPath) {
         return resolveConfiguredPath(projectStore, platform.bsp.rootPath);
     }
@@ -823,6 +881,13 @@ export async function runEmbeddedBuild(
     const platform = projectStore.project.embeddedPlatform;
     options.onProgress?.(0);
 
+    if (isMockExecution(platform) && !isWebSocketEnabled(platform)) {
+        const message =
+            "[模拟环境 / MOCK] Enable the local middleware WebSocket before starting a mock build.";
+        output(projectStore, MessageType.ERROR, message);
+        return { success: false, message };
+    }
+
     if (isWebSocketEnabled(platform)) {
         const missingField = getMissingRemoteBuildField(platform);
         if (missingField) {
@@ -837,7 +902,8 @@ export async function runEmbeddedBuild(
             {
                 command: "cmake",
                 output_dir: normalizeRemotePath(remoteBuild.projectDirectory),
-                config_file: normalizeRemotePath(remoteBuild.configFile)
+                config_file: normalizeRemotePath(remoteBuild.configFile),
+                mode: isMockExecution(platform) ? "mock" : "real"
             },
             options,
             { outputDirectory: normalizeRemotePath(remoteBuild.outputDirectory) }
@@ -851,7 +917,8 @@ export async function runEmbeddedBuild(
             {
                 command: "build",
                 src: normalizeRemotePath(remoteBuild.projectDirectory),
-                dst: normalizeRemotePath(remoteBuild.outputDirectory)
+                dst: normalizeRemotePath(remoteBuild.outputDirectory),
+                mode: isMockExecution(platform) ? "mock" : "real"
             },
             options,
             { outputDirectory: normalizeRemotePath(remoteBuild.outputDirectory) }
@@ -873,7 +940,12 @@ export async function runEmbeddedBuild(
     }
 
     const outputDirectory = getOutputDirectory(projectStore, platform);
-    const sourceDirectory = getBspSourceDirectory(projectStore, platform);
+    const managedBsp = getManagedBspConfiguration(
+        projectStore,
+        platform,
+        outputDirectory
+    );
+    const sourceDirectory = getBspSourceDirectory(projectStore, platform, managedBsp);
     const cwd = projectDirectory(projectStore);
 
     try {
@@ -908,15 +980,23 @@ export async function runEmbeddedBuild(
             }
 
             const configureArgs = ["-S", sourceDirectory, "-B", outputDirectory];
-            if (platform.build.cmakeGenerator) {
-                configureArgs.push("-G", platform.build.cmakeGenerator);
+            const cmakeGenerator =
+                managedBsp?.generator || platform.build.cmakeGenerator;
+            if (cmakeGenerator) {
+                configureArgs.push("-G", cmakeGenerator);
             }
-            if (platform.bsp.toolchainFile) {
+            if (managedBsp?.toolchainFile || platform.bsp.toolchainFile) {
                 configureArgs.push(
-                    `-DCMAKE_TOOLCHAIN_FILE=${resolveConfiguredPath(projectStore, platform.bsp.toolchainFile)}`
+                    `-DCMAKE_TOOLCHAIN_FILE=${managedBsp?.toolchainFile || resolveConfiguredPath(projectStore, platform.bsp.toolchainFile)}`
                 );
             }
-            configureArgs.push(...tokenizeArguments(platform.build.extraArguments));
+            if (managedBsp?.generator) {
+                configureArgs.push("-G", managedBsp.generator);
+            }
+            configureArgs.push(
+                ...(managedBsp?.extraArguments || []),
+                ...tokenizeArguments(platform.build.extraArguments)
+            );
 
             const configureCode = await runCommand(
                 projectStore,
@@ -952,12 +1032,15 @@ export async function runEmbeddedBuild(
     }
 
     options.onProgress?.(100);
-    const message = "Firmware build completed.";
+    const message = `${executionPrefix(platform)}Firmware build completed.`;
     output(projectStore, MessageType.INFO, message);
     return { success: true, message, outputDirectory };
 }
 
-function findFirmwareFile(outputDirectory: string) {
+function findFirmwareFile(
+    outputDirectory: string,
+    managedBsp?: ManagedBspConfiguration
+) {
     const candidates = [
         "firmware.bin",
         "firmware.hex",
@@ -965,6 +1048,7 @@ function findFirmwareFile(outputDirectory: string) {
         "app.bin",
         "app.hex"
     ].map(name => path.join(outputDirectory, name));
+    candidates.unshift(...(managedBsp?.firmwareCandidates || []));
     return candidates.find(candidate => fs.existsSync(candidate));
 }
 
@@ -1024,7 +1108,11 @@ export async function detectEmbeddedTarget(
     if (isWebSocketEnabled(platform)) {
         return sendEmbeddedWebSocketCommand(
             projectStore,
-            { command: "test", msg: "Studio WebSocket connection test" },
+            {
+                command: "test",
+                msg: "Studio WebSocket connection test",
+                mode: isMockExecution(platform) ? "mock" : "real"
+            },
             {}
         );
     }
@@ -1069,7 +1157,12 @@ export async function runEmbeddedTransform(
 
     return sendEmbeddedWebSocketCommand(
         projectStore,
-        { command: "transform", type, model },
+        {
+            command: "transform",
+            type,
+            model,
+            mode: isMockExecution(platform) ? "mock" : "real"
+        },
         options
     );
 }
@@ -1082,26 +1175,46 @@ export async function runEmbeddedDownload(
     const platform = projectStore.project.embeddedPlatform;
     const settings = platform.download;
 
+    if (isMockExecution(platform) && !isWebSocketEnabled(platform)) {
+        const message =
+            "[模拟环境 / MOCK] Enable the local middleware WebSocket before starting a mock download.";
+        output(projectStore, MessageType.ERROR, message);
+        return { success: false, message };
+    }
+
     if (isWebSocketEnabled(platform)) {
-        const missingField = getMissingRemoteDownloadField(platform);
+        const remoteDownload = platform.remote.download;
+        const managedBsp = getManagedBspConfiguration(
+            projectStore,
+            platform,
+            getOutputDirectory(projectStore, platform)
+        );
+        const manifestDownload = managedBsp?.download;
+        const effectiveTarget = (manifestDownload?.target || remoteDownload.target).trim();
+        const effectiveFirmware = remoteDownload.firmwarePath.trim();
+        const missingField = !effectiveTarget
+            ? "Target identifier"
+            : !effectiveFirmware
+              ? "Firmware path (remote)"
+              : undefined;
         if (missingField) {
             const message = `Set ${missingField} before starting the remote firmware download.`;
             output(projectStore, MessageType.ERROR, message);
             return { success: false, message };
         }
 
-        const remoteDownload = platform.remote.download;
         const remoteFirmwarePath = normalizeRemotePath(remoteDownload.firmwarePath);
         return sendEmbeddedWebSocketCommand(
             projectStore,
             {
                 command: "download",
-                target: remoteDownload.target.trim(),
-                pack: remoteDownload.pack.trim() || "null",
-                script: remoteDownload.script.trim() || "null",
-                frequency: remoteDownload.frequency.trim() || "500000",
+                target: effectiveTarget,
+                pack: (manifestDownload?.pack || remoteDownload.pack).trim() || "null",
+                script: (manifestDownload?.script || remoteDownload.script).trim() || "null",
+                frequency: (manifestDownload?.frequency || remoteDownload.frequency).trim() || "500000",
                 firmware: remoteFirmwarePath,
-                addr: remoteDownload.addressOffset.trim() || "0x0"
+                addr: (manifestDownload?.address || remoteDownload.addressOffset).trim() || "0x0",
+                mode: isMockExecution(platform) ? "mock" : "real"
             },
             options,
             { outputDirectory: normalizeRemotePath(platform.remote.build.outputDirectory), firmwarePath: remoteFirmwarePath }
@@ -1109,7 +1222,12 @@ export async function runEmbeddedDownload(
     }
 
     const outputDirectory = getOutputDirectory(projectStore, platform);
-    const resolvedFirmware = firmwarePath || findFirmwareFile(outputDirectory);
+    const managedBsp = getManagedBspConfiguration(
+        projectStore,
+        platform,
+        outputDirectory
+    );
+    const resolvedFirmware = firmwarePath || findFirmwareFile(outputDirectory, managedBsp);
 
     if (!resolvedFirmware || !fs.existsSync(resolvedFirmware)) {
         const message = "No firmware image was found. Build the firmware or choose a .bin/.hex file.";
@@ -1148,10 +1266,11 @@ export async function runEmbeddedDownload(
             projectDirectory(projectStore),
             options
         );
-        const message =
+        const message = `${executionPrefix(platform)}${
             code === 0
                 ? "Firmware download completed."
-                : `Firmware download exited with code ${code}.`;
+                : `Firmware download exited with code ${code}.`
+        }`;
         output(projectStore, code === 0 ? MessageType.INFO : MessageType.ERROR, message);
         options.onProgress?.(code === 0 ? 100 : 0);
         return {
@@ -1161,7 +1280,7 @@ export async function runEmbeddedDownload(
             firmwarePath: resolvedFirmware
         };
     } catch (error) {
-        const message = `Firmware download could not be started: ${error}`;
+        const message = `${executionPrefix(platform)}Firmware download could not be started: ${error}`;
         output(projectStore, MessageType.ERROR, message);
         return {
             success: false,

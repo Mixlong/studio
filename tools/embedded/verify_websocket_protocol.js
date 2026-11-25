@@ -33,7 +33,8 @@ const messages = [
         firmware: "Project.bin",
         addr: "0x08000000"
     },
-    { command: "transform", type: "picture", model: "rom" }
+    { command: "transform", type: "picture", model: "rom" },
+    { command: "cancel", operation: "build", mode: "mock" }
 ];
 
 for (const message of messages) {
@@ -70,6 +71,10 @@ assert(
         model: "non-xip"
     }).length > 0,
     "legacy transform models must be rejected"
+);
+assert(
+    validateEmbeddedMessage({ command: "cancel", operation: "unsupported" }).length > 0,
+    "cancel must name a supported operation"
 );
 assert.throws(
     () => serializeEmbeddedMessage({ command: "build", src: "", dst: "./build" }),
