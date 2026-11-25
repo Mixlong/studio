@@ -70,10 +70,32 @@ function renderProgress(value: number) {
     );
 }
 
+function isMockExecution(platform: EmbeddedPlatform) {
+    return platform.executionMode === "mock";
+}
+
+function renderExecutionModeBadge(platform: EmbeddedPlatform) {
+    return (
+        <span
+            className={`EezStudio_EmbeddedPlatform_ModeBadge${
+                isMockExecution(platform) ? " is-mock" : ""
+            }`}
+            aria-label={
+                isMockExecution(platform)
+                    ? "模拟环境 / MOCK"
+                    : "真实设备模式"
+            }
+        >
+            {isMockExecution(platform) ? "[模拟环境 / MOCK]" : "真实设备"}
+        </span>
+    );
+}
+
 const REMOTE_FIRMWARE_BUILD_PANEL_ID = "eez-embedded-build-v2";
 
 export function showEmbeddedBuildWindow(projectStore: ProjectStore) {
     const remoteMode = projectStore.project.embeddedPlatform.websocket?.enabled === true;
+    const mockMode = isMockExecution(projectStore.project.embeddedPlatform);
     showDialog(
         <ProjectContext.Provider value={projectStore}>
             <EmbeddedBuildWindow />
@@ -81,7 +103,11 @@ export function showEmbeddedBuildWindow(projectStore: ProjectStore) {
         {
             jsPanel: {
                 id: remoteMode ? REMOTE_FIRMWARE_BUILD_PANEL_ID : "eez-embedded-build",
-                title: remoteMode ? "Remote Firmware Build" : "Embedded Firmware Build",
+                title: mockMode
+                    ? "[模拟环境 / MOCK] Firmware Build"
+                    : remoteMode
+                      ? "Remote Firmware Build"
+                      : "Embedded Firmware Build",
                 width: remoteMode ? 1180 : 1060,
                 height: 760,
                 headerControls: {
@@ -97,6 +123,7 @@ export function showEmbeddedBuildWindow(projectStore: ProjectStore) {
 
 export function showEmbeddedDownloadWindow(projectStore: ProjectStore) {
     const remoteMode = projectStore.project.embeddedPlatform.websocket?.enabled === true;
+    const mockMode = isMockExecution(projectStore.project.embeddedPlatform);
     showDialog(
         <ProjectContext.Provider value={projectStore}>
             {remoteMode ? <EmbeddedBuildWindow /> : <EmbeddedDownloadWindow />}
@@ -106,7 +133,11 @@ export function showEmbeddedDownloadWindow(projectStore: ProjectStore) {
                 id: remoteMode
                     ? REMOTE_FIRMWARE_BUILD_PANEL_ID
                     : "eez-embedded-download",
-                title: remoteMode ? "Remote Firmware Build" : "Firmware Download",
+                title: mockMode
+                    ? "[模拟环境 / MOCK] Firmware Download"
+                    : remoteMode
+                      ? "Remote Firmware Build"
+                      : "Firmware Download",
                 width: remoteMode ? 1180 : 980,
                 height: remoteMode ? 760 : 700,
                 headerControls: {
@@ -484,6 +515,32 @@ export const EmbeddedPlatformTab = observer(
                     return (
                         <>
                             <Panel
+                                id="embedded-execution-mode"
+                                title="Execution Mode"
+                                body={
+                                    <div className="EezStudio_EmbeddedPlatform_ExecutionMode">
+                                        <label>
+                                            <span>Run target</span>
+                                            <select
+                                                aria-label="Execution mode"
+                                                value={platform.executionMode || "real"}
+                                                onChange={event =>
+                                                    (platform.executionMode = event.target.value as "real" | "mock")
+                                                }
+                                            >
+                                                <option value="real">Real device</option>
+                                                <option value="mock">Mock / software only</option>
+                                            </select>
+                                        </label>
+                                        {isMockExecution(platform) && (
+                                            <span className="EezStudio_EmbeddedPlatform_MockHint">
+                                                A-stage software loop only; no hardware is flashed.
+                                            </span>
+                                        )}
+                                    </div>
+                                }
+                            />
+                            <Panel
                                 id="embedded-websocket"
                                 title="Middleware WebSocket"
                                 body={
@@ -537,6 +594,7 @@ export const EmbeddedPlatformTab = observer(
                         <div className="EezStudio_EmbeddedPlatform_Title">
                             <Icon icon="material:developer_board" size={22} />
                             <span>Embedded Platform</span>
+                            {renderExecutionModeBadge(platform)}
                         </div>
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_Content">
@@ -623,7 +681,9 @@ export const EmbeddedPlatformTab = observer(
                         <span className="EezStudio_EmbeddedPlatform_StatusDot" />
                         <span>Ready</span>
                         <span>
-                            {platform.websocket.enabled
+                            {isMockExecution(platform)
+                                ? "Software-only simulation"
+                                : platform.websocket.enabled
                                 ? "Remote project"
                                 : platform.bsp.name || "No target configured"}
                         </span>
@@ -1293,7 +1353,7 @@ const EmbeddedBuildWindow = observer(
             });
             const result = await connectEmbeddedWebSocket(this.context);
             runInAction(() => {
-                this.status = result.message;
+                this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}${result.message}`;
             });
         }
 
@@ -1326,15 +1386,13 @@ const EmbeddedBuildWindow = observer(
                     this.appendLog(
                         "[WebSocket] disconnected. Click Retry Remote Download to restart."
                     );
-                    this.status =
-                        "WebSocket disconnected. Click Retry Remote Download to restart the download.";
+                    this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}WebSocket disconnected. Click Retry Remote Download to restart the download.`;
                 } else {
                     this.lastRunFailed = true;
                     this.appendLog(
                         "[WebSocket] disconnected. Click Retry Remote Build to restart."
                     );
-                    this.status =
-                        "WebSocket disconnected. Click Retry Remote Build to restart cmake and build.";
+                    this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}WebSocket disconnected. Click Retry Remote Build to restart cmake and build.`;
                 }
             }
         }
@@ -1353,9 +1411,11 @@ const EmbeddedBuildWindow = observer(
             this.buildCompleted = false;
             this.logs = [];
             this.followLogs = true;
-            this.status = remoteMode
-                ? "Sending remote cmake and build commands..."
-                : "Generating resources and building firmware...";
+            this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}${
+                remoteMode
+                    ? "Sending remote cmake and build commands..."
+                    : "Generating resources and building firmware..."
+            }`;
             try {
                 const result = await runEmbeddedBuild(this.context, {
                     onProgress: value =>
@@ -1372,7 +1432,7 @@ const EmbeddedBuildWindow = observer(
                     this.buildCompleted = remoteMode && result.success;
                     this.status = result.success
                         ? result.message
-                        : `${result.message} Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
+                        : `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}${result.message} Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
                 });
             } catch (error) {
                 runInAction(() => {
@@ -1380,7 +1440,7 @@ const EmbeddedBuildWindow = observer(
                     this.operation = undefined;
                     this.lastRunFailed = true;
                     this.buildCompleted = false;
-                    this.status = `Build failed: ${error}. Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
+                    this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Build failed: ${error}. Click ${remoteMode ? "Retry Remote Build" : "Start Build"} to try again.`;
                 });
             }
         }
@@ -1394,8 +1454,8 @@ const EmbeddedBuildWindow = observer(
             this.operation = "download";
             this.progress = 0;
             this.lastDownloadFailed = false;
-            this.status = "Sending remote download command...";
-            this.appendLog("[Remote Download] Starting firmware download...");
+            this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Sending remote download command...`;
+            this.appendLog(`${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}[Remote Download] Starting firmware download...`);
             try {
                 const result = await runEmbeddedDownload(this.context, undefined, {
                     onProgress: value =>
@@ -1411,7 +1471,7 @@ const EmbeddedBuildWindow = observer(
                     this.lastDownloadFailed = !result.success;
                     this.status = result.success
                         ? result.message
-                        : `${result.message} Click Retry Remote Download to try again.`;
+                        : `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}${result.message} Click Retry Remote Download to try again.`;
                 });
                 this.appendLog(`[Remote Download] ${result.message}`);
             } catch (error) {
@@ -1419,7 +1479,7 @@ const EmbeddedBuildWindow = observer(
                     this.running = false;
                     this.operation = undefined;
                     this.lastDownloadFailed = true;
-                    this.status = `Download failed: ${error}. Click Retry Remote Download to try again.`;
+                    this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Download failed: ${error}. Click Retry Remote Download to try again.`;
                 });
                 this.appendLog(`[Remote Download] Download failed: ${error}`);
             }
@@ -1428,7 +1488,7 @@ const EmbeddedBuildWindow = observer(
         async transform() {
             this.running = true;
             this.progress = 0;
-            this.status = "Sending resource transform command...";
+            this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Sending resource transform command...`;
             const result = await runEmbeddedTransform(
                 this.context,
                 this.transformType,
@@ -1442,7 +1502,7 @@ const EmbeddedBuildWindow = observer(
             );
             runInAction(() => {
                 this.running = false;
-                this.status = result.message;
+                this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}${result.message}`;
             });
         }
 
@@ -1453,11 +1513,11 @@ const EmbeddedBuildWindow = observer(
             this.operation = undefined;
             if (operation === "download") {
                 this.lastDownloadFailed = true;
-                this.status = "Download stopped. Click Retry Remote Download to try again.";
+                this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Download stopped. Click Retry Remote Download to try again.`;
             } else {
                 this.lastRunFailed = true;
                 this.buildCompleted = false;
-                this.status = "Build stopped. Click Retry Remote Build to try again.";
+                this.status = `${isMockExecution(this.context.project.embeddedPlatform) ? "[模拟环境 / MOCK] " : ""}Build stopped. Click Retry Remote Build to try again.`;
             }
         }
 
@@ -1573,7 +1633,9 @@ const EmbeddedBuildWindow = observer(
                         )}
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_WindowFooter">
-                        <div className="EezStudio_EmbeddedPlatform_Status">{this.status}</div>
+                        <div className="EezStudio_EmbeddedPlatform_Status">
+                            {renderExecutionModeBadge(platform)} {this.status}
+                        </div>
                         {renderProgress(this.progress)}
                         <div className="EezStudio_EmbeddedPlatform_Actions">
                             {remoteMode && this.buildCompleted ? (
@@ -1759,7 +1821,9 @@ const EmbeddedDownloadWindow = observer(
                         )}
                     </div>
                     <div className="EezStudio_EmbeddedPlatform_WindowFooter">
-                        <div className="EezStudio_EmbeddedPlatform_Status">{this.status}</div>
+                        <div className="EezStudio_EmbeddedPlatform_Status">
+                            {renderExecutionModeBadge(platform)} {this.status}
+                        </div>
                         {renderProgress(this.progress)}
                         <div className="EezStudio_EmbeddedPlatform_Actions">
                             <ButtonAction

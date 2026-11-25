@@ -65,15 +65,24 @@ function sendLog(socket, data) {
     sendMessage(socket, { command: "log", data });
 }
 
+function modePrefix(message) {
+    return message?.mode === "mock" ? "[模拟环境 / MOCK] MOCK_SIMULATED " : "";
+}
+
 function wait(milliseconds) {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
 }
 
-async function sendProgress(socket, label, values = [0, 50, 100]) {
+async function sendProgress(socket, label, operation, values = [0, 50, 100]) {
     for (const value of values) {
-        sendLog(socket, `${label} ${value}%`);
+        if (operation.cancelled) {
+            sendLog(socket, `${operation.prefix}${label} cancelled`);
+            return false;
+        }
+        sendLog(socket, `${operation.prefix}${label} ${value}%`);
         await wait(120);
     }
+    return !operation.cancelled;
 }
 
 function createDemoFirmware(root, destination) {
@@ -95,12 +104,25 @@ async function handleMessage(socket, message, root) {
     switch (message.command) {
         case "test":
             sendMessage(socket, message);
-            sendLog(socket, "middleware test ok");
+            sendLog(socket, `${modePrefix(message)}middleware test ok`);
             return;
         case "log":
             sendLog(socket, `studio log: ${String(message.data || "")}`);
             return;
+        case "cancel": {
+            const operation = socket.__demoOperations?.get(message.operation);
+            if (operation) {
+                operation.cancelled = true;
+            }
+            return;
+        }
         case "cmake": {
+            const operation = {
+                cancelled: false,
+                prefix: modePrefix(message)
+            };
+            socket.__demoOperations ||= new Map();
+            socket.__demoOperations.set("cmake", operation);
             try {
                 resolveInsideRoot(root, message.output_dir || "./");
                 const configFile = resolveInsideRoot(root, message.config_file || "");
@@ -111,35 +133,64 @@ async function handleMessage(socket, message, root) {
                     socket,
                     `cmake output=${message.output_dir} config=${message.config_file}`
                 );
-                await sendProgress(socket, "cmake");
-                sendLog(socket, "cmake completed");
+                if (await sendProgress(socket, "cmake", operation)) {
+                    sendLog(socket, `${operation.prefix}cmake completed`);
+                }
             } catch (error) {
-                sendLog(socket, `cmake failed: ${error.message || error}`);
+                sendLog(socket, `${operation.prefix}cmake failed: ${error.message || error}`);
+            } finally {
+                socket.__demoOperations.delete("cmake");
             }
             return;
         }
         case "transform":
-            sendLog(socket, `transform ${message.type} ${message.model} started`);
-            await sendProgress(socket, "transform");
-            sendLog(socket, "transform completed");
+            {
+                const operation = {
+                    cancelled: false,
+                    prefix: modePrefix(message)
+                };
+                socket.__demoOperations ||= new Map();
+                socket.__demoOperations.set("transform", operation);
+                sendLog(socket, `${operation.prefix}transform ${message.type} ${message.model} started`);
+                if (await sendProgress(socket, "transform", operation)) {
+                    sendLog(socket, `${operation.prefix}transform completed`);
+                }
+                socket.__demoOperations.delete("transform");
+            }
             return;
         case "build": {
+            const operation = {
+                cancelled: false,
+                prefix: modePrefix(message)
+            };
+            socket.__demoOperations ||= new Map();
+            socket.__demoOperations.set("build", operation);
             try {
                 const source = resolveInsideRoot(root, message.src || "");
                 const destination = resolveInsideRoot(root, message.dst || "");
                 if (!fs.existsSync(source)) {
                     throw new Error(`source does not exist: ${message.src}`);
                 }
-                sendLog(socket, `build source=${message.src} destination=${message.dst}`);
-                await sendProgress(socket, "build");
+                sendLog(socket, `${operation.prefix}build source=${message.src} destination=${message.dst}`);
+                if (!(await sendProgress(socket, "build", operation))) {
+                    return;
+                }
                 const firmware = createDemoFirmware(root, destination);
-                sendLog(socket, `build completed: ${firmware}`);
+                sendLog(socket, `${operation.prefix}build completed: ${firmware}`);
             } catch (error) {
-                sendLog(socket, `build failed: ${error.message || error}`);
+                sendLog(socket, `${operation.prefix}build failed: ${error.message || error}`);
+            } finally {
+                socket.__demoOperations.delete("build");
             }
             return;
         }
         case "download": {
+            const operation = {
+                cancelled: false,
+                prefix: modePrefix(message)
+            };
+            socket.__demoOperations ||= new Map();
+            socket.__demoOperations.set("download", operation);
             try {
                 const firmware = resolveInsideRoot(root, message.firmware || "");
                 if (!fs.existsSync(firmware)) {
@@ -147,12 +198,15 @@ async function handleMessage(socket, message, root) {
                 }
                 sendLog(
                     socket,
-                    `download target=${message.target} pack=${message.pack} script=${message.script} ${message.frequency}Hz ${message.addr}`
+                    `${operation.prefix}download target=${message.target} pack=${message.pack} script=${message.script} ${message.frequency}Hz ${message.addr}`
                 );
-                await sendProgress(socket, "download");
-                sendLog(socket, "download completed (demo; no hardware was flashed)");
+                if (await sendProgress(socket, "download", operation)) {
+                    sendLog(socket, `${operation.prefix}download completed (demo; no hardware was flashed)`);
+                }
             } catch (error) {
-                sendLog(socket, `download failed: ${error.message || error}`);
+                sendLog(socket, `${operation.prefix}download failed: ${error.message || error}`);
+            } finally {
+                socket.__demoOperations.delete("download");
             }
             return;
         }
@@ -182,7 +236,10 @@ function startDemoMiddleware({ host = DEFAULT_HOST, port = DEFAULT_PORT, root = 
         server.once("listening", onListening);
     });
 
+    const clients = new Set();
     server.on("connection", socket => {
+        clients.add(socket);
+        socket.__demoOperations = new Map();
         logger("Demo Middleware client connected");
         socket.on("message", data => {
             let message;
@@ -194,12 +251,20 @@ function startDemoMiddleware({ host = DEFAULT_HOST, port = DEFAULT_PORT, root = 
             }
             void handleMessage(socket, message, resolvedRoot);
         });
-        socket.on("close", () => logger("Demo Middleware client disconnected"));
+        socket.on("close", () => {
+            clients.delete(socket);
+            logger("Demo Middleware client disconnected");
+        });
     });
 
     return {
         server,
         ready,
+        disconnectClients: () => {
+            for (const client of clients) {
+                client.close(1012, "simulated disconnect");
+            }
+        },
         close: () => new Promise(resolve => server.close(() => resolve()))
     };
 }

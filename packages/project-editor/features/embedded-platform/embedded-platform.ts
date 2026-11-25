@@ -24,6 +24,7 @@ import type { ProjectEditorFeature } from "project-editor/store/features";
 export type EmbeddedStorageMode = "rom" | "xip" | "non-xip";
 export type EmbeddedDownloadTool = "jlink" | "stlink" | "dplink";
 export type EmbeddedWebSocketEnvironment = "local" | "production";
+export type EmbeddedExecutionMode = "real" | "mock";
 
 export const DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY = "build";
 
@@ -987,6 +988,7 @@ registerClass("HiddenComponent", HiddenComponent);
 ////////////////////////////////////////////////////////////////////////////////
 
 export class EmbeddedPlatform extends EezObject {
+    executionMode: EmbeddedExecutionMode;
     bsp: EmbeddedBsp;
     storage: EmbeddedStorageSettings;
     protocols: ProtocolResource[];
@@ -1000,6 +1002,16 @@ export class EmbeddedPlatform extends EezObject {
     static classInfo: ClassInfo = {
         label: () => "Embedded platform",
         properties: [
+            {
+                name: "executionMode",
+                displayName: "Execution mode",
+                type: PropertyType.Enum,
+                enumItems: [
+                    { id: "real", label: "Real device" },
+                    { id: "mock", label: "Mock / software only" }
+                ],
+                enumDisallowUndefined: true
+            },
             { name: "bsp", type: PropertyType.Object, typeClass: EmbeddedBsp },
             { name: "storage", type: PropertyType.Object, typeClass: EmbeddedStorageSettings },
             { name: "protocols", type: PropertyType.Array, typeClass: ProtocolResource, defaultValue: [] },
@@ -1011,6 +1023,7 @@ export class EmbeddedPlatform extends EezObject {
             { name: "cloudEndpoint", displayName: "Protocol cloud endpoint", type: PropertyType.String }
         ],
         defaultValue: {
+            executionMode: "real",
             bsp: EmbeddedBsp.classInfo.defaultValue,
             storage: EmbeddedStorageSettings.classInfo.defaultValue,
             protocols: [],
@@ -1025,6 +1038,9 @@ export class EmbeddedPlatform extends EezObject {
             _object: EmbeddedPlatform,
             jsObject: Partial<EmbeddedPlatform>
         ) => {
+            if (jsObject.executionMode === undefined) {
+                jsObject.executionMode = "real";
+            }
             if (jsObject.websocket === undefined) {
                 jsObject.websocket = EmbeddedWebSocketSettings.classInfo.defaultValue;
             }
@@ -1037,6 +1053,7 @@ export class EmbeddedPlatform extends EezObject {
     override makeEditable() {
         super.makeEditable();
         makeObservable(this, {
+            executionMode: observable,
             bsp: observable,
             storage: observable,
             protocols: observable,

@@ -43,13 +43,19 @@ async function main() {
     const middleware = startDemoMiddleware({ host: "127.0.0.1", port: 0, root });
     const address = await middleware.ready;
     const messages = [];
+    const states = [];
     const client = new EmbeddedWebSocketClient(address.endpoint, 1000, {
-        onMessage: message => messages.push(message)
+        onMessage: message => messages.push(message),
+        onStateChange: state => states.push(state)
     });
 
     try {
-        await client.send({ command: "test", msg: "demo test" });
+        await client.send({ command: "test", msg: "demo test", mode: "mock" });
         await waitFor(message => message.command === "test", messages);
+        assert(
+            messages.some(message => message.command === "log" && /MOCK_SIMULATED/.test(message.data)),
+            "mock middleware must label its protocol logs"
+        );
 
         await client.send({ command: "transform", type: "picture", model: "rom" });
         await waitFor(
@@ -60,14 +66,15 @@ async function main() {
         await client.send({
             command: "cmake",
             output_dir: "./",
-            config_file: "./config_MH2457.py"
+            config_file: "./config_MH2457.py",
+            mode: "mock"
         });
         await waitFor(
             message => message.command === "log" && /cmake completed/.test(message.data),
             messages
         );
 
-        await client.send({ command: "build", src: "./", dst: "./build" });
+        await client.send({ command: "build", src: "./", dst: "./build", mode: "mock" });
         await waitFor(
             message => message.command === "log" && /build completed/.test(message.data),
             messages
@@ -82,14 +89,37 @@ async function main() {
             script: "null",
             frequency: "500000",
             firmware: "./build/firmware.bin",
-            addr: "0x08000000"
+            addr: "0x08000000",
+            mode: "mock"
         });
         await waitFor(
             message => message.command === "log" && /download completed/.test(message.data),
             messages
         );
 
-        console.log("Complete P1 demo middleware verification passed.");
+        // A running operation can be cancelled without reporting a false success.
+        messages.length = 0;
+        await client.send({ command: "build", src: "./", dst: "./cancelled-build", mode: "mock" });
+        await new Promise(resolve => setTimeout(resolve, 140));
+        await client.send({ command: "cancel", operation: "build", mode: "mock" });
+        await waitFor(
+            message => message.command === "log" && /build cancelled/.test(message.data),
+            messages
+        );
+        assert(
+            !messages.some(message => message.command === "log" && /build completed/.test(message.data)),
+            "cancelled mock build must not report completion"
+        );
+
+        // A simulated disconnect must be recoverable by the same client on retry.
+        assert.equal(typeof middleware.disconnectClients, "function");
+        middleware.disconnectClients();
+        await waitFor(() => states.includes("disconnected"), messages);
+        messages.length = 0;
+        await client.send({ command: "test", msg: "reconnect", mode: "mock" });
+        await waitFor(message => message.command === "test", messages);
+
+        console.log("Complete P1 demo middleware verification passed (MOCK_SIMULATED, cancel, reconnect).");
     } finally {
         client.close();
         await middleware.close();

@@ -58,5 +58,8 @@ assert(view.includes("aria-expanded={this.advancedWorkspacesExpanded}"));
 assert(view.includes("advancedWorkspacesExpanded: observable"));
 assert(view.includes("const remoteMode = platform.websocket?.enabled === true"));
 assert(view.includes("this.renderWorkspaceButton("));
+assert(view.includes("[模拟环境 / MOCK]"));
+assert(view.includes('aria-label="Execution mode"'));
+assert(view.includes("platform.executionMode"));
 
-console.log("Embedded Platform navigation verified: remote default, advanced disclosure, local fallback, live mode switching.");
+console.log("Embedded Platform UI evidence verified: navigation, execution-mode selector, and [模拟环境 / MOCK] badge are present.");

@@ -25,6 +25,7 @@
         "verify-images": "npm run build-src && node tools/embedded/verify_image_build.js",
         "verify-websocket": "npm run build-src && node tools/embedded/verify_websocket_protocol.js",
         "verify-update-discovery": "node tools/verify_update_discovery.cjs",
+        "verify-download-url-policy": "npm run build-src && node tools/verify_digiwise_download_url_policy.cjs",
         "verify-java-rollout": "npx tsc --pretty false && node tools/verify_java_rollout_integration.cjs",
         "verify-ide-changelog": "npx tsc --pretty false && node tools/verify_ide_changelog.cjs",
         "verify-ide-changelog-ui": "node tools/verify_ide_changelog_ui.cjs",

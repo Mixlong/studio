@@ -1,10 +1,14 @@
+import {
+    createDigiwiseDownloadUrlPolicy,
+    DigiwiseDownloadUrlPolicy
+} from "./digiwise-download-policy";
+
 export interface IdeReleaseAsset {
     fileName: string;
     fileSize: number;
     sha256: string;
     sha512: string;
 }
-
 export interface IdeRelease {
     id: string;
     channel: "stable" | "dev";
@@ -106,7 +110,10 @@ export function validateReleaseDownload(
     value: unknown,
     release: IdeRelease,
     platform: "win32" | "darwin",
-    arch: "x64" | "arm64"
+    arch: "x64" | "arm64",
+    urlPolicy: DigiwiseDownloadUrlPolicy = createDigiwiseDownloadUrlPolicy({
+        isPackaged: true
+    })
 ): IdeReleaseDownload {
     if (!object(value) ||
         String(value.releaseId) !== release.id ||
@@ -132,8 +139,12 @@ export function validateReleaseDownload(
     } catch (_error) {
         throw new Error("Invalid signed download URL");
     }
-    if (url.protocol !== "https:" || url.username || url.password ||
-        !url.hostname || url.hash) {
+    try {
+        urlPolicy.validate(url);
+    } catch (_error) {
+        throw new Error("Signed update URL must be HTTPS");
+    }
+    if (!url.hostname || url.hash) {
         throw new Error("Signed update URL must be HTTPS");
     }
     return value as unknown as IdeReleaseDownload;
