@@ -468,7 +468,8 @@ export const LocalPipelinePanel = observer(
                     toolchain: {
                         compiler: { id: "arm-none-eabi-gcc", version: "14.3.rel1" },
                         cmake: { minVersion: "3.20.0" },
-                        ninja: { minVersion: "1.10.0" }
+                        ninja: { minVersion: "1.10.0" },
+                        python: { minVersion: "3.8.0" }
                     },
                     download: {
                         probe: "jlink",

@@ -170,9 +170,6 @@ app.on("ready", async function () {
         homeWindow = openHomeWindow();
     }
 
-    const { registerDigiwiseBspCatalogIpc } = await import("main/digiwise-bsp-catalog");
-    registerDigiwiseBspCatalogIpc(() => homeWindow);
-
     await import("main/menu");
 
     const { registerDigiwiseBspCatalogIpc } = await import(

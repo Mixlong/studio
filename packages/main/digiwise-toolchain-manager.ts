@@ -50,6 +50,46 @@ function toolchainConfigPath(): string {
     return path.join(electron.app.getPath("userData"), CONFIG_FILENAME);
 }
 
+/**
+ * Resolve built-in isolated toolchain root bundled inside the client app/installer:
+ * - Packaged builds: <resourcesPath>/toolchains
+ * - Dev builds: <appPath>/resources/toolchains
+ */
+export function getBundledToolchainRoots(): string[] {
+    const candidates: string[] = [];
+    const isPackaged = Boolean(electron.app?.isPackaged);
+    if (isPackaged && typeof process.resourcesPath === "string" && process.resourcesPath) {
+        candidates.push(path.join(process.resourcesPath, "toolchains"));
+    } else {
+        const appPath =
+            typeof electron.app?.getAppPath === "function"
+                ? electron.app.getAppPath()
+                : process.cwd();
+        candidates.push(path.join(appPath, "resources", "toolchains"));
+    }
+    return candidates.filter(dir => {
+        try {
+            return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+        } catch {
+            return false;
+        }
+    });
+}
+
+export function mergeToolchainEnvRoots(customEnvRoots: string[] = []): string[] {
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    for (const dir of [...customEnvRoots, ...getBundledToolchainRoots()]) {
+        const trimmed = typeof dir === "string" ? dir.trim() : "";
+        if (!trimmed) continue;
+        const key = process.platform === "win32" ? trimmed.toLowerCase() : trimmed;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(trimmed);
+    }
+    return merged;
+}
+
 function getHostOsTag(): string {
     if (process.platform === "win32") return "windows-x64";
     if (process.platform === "darwin") return process.arch === "arm64" ? "macos-arm64" : "macos-x64";
@@ -826,7 +866,7 @@ export function registerDigiwiseToolchainIpc(
                 const reqs = resolveBspToolchainRequirements(manifest as DigiwiseBspManifest);
                 const bsp = (manifest as DigiwiseBspManifest)?.bsp;
                 const report = await inspectToolchainEnvironment(toolchainStoreRoot(), reqs, {
-                    customEnvRoots: cfg.customEnvRoots,
+                    customEnvRoots: mergeToolchainEnvRoots(cfg.customEnvRoots),
                     bspMeta: bsp
                         ? { bspId: bsp.id, categoryCode: bsp.categoryCode, bspVersion: bsp.version }
                         : undefined

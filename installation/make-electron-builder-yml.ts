@@ -43,6 +43,14 @@ async function getExtraResource() {
             from: "./resources/project-templates",
             to: "project-templates"
         },
+        ...(fs.existsSync("./resources/toolchains")
+            ? [
+                  {
+                      from: "./resources/toolchains",
+                      to: "toolchains"
+                  }
+              ]
+            : []),
         ...eezFrameworkAmalgamation,
         ...eezGuiLite,
         ...dockerBuild,

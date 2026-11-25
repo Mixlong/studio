@@ -55,4 +55,5 @@ tools/lvgl-api/build
 /artifacts
 *.tsbuildinfo
 main.*.css
+/resources/toolchains
 

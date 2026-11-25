@@ -9,6 +9,7 @@ import { verifyBspBuildAccess } from "main/digiwise-bsp-catalog";
 import {
     buildScopedToolchainEnv,
     inspectToolchainEnvironment,
+    mergeToolchainEnvRoots,
     resolveBspToolchainRequirements
 } from "main/digiwise-toolchain-manager";
 import type { DigiwiseIpcResult } from "eez-studio-shared/digiwise-auth";
@@ -43,12 +44,14 @@ async function loadCustomEnvRoots(): Promise<string[]> {
     try {
         const parsed = JSON.parse(await fs.promises.readFile(toolchainConfigPath(), "utf8"));
         if (parsed && Array.isArray(parsed.customEnvRoots)) {
-            return parsed.customEnvRoots.filter((r: unknown) => typeof r === "string" && r.trim());
+            return mergeToolchainEnvRoots(
+                parsed.customEnvRoots.filter((r: unknown) => typeof r === "string" && r.trim())
+            );
         }
     } catch {
         // Ignore missing config
     }
-    return [];
+    return mergeToolchainEnvRoots([]);
 }
 
 function killProcessTree(child: ChildProcess): void {

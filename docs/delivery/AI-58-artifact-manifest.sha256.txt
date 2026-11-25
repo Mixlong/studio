@@ -1,0 +1,23 @@
+# AI-58 artifact manifest
+# Generated/verified: 2026-11-19 18:48:07 CST
+# These are local isolation artifacts; not signed or published.
+
+D:/代码/DigiwiseStudio/dist-win-x64/DigiStudio-x64-setup.exe
+size=126519281
+sha256=0e29872087f12a05861eb66f2dc4d0bd2180395f45417b0598529c429a8a7ee8
+sha512=f014b3a775485e60d868b846811aa224ac10cd59dcf203f9db31abea69e4f22dd8ee24a0a6ed1f4c48ededce8d438e09efe7647662b1559c925c9df92d242314
+role=old-baseline-local
+metadata=dist-win-x64/latest.yml version 0.0.13; file timestamp 2026-11-17 14:03:24 +0800
+
+D:/代码/DigiwiseStudio/dist/DigiwiseStudio-0.0.13-x64-setup.exe
+size=141050453
+sha256=3779bec2086f40a80f567806a8f0fb06f81d5d5eab68ce5b58e55a7918563252
+sha512=674b9be4c876666a503531af7426c22ffc314a5a4526b6752928d9308da6207ea18386178aca30983f030214490d1d5976171b2d13713cb5ff111ef7d0b5fc0f
+role=new-candidate-local
+metadata=dist/latest.yml version 0.0.13; file timestamp 2026-11-19 14:55:18 +0800
+
+verification_commands:
+sha256sum "D:/代码/DigiwiseStudio/dist-win-x64/DigiStudio-x64-setup.exe"
+sha256sum "D:/代码/DigiwiseStudio/dist/DigiwiseStudio-0.0.13-x64-setup.exe"
+sha512sum "D:/代码/DigiwiseStudio/dist-win-x64/DigiStudio-x64-setup.exe"
+sha512sum "D:/代码/DigiwiseStudio/dist/DigiwiseStudio-0.0.13-x64-setup.exe"

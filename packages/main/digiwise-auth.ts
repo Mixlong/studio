@@ -42,7 +42,7 @@ interface EncryptedSessionFile {
 function readPublicApiBaseUrl(): string | undefined {
     const injected = process.env.DIGIWISE_IDE_API_BASE_URL?.trim();
     if (injected) return injected;
-    if (!app.isPackaged) return "http://127.0.0.1:18080/api/ide/v1";
+    if (!app.isPackaged) return "http://192.168.2.88:18080/api/ide/v1";
     try {
         const value = JSON.parse(
             fs.readFileSync(
