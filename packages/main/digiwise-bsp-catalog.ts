@@ -350,6 +350,119 @@ export async function readAndValidateInstalledManifest(
     return result.manifest;
 }
 
+/**
+ * Convention-over-configuration fallback when a generic BSP ZIP does not include bsp-manifest.json.
+ * Auto-detects CMakeLists.txt / Makefile, APP/ui directory, cmake_config_*.py metadata, and *.ld FLASH ORIGIN.
+ */
+export async function synthesizeDefaultBspManifest(
+    bspDir: string,
+    meta: { categoryCode: string; version: string; bspId?: number }
+): Promise<DigiwiseBspManifest> {
+    let entries: string[] = [];
+    try {
+        entries = await fs.promises.readdir(bspDir);
+    } catch {
+        entries = [];
+    }
+
+    const hasCMake = entries.some(e => e.toLowerCase() === "cmakelists.txt");
+    const hasMakefile = entries.some(e => e.toLowerCase() === "makefile");
+    const buildSystem: DigiwiseBspManifest["build"]["system"] = hasCMake
+        ? "cmake"
+        : hasMakefile
+          ? "make"
+          : "cmake";
+
+    let projectName = "firmware";
+    let cpuArch = "cortex-m4";
+    let targetChip = meta.categoryCode.toLowerCase();
+    let flashAddress = "0x08001000";
+
+    // Inspect cmake_config_*.py if present and plaintext
+    const configPy = entries.find(e => /^cmake_config_.*\.py$/i.test(e));
+    if (configPy) {
+        try {
+            const text = await fs.promises.readFile(path.join(bspDir, configPy), "utf8");
+            const nameMatch = text.match(/['"]project_name['"]\s*:\s*['"]([^'"]+)['"]/);
+            if (nameMatch) projectName = nameMatch[1].trim();
+            const archMatch = text.match(/['"]cpu_arch['"]\s*:\s*['"]([^'"]+)['"]/);
+            if (archMatch) cpuArch = archMatch[1].trim();
+            const chipFromFile = configPy.match(/^cmake_config_([A-Za-z0-9_-]+)\.py$/i)?.[1];
+            if (chipFromFile) targetChip = chipFromFile.toLowerCase();
+        } catch {
+            // Ignore unreadable/encrypted config files
+        }
+    }
+
+    // Inspect *.ld linker script for FLASH ORIGIN if present and plaintext
+    const ldFile = entries.find(e => /\.ld$/i.test(e));
+    if (ldFile) {
+        try {
+            const ldText = await fs.promises.readFile(path.join(bspDir, ldFile), "utf8");
+            const originMatch = ldText.match(/FLASH\b[^\n\r]*ORIGIN\s*=\s*(0x[0-9a-fA-F]+|\d+)/i);
+            if (originMatch) flashAddress = originMatch[1];
+        } catch {
+            // Ignore unreadable linker script
+        }
+    }
+
+    const generatedUiDir = fs.existsSync(path.join(bspDir, "APP", "ui"))
+        ? "APP/ui"
+        : "ui/generated";
+
+    return {
+        schemaVersion: "1.0",
+        bsp: {
+            id: `${meta.categoryCode.toLowerCase()}-generic`,
+            categoryCode: meta.categoryCode,
+            version: meta.version,
+            name: `${meta.categoryCode} ${meta.version} (通用默认规则)`,
+            minStudioVersion: "0.0.1",
+            supportedHostOs: ["windows-x64"]
+        },
+        target: {
+            chip: targetChip,
+            arch: cpuArch
+        },
+        build: {
+            system: buildSystem,
+            sourceDir: ".",
+            cmakeLists: hasCMake ? "CMakeLists.txt" : null,
+            preConfigureScript: null,
+            toolchainFile: null,
+            generator: buildSystem === "cmake" ? "Ninja" : null,
+            uiSync: {
+                strategy: "copy-to-dir",
+                generatedUiDir,
+                resourceManifest: "build/generated/embedded-resources.json"
+            },
+            env: {},
+            extraArgs: [],
+            artifacts: [
+                { role: "firmware", format: "bin", path: `build/${projectName}.bin`, required: true },
+                { role: "symbols", format: "elf", path: `build/${projectName}.elf`, required: false }
+            ]
+        },
+        toolchain: {
+            compiler: { id: "arm-none-eabi-gcc", version: "14.3.rel1" },
+            ...(buildSystem === "cmake"
+                ? { cmake: { minVersion: "3.20.0" }, ninja: { minVersion: "1.10.0" } }
+                : {})
+        },
+        download: {
+            probe: "jlink",
+            target: targetChip,
+            interface: "SWD",
+            frequencyHz: 500000,
+            flashAddress,
+            pack: null,
+            script: null,
+            verifyAfterFlash: true,
+            resetAfterFlash: true
+        }
+    };
+}
+
 export async function installVerifiedBsp(
     storeRoot: string,
     bspId: number,
@@ -375,10 +488,16 @@ export async function installVerifiedBsp(
         await fs.promises.mkdir(stageDir, { recursive: true });
         await extractVerifiedBspArchive(tempZip, stageDir);
 
-        const manifest = await readAndValidateInstalledManifest(stageDir, {
-            categoryCode: meta.categoryCode,
-            version: meta.version
-        });
+        const manifest =
+            (await readAndValidateInstalledManifest(stageDir, {
+                categoryCode: meta.categoryCode,
+                version: meta.version
+            })) ||
+            (await synthesizeDefaultBspManifest(stageDir, {
+                categoryCode: meta.categoryCode,
+                version: meta.version,
+                bspId: meta.bspId ?? bspId
+            }));
 
         const record: DigiwiseInstalledBspRecord = {
             bspId: meta.bspId ?? bspId,
@@ -504,10 +623,16 @@ export async function verifyBspBuildAccess(
         });
     }
 
-    const manifest = await readAndValidateInstalledManifest(installed.installPath, {
-        categoryCode: installed.categoryCode,
-        version: installed.version
-    });
+    const manifest =
+        (await readAndValidateInstalledManifest(installed.installPath, {
+            categoryCode: installed.categoryCode,
+            version: installed.version
+        })) ||
+        (await synthesizeDefaultBspManifest(installed.installPath, {
+            categoryCode: installed.categoryCode,
+            version: installed.version,
+            bspId: installed.bspId
+        }));
 
     return {
         authorized: true,

@@ -204,8 +204,55 @@ const AdmZip = require("adm-zip");
         );
         assert.equal(tamperedFlash.errorCode, "FIRMWARE_INTEGRITY_FAILED");
 
+        // 4. Manifest-free generic BSP convention test (no bsp-manifest.json at all!)
+        const genericZip = new AdmZip();
+        genericZip.addFile(
+            "cmake_config_MH2457.py",
+            Buffer.from("EXCLUDE_PATTERNS = {'project_name': 'HMI_MH2457', 'cpu_arch': 'cortex-m4'}\n", "utf8")
+        );
+        genericZip.addFile(
+            "mh2457_define.ld",
+            Buffer.from("MEMORY { FLASH (rx) : ORIGIN = 0x08001000, LENGTH = 32M }\n", "utf8")
+        );
+        genericZip.addFile("APP/ui/placeholder.h", Buffer.from("// ui dir\n", "utf8"));
+        genericZip.addFile("CMakeLists.txt", Buffer.from("cmake_minimum_required(VERSION 3.20)\n", "utf8"));
+        const genericBuf = genericZip.toBuffer();
+        const genericSha = crypto.createHash("sha256").update(genericBuf).digest("hex");
+        const genericServer = http.createServer((req, res) => {
+            res.writeHead(200, { "Content-Length": String(genericBuf.length) });
+            res.end(genericBuf);
+        });
+        await new Promise(resolve => genericServer.listen(0, "127.0.0.1", resolve));
+        const gPort = genericServer.address().port;
+        try {
+            const genericInstalled = await installVerifiedBsp(
+                bspStore,
+                202,
+                {
+                    bspId: 202,
+                    modelId: 43,
+                    downloadUrl: `http://127.0.0.1:${gPort}/generic.zip`,
+                    expiresAt: new Date(Date.now() + 300_000).toISOString(),
+                    fileName: "s350-generic-1.0.0.zip",
+                    fileSize: genericBuf.length,
+                    sha256: genericSha,
+                    version: "1.0.0",
+                    modelCode: "S350",
+                    categoryCode: "S350"
+                },
+                () => {}
+            );
+            assert.ok(genericInstalled.manifest, "Manifest-free generic BSP must auto-synthesize default manifest");
+            assert.equal(genericInstalled.manifest.build.uiSync.generatedUiDir, "APP/ui");
+            assert.equal(genericInstalled.manifest.download.flashAddress, "0x08001000");
+            assert.equal(genericInstalled.manifest.download.target, "mh2457");
+            assert.equal(genericInstalled.manifest.build.artifacts[0].path, "build/HMI_MH2457.bin");
+        } finally {
+            genericServer.close();
+        }
+
         console.log(
-            `PASS: FULL E2E SOFTWARE PIPELINE (LB02 install -> LB03 toolchain -> LB04 real ARM GCC ${fwArt.fileSize}B bin -> LB05 JLink detect & SHA-256 gate)`
+            `PASS: FULL E2E SOFTWARE PIPELINE (LB02 install + manifest-free generic auto-detect -> LB03 toolchain -> LB04 real ARM GCC ${fwArt.fileSize}B bin -> LB05 JLink detect & SHA-256 gate)`
         );
     } finally {
         server.close();

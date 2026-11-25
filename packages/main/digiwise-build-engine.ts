@@ -454,11 +454,23 @@ export async function runLocalFirmwareBuild(
         }
 
         // Stage 7: Collect & SHA-256 verify artifacts declared in manifest.build.artifacts
+        // (with generic fallback scan of build/*.bin and build/*.elf when using convention-based BSPs)
         emit("collect-artifacts", "info", "Collecting and hashing build artifacts...", 90);
         await fs.promises.mkdir(artifactsOutDir, { recursive: true });
         const collected: LocalBuildArtifactRecord[] = [];
         for (const spec of manifest.build.artifacts) {
-            const producedPath = resolveInsideDir(workDir, spec.path);
+            let producedPath = resolveInsideDir(workDir, spec.path);
+            if (!fs.existsSync(producedPath) && (spec.format === "bin" || spec.format === "elf")) {
+                const buildSubDir = path.join(workDir, "build");
+                if (fs.existsSync(buildSubDir)) {
+                    const fallbackFile = (await fs.promises.readdir(buildSubDir)).find(f =>
+                        f.toLowerCase().endsWith(`.${spec.format}`)
+                    );
+                    if (fallbackFile) {
+                        producedPath = path.join(buildSubDir, fallbackFile);
+                    }
+                }
+            }
             if (!fs.existsSync(producedPath)) {
                 if (spec.required) {
                     throw Object.assign(
@@ -481,7 +493,7 @@ export async function runLocalFirmwareBuild(
                 role: spec.role,
                 format: spec.format,
                 required: spec.required,
-                relativePath: spec.path,
+                relativePath: path.relative(workDir, producedPath).replace(/\\/g, "/"),
                 path: destPath,
                 fileSize,
                 sha256
