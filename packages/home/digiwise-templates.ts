@@ -5,12 +5,19 @@ import type {
     DigiwiseTemplateCreateRequest,
     DigiwiseTemplateCreateProgress,
     DigiwiseTemplateCreateResult,
-    DigiwiseTemplateItem
+    DigiwiseTemplateItem,
+    DigiwiseTemplateOptions
 } from "eez-studio-shared/digiwise-templates";
 
 export function listDigiwiseTemplates() {
     return ipcRenderer.invoke("digistudio:templates:list") as Promise<
         DigiwiseIpcResult<DigiwiseTemplateItem[]>
+    >;
+}
+
+export function getDigiwiseTemplateOptions() {
+    return ipcRenderer.invoke("digistudio:templates:options") as Promise<
+        DigiwiseIpcResult<DigiwiseTemplateOptions>
     >;
 }
 

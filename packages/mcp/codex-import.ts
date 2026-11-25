@@ -12,6 +12,51 @@ export interface CodexImportResult {
     alreadyInstalled: boolean;
 }
 
+export interface McpClientConfigSnippet {
+    serverName: string;
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+    json: string;
+}
+
+/**
+ * Returns a standard Stdio MCP client configuration snippet (no secrets or
+ * tokens) for non-Codex clients such as Cursor, Claude Desktop, Windsurf,
+ * Cline, or MCP Inspector.
+ */
+export function getDigiStudioMcpClientConfig(): McpClientConfigSnippet {
+    const script = path.join(app.getAppPath(), "build", "mcp", "stdio-cli.mjs");
+    if (!fs.existsSync(script)) {
+        throw new Error("MCP stdio entry is missing. Rebuild DigiStudio first.");
+    }
+    const entry = {
+        command: process.execPath,
+        args: [script],
+        env: {
+            ELECTRON_RUN_AS_NODE: "1",
+            DIGISTUDIO_MCP_SESSION_FILE: path.join(
+                app.getPath("userData"),
+                MCP_SESSION_NAME
+            )
+        }
+    };
+    const json = JSON.stringify(
+        {
+            mcpServers: {
+                [CODEX_MCP_SERVER_NAME]: entry
+            }
+        },
+        null,
+        2
+    );
+    return {
+        serverName: CODEX_MCP_SERVER_NAME,
+        ...entry,
+        json
+    };
+}
+
 function codexConfigPath() {
     const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
     return path.join(codexHome, "config.toml");

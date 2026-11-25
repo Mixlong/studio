@@ -1094,6 +1094,8 @@ interface McpSettingsState {
     busy: boolean;
     message: string;
     error: boolean;
+    showGuide: boolean;
+    clientConfigJson: string;
 }
 
 /** This entire control is hidden unless Java grants MCP to the signed-in IDE account. */
@@ -1104,7 +1106,9 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
         loading: true,
         busy: false,
         message: "",
-        error: false
+        error: false,
+        showGuide: false,
+        clientConfigJson: ""
     };
 
     private mounted = false;
@@ -1190,10 +1194,67 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
         }
     };
 
+    private loadClientConfig = async (): Promise<string> => {
+        const result: { json: string } = await ipcRenderer.invoke(
+            "digistudio:mcp:client-config"
+        );
+        if (this.mounted) {
+            this.setState({ clientConfigJson: result.json });
+        }
+        return result.json;
+    };
+
+    copyGenericConfig = async () => {
+        if (this.state.busy || !this.state.allowed) return;
+        this.setState({ busy: true, message: "", error: false });
+        try {
+            const json = this.state.clientConfigJson || await this.loadClientConfig();
+            clipboard.writeText(json);
+            if (this.mounted) this.setState({
+                message: isChineseLocale()
+                    ? "已复制通用 MCP 配置（JSON），可粘贴到 Cursor / Claude / Windsurf / Cline 等客户端。"
+                    : "Copied generic MCP JSON config for Cursor, Claude, Windsurf, Cline, etc."
+            });
+        } catch (_error) {
+            if (this.mounted) this.setState({
+                error: true,
+                message: isChineseLocale()
+                    ? "获取或复制通用 MCP 配置失败，请检查账号授权。"
+                    : "Could not load or copy generic MCP config."
+            });
+        } finally {
+            if (this.mounted) this.setState({ busy: false });
+        }
+    };
+
+    toggleGuide = async () => {
+        if (this.state.busy || !this.state.allowed) return;
+        if (this.state.showGuide) {
+            this.setState({ showGuide: false });
+            return;
+        }
+        this.setState({ busy: true, message: "", error: false });
+        try {
+            if (!this.state.clientConfigJson) {
+                await this.loadClientConfig();
+            }
+            if (this.mounted) this.setState({ showGuide: true });
+        } catch (_error) {
+            if (this.mounted) this.setState({
+                error: true,
+                message: isChineseLocale()
+                    ? "加载通用接入配置失败，请检查账号授权。"
+                    : "Could not load generic MCP setup guide."
+            });
+        } finally {
+            if (this.mounted) this.setState({ busy: false });
+        }
+    };
+
     render() {
         if (!this.state.allowed || this.state.loading) return null;
         const isChinese = isChineseLocale();
-        const { enabled, busy, message, error } = this.state;
+        const { enabled, busy, message, error, showGuide, clientConfigJson } = this.state;
         return (
             <div className="settings-card">
                 <div className="settings-card-header">
@@ -1217,12 +1278,51 @@ class McpSettings extends React.Component<{}, McpSettingsState> {
                         onChange={event => void this.setEnabled(event.target.checked)} />
                     <span>{isChinese ? "接入 MCP 服务" : "Connect MCP server"}</span>
                 </label>
-                <div className="settings-input-with-button">
+                <div className="settings-input-with-button settings-mcp-actions">
                     <button type="button" className="settings-action-btn"
                         disabled={!enabled || busy} onClick={this.addToCodex}>
                         {isChinese ? "一键添加到 Codex" : "Add to Codex"}
                     </button>
+                    <button type="button" className="settings-action-btn"
+                        disabled={busy} onClick={this.copyGenericConfig}>
+                        {isChinese ? "复制通用 MCP 配置" : "Copy MCP JSON"}
+                    </button>
+                    <button type="button" className="settings-action-btn"
+                        disabled={busy} onClick={this.toggleGuide}>
+                        {showGuide
+                            ? (isChinese ? "收起接入教程" : "Hide guide")
+                            : (isChinese ? "其他客户端接入教程" : "Other clients guide")}
+                    </button>
                 </div>
+                {showGuide && (
+                    <div className="settings-mcp-guide">
+                        <div className="settings-mcp-guide-title">
+                            {isChinese
+                                ? "其他 MCP 客户端（Cursor / Claude / Windsurf / Cline 等）接入步骤"
+                                : "Connect other MCP clients (Cursor / Claude / Windsurf / Cline, etc.)"}
+                        </div>
+                        <ol className="settings-mcp-guide-steps">
+                            <li>
+                                {isChinese
+                                    ? "先勾选上方「接入 MCP 服务」（状态变为“已接入”）。"
+                                    : "Check \"Connect MCP server\" above so the status becomes Connected."}
+                            </li>
+                            <li>
+                                {isChinese
+                                    ? "打开你的 AI 客户端 MCP 配置文件（Stdio 模式），粘贴下方 JSON 到 mcpServers 中。"
+                                    : "Open your AI client's MCP Stdio config file and paste the JSON below into mcpServers."}
+                            </li>
+                            <li>
+                                {isChinese
+                                    ? "重启或刷新客户端，即可发现 digistudio 工具；取消接入或切换账号后连接立即失效。"
+                                    : "Restart or reload the client to discover digistudio tools; disconnecting or switching accounts immediately revokes access."}
+                            </li>
+                        </ol>
+                        {clientConfigJson && (
+                            <pre className="settings-mcp-code"><code>{clientConfigJson}</code></pre>
+                        )}
+                    </div>
+                )}
                 <p className="settings-mcp-hint">
                     {isChinese
                         ? "账号授权仅提供接入资格，不会自动连接。主动接入后每次工具调用均实时校验权限，已开放编辑/删除/保存工具静默执行；退出或切换账号自动断开。"

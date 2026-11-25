@@ -21,6 +21,7 @@ import type {
 } from "eez-studio-shared/digiwise-auth";
 import type {
     DigiwiseTemplateDownload,
+    DigiwiseTemplateOptions,
     DigiwiseTemplatePage
 } from "eez-studio-shared/digiwise-templates";
 import type {
@@ -31,8 +32,25 @@ import type {
     DigiwiseChangelog,
     DigiwiseChangelogLanguage
 } from "eez-studio-shared/digiwise-changelog";
+import type { DigiwiseCategory, DigiwiseBspVersion, DigiwiseBspDownloadMeta } from "eez-studio-shared/digiwise-bsp-catalog";
 
 type JsonObject = Record<string, unknown>;
+
+const MAX_CATEGORY_ITEMS = 200;
+const MAX_BSP_ITEMS = 200;
+const MAX_CATALOG_STRING_LENGTH = 256;
+const MAX_BSP_FILE_NAME_LENGTH = 512;
+const MAX_BSP_FILE_SIZE = 4 * 1024 * 1024 * 1024;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const PUBLISHED_AT_PATTERN = /^\d{4}-\d{2}-\d{2}(?:T| )\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})?$/;
+
+function boundedString(value: unknown, maxLength: number): value is string {
+    return typeof value === "string" && value.length > 0 && value.length <= maxLength;
+}
+
+function validPublishedAt(value: unknown): value is string | null {
+    return value === null || (typeof value === "string" && PUBLISHED_AT_PATTERN.test(value) && Number.isFinite(Date.parse(value)));
+}
 
 export class DigiwisePublicApiError extends Error {
     readonly status: number;
@@ -596,6 +614,106 @@ export class DigiwisePublicApi {
             { method: "POST", body: JSON.stringify(input) },
             accessToken
         );
+    }
+
+    async listCategories(accessToken: string): Promise<DigiwiseCategory[]> {
+        const data = await this.request<unknown>("categories", { method: "GET" }, accessToken);
+        if (!Array.isArray(data) || data.length > MAX_CATEGORY_ITEMS || !data.every(item =>
+            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
+            [item.modelCode, item.categoryCode, item.modelName, item.categoryName].every(v => boundedString(v, MAX_CATALOG_STRING_LENGTH)) &&
+            (item.chipFamily === null || boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
+            (item.productType === null || (Number.isSafeInteger(item.productType) && (item.productType as number) > 0)) &&
+            (item.externalId === null || boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
+        )) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid category catalog", "category-contract");
+        }
+        return data.map(({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }) =>
+            ({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }));
+    }
+
+    async listBspVersions(accessToken: string, categoryCode?: string): Promise<DigiwiseBspVersion[]> {
+        if (categoryCode !== undefined && (typeof categoryCode !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(categoryCode))) {
+            throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid category code", "local-validation");
+        }
+        const query = categoryCode === undefined ? "" : `?${new URLSearchParams({ categoryCode })}`;
+        const data = await this.request<unknown>(`bsp${query}`, { method: "GET" }, accessToken);
+        if (!Array.isArray(data) || data.length > MAX_BSP_ITEMS || !data.every(item =>
+            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
+            Number.isSafeInteger(item.modelId) && (item.modelId as number) > 0 &&
+            Number.isSafeInteger(item.fileSize) && (item.fileSize as number) >= 0 && (item.fileSize as number) <= MAX_BSP_FILE_SIZE &&
+            boundedString(item.modelCode, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.categoryCode, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.modelName, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.categoryName, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.version, MAX_CATALOG_STRING_LENGTH) &&
+            boundedString(item.fileName, MAX_BSP_FILE_NAME_LENGTH) &&
+            typeof item.sha256 === "string" && SHA256_PATTERN.test(item.sha256) &&
+            validPublishedAt(item.publishedAt)
+        )) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP catalog", "bsp-contract");
+        }
+        return data.map(({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }) =>
+            ({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }));
+    }
+
+    async prepareBspDownload(accessToken: string, bspId: number): Promise<DigiwiseBspDownloadMeta> {
+        if (!Number.isSafeInteger(bspId) || bspId <= 0) {
+            throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid BSP id", "local-validation");
+        }
+        const data = await this.request<unknown>(`bsp/${bspId}/download`, { method: "GET" }, accessToken);
+        const expiresMs = isObject(data) && typeof data.expiresAt === "string"
+            ? Date.parse(data.expiresAt)
+            : NaN;
+        if (
+            !isObject(data) ||
+            typeof data.downloadUrl !== "string" ||
+            !data.downloadUrl.trim() ||
+            !Number.isFinite(expiresMs) ||
+            expiresMs <= Date.now() ||
+            !boundedString(data.fileName, MAX_BSP_FILE_NAME_LENGTH) ||
+            !Number.isSafeInteger(data.fileSize) ||
+            (data.fileSize as number) <= 0 ||
+            (data.fileSize as number) > MAX_BSP_FILE_SIZE ||
+            typeof data.sha256 !== "string" ||
+            !SHA256_PATTERN.test(data.sha256) ||
+            !boundedString(data.version, MAX_CATALOG_STRING_LENGTH) ||
+            !boundedString(data.modelCode, MAX_CATALOG_STRING_LENGTH) ||
+            !boundedString(data.categoryCode, MAX_CATALOG_STRING_LENGTH) ||
+            (data.bspId !== undefined && (!Number.isSafeInteger(data.bspId) || (data.bspId as number) !== bspId)) ||
+            (data.modelId !== undefined && (!Number.isSafeInteger(data.modelId) || (data.modelId as number) <= 0))
+        ) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP download metadata", "bsp-download-contract");
+        }
+        return {
+            ...(data.bspId !== undefined ? { bspId: data.bspId as number } : {}),
+            ...(data.modelId !== undefined ? { modelId: data.modelId as number } : {}),
+            downloadUrl: data.downloadUrl as string,
+            expiresAt: data.expiresAt as string,
+            fileName: data.fileName as string,
+            fileSize: data.fileSize as number,
+            sha256: (data.sha256 as string).toLowerCase(),
+            version: data.version as string,
+            modelCode: data.modelCode as string,
+            categoryCode: data.categoryCode as string
+        };
+    }
+
+    async getTemplateOptions(accessToken: string): Promise<DigiwiseTemplateOptions> {
+        const data = await this.request<unknown>("templates/options", { method: "GET" }, accessToken);
+        const parseList = (list: unknown) => {
+            if (!Array.isArray(list)) return [];
+            return list
+                .filter(item => isObject(item) && boundedString(item.label, 128) && boundedString(item.value, 64))
+                .map(item => ({ label: item.label as string, value: item.value as string }));
+        };
+        if (!isObject(data)) {
+            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid template options", "template-options-contract");
+        }
+        return {
+            lvglVersions: parseList(data.lvglVersions),
+            categories: parseList(data.categories),
+            projectTypes: parseList(data.projectTypes)
+        };
     }
 
     listTemplates(accessToken: string, page: number, pageSize: number) {

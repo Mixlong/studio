@@ -55,3 +55,14 @@ export interface DigiwiseTemplateCreateProgress {
     receivedBytes?: number;
     totalBytes?: number;
 }
+
+export interface DigiwiseTemplateDictOption {
+    label: string;
+    value: string;
+}
+
+export interface DigiwiseTemplateOptions {
+    lvglVersions: DigiwiseTemplateDictOption[];
+    categories: DigiwiseTemplateDictOption[];
+    projectTypes: DigiwiseTemplateDictOption[];
+}

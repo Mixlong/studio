@@ -840,6 +840,11 @@ export function registerDigiwiseTemplateIpc() {
             listAllTemplates(api, accessToken, getDigiwiseDownloadUrlPolicy())
         )
     );
+    ipcMain.handle("digistudio:templates:options", () =>
+        callDigiwisePublicApiWithSession((api, accessToken) =>
+            api.getTemplateOptions(accessToken)
+        )
+    );
     ipcMain.handle(
         "digistudio:templates:create",
         (event, input: unknown) =>

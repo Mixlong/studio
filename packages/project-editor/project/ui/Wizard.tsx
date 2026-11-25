@@ -38,11 +38,15 @@ import { openProject } from "home/tabs-store";
 import { settingsController } from "home/settings";
 import {
     createDigiwiseTemplate,
+    getDigiwiseTemplateOptions,
     listDigiwiseTemplates
 } from "home/digiwise-templates";
 import { productConfig } from "eez-studio-shared/product-config";
 import { resolveProjectTemplateFile } from "eez-studio-shared/project-templates";
-import type { DigiwiseTemplateItem } from "eez-studio-shared/digiwise-templates";
+import type {
+    DigiwiseTemplateDictOption,
+    DigiwiseTemplateItem
+} from "eez-studio-shared/digiwise-templates";
 
 import {
     DASHBOARD_PROJECT_ICON,
@@ -318,6 +322,8 @@ export class WizardModel {
 
     templateProjects: TemplateProject[] = [];
     digiwiseTemplates: DigiwiseTemplateItem[] = [];
+    digiwiseLvglOptions: DigiwiseTemplateDictOption[] = [];
+    digiwiseTemplateCategories: DigiwiseTemplateDictOption[] = [];
     templateListLoading = false;
     templateListError: string | undefined;
     private templateListRequestId = 0;
@@ -371,6 +377,8 @@ export class WizardModel {
             projectVersion: observable,
             templateProjects: observable,
             digiwiseTemplates: observable,
+            digiwiseLvglOptions: observable,
+            digiwiseTemplateCategories: observable,
             templateListLoading: observable,
             templateListError: observable,
             projectCreationError: observable,
@@ -608,10 +616,36 @@ export class WizardModel {
         });
 
         try {
-            const result = await listDigiwiseTemplates();
+            const [result, optionsResult] = await Promise.all([
+                listDigiwiseTemplates(),
+                getDigiwiseTemplateOptions().catch(() => ({
+                    ok: false as const,
+                    error: { status: 502, code: "PUBLIC_API_UNAVAILABLE", message: "Unavailable", requestId: "local" }
+                }))
+            ]);
             if (requestId !== this.templateListRequestId) {
                 return;
             }
+
+            runInAction(() => {
+                if (optionsResult.ok) {
+                    this.digiwiseLvglOptions = optionsResult.data.lvglVersions;
+                    this.digiwiseTemplateCategories = optionsResult.data.categories;
+                    if (this.digiwiseLvglOptions.length > 0) {
+                        const currentMajor = this.lvglVersion.split(".")[0];
+                        const matchesExisting = this.digiwiseLvglOptions.some(
+                            opt => opt.value === this.lvglVersion || opt.value.split(".")[0] === currentMajor
+                        );
+                        if (!matchesExisting) {
+                            const firstVal = this.digiwiseLvglOptions[0].value;
+                            this.lvglVersion = firstVal.startsWith("9") ? "9.3.0" : "8.4.0";
+                        }
+                    }
+                } else {
+                    this.digiwiseLvglOptions = [];
+                    this.digiwiseTemplateCategories = [];
+                }
+            });
 
             if (!result.ok) {
                 runInAction(() => {
@@ -3298,12 +3332,20 @@ export const NewProjectWizard = observer(
             const { tempType, templateFilterType, templateFilterName } = this.state;
             const isChinese = settingsController.locale.toLowerCase().startsWith("zh");
 
-            // Filter applications by category and search name
+            // Filter applications by active LVGL version, template category and search name
             const allApps = wizardModel.projectTypes;
-            const templateCategories = Array.from(
-                new Set(allApps.map(getTemplateCategory))
-            );
-            const filteredApps = allApps.filter(p => {
+            const lvglOptions = wizardModel.digiwiseLvglOptions;
+            const activeLvglMajor = wizardModel.lvglVersion.split(".")[0];
+            const versionScopedApps = allApps.filter(p => {
+                const remoteVer = p.remoteTemplate?.lvglVersion;
+                if (!remoteVer) return true;
+                return remoteVer === wizardModel.lvglVersion || remoteVer.split(".")[0] === activeLvglMajor;
+            });
+            const templateCategories =
+                wizardModel.digiwiseTemplateCategories.length > 0
+                    ? wizardModel.digiwiseTemplateCategories.map(item => item.value)
+                    : Array.from(new Set(versionScopedApps.map(getTemplateCategory)));
+            const filteredApps = versionScopedApps.filter(p => {
                 if (templateFilterType && templateFilterType !== "All") {
                     const cat = getTemplateCategory(p);
                     if (cat !== templateFilterType) return false;
@@ -3328,39 +3370,40 @@ export const NewProjectWizard = observer(
                         disabled: wizardModel.createProjectInProgress
                     })}
                 >
-                    {/* Top tab list: LVGL version switcher (Step 1) or current LVGL version display (Step 2) */}
+                    {/* Top tab list: backend-configured LVGL versions dictionary (with LVGL9/LVGL8 fallback) */}
                     <div className="tab-list">
                         <div className="version-tabs">
-                            {selectedApp?.remoteTemplate ? (
+                            {tempType === "create" ? (
                                 <span className="active static-title">
-                                    {remoteLvglVersion
-                                        ? `LVGL ${remoteLvglVersion}`
-                                        : labels.templateVersion}
+                                    {selectedApp?.remoteTemplate
+                                        ? (remoteLvglVersion
+                                              ? `LVGL ${remoteLvglVersion}`
+                                              : labels.templateVersion)
+                                        : (isV9 ? "LVGL9" : "LVGL8")}
                                 </span>
-                            ) : tempType === "create" ? (
-                                <span className="active static-title">
-                                    {isV9 ? "LVGL9" : "LVGL8"}
-                                </span>
-                            ) : (
+                            ) : lvglOptions.length > 0 ? (
                                 <>
-                                    <span
-                                        className={isV9 ? "active" : ""}
-                                        onClick={action(() => {
-                                            wizardModel.lvglVersion = "9.3.0";
-                                        })}
-                                    >
-                                        LVGL9
-                                    </span>
-                                    <span
-                                        className={!isV9 ? "active" : ""}
-                                        onClick={action(() => {
-                                            wizardModel.lvglVersion = "8.4.0";
-                                        })}
-                                    >
-                                        LVGL8
-                                    </span>
+                                    {lvglOptions.map(opt => {
+                                        const isActive =
+                                            opt.value === wizardModel.lvglVersion ||
+                                            opt.value.split(".")[0] === activeLvglMajor;
+                                        return (
+                                            <span
+                                                key={opt.value}
+                                                className={isActive ? "active" : ""}
+                                                onClick={action(() => {
+                                                    wizardModel.lvglVersion = opt.value.startsWith("9")
+                                                        ? "9.3.0"
+                                                        : "8.4.0";
+                                                    this.setState({ templateFilterType: "All" });
+                                                })}
+                                            >
+                                                {opt.label}
+                                            </span>
+                                        );
+                                    })}
                                 </>
-                            )}
+                            ) : null}
                         </div>
 
                         {tempType !== "create" && (
@@ -3406,6 +3449,23 @@ export const NewProjectWizard = observer(
 
                     {/* Step 1: Template selection box (single responsive gallery) */}
                     <div className={classNames("template-box", { hide: tempType === "create" })}>
+                        {wizardModel.templateListLoading ? (
+                            <div
+                                className="template-gallery-state"
+                                style={{
+                                    display: "flex",
+                                    flex: "1 1 auto",
+                                    width: "100%",
+                                    height: "100%",
+                                    minHeight: "320px",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "14px"
+                                }}
+                            >
+                                {labels.loadingTemplates}
+                            </div>
+                        ) : (
                         <div className="board-template template-gallery">
                             <div className="search-bar">
                                 <div className="search-item">
@@ -3435,10 +3495,13 @@ export const NewProjectWizard = observer(
                                             <span>
                                                 {cat === "All"
                                                     ? labels.categories.All
-                                                    : getTemplateCategoryLabel(
+                                                    : (wizardModel.digiwiseTemplateCategories.find(
+                                                          item => item.value === cat
+                                                      )?.label ||
+                                                      getTemplateCategoryLabel(
                                                           cat,
                                                           isChinese
-                                                      )}
+                                                      ))}
                                             </span>
                                         </label>
                                     ))}
@@ -3446,13 +3509,22 @@ export const NewProjectWizard = observer(
                             </div>
 
                             <div className="temp-box scroll-bar">
-                                {wizardModel.templateListLoading ? (
-                                    <div className="template-gallery-state">
-                                        {labels.loadingTemplates}
-                                    </div>
-                                ) : wizardModel.templateListError &&
+                                {wizardModel.templateListError &&
                                   filteredApps.length === 0 ? (
-                                    <div className="template-gallery-state template-gallery-state--error">
+                                    <div
+                                        className="template-gallery-state template-gallery-state--error"
+                                        style={{
+                                            gridColumn: "1 / -1",
+                                            width: "100%",
+                                            minHeight: "260px",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            textAlign: "center",
+                                            gap: "12px"
+                                        }}
+                                    >
                                         <span>
                                             {getTemplateListErrorMessage(
                                                 wizardModel.templateListError,
@@ -3470,7 +3542,18 @@ export const NewProjectWizard = observer(
                                         </button>
                                     </div>
                                 ) : filteredApps.length === 0 ? (
-                                    <div className="template-gallery-state">
+                                    <div
+                                        className="template-gallery-state"
+                                        style={{
+                                            gridColumn: "1 / -1",
+                                            width: "100%",
+                                            minHeight: "260px",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            textAlign: "center"
+                                        }}
+                                    >
                                         {wizardModel.digiwiseTemplates.length === 0
                                             ? labels.noTemplates
                                             : labels.noTemplateMatches}
@@ -3510,6 +3593,7 @@ export const NewProjectWizard = observer(
                                 })}
                             </div>
                         </div>
+                        )}
                     </div>
 
                     {/* Step 2: Parameter configuration form */}

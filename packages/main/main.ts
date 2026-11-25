@@ -170,6 +170,9 @@ app.on("ready", async function () {
         homeWindow = openHomeWindow();
     }
 
+    const { registerDigiwiseBspCatalogIpc } = await import("main/digiwise-bsp-catalog");
+    registerDigiwiseBspCatalogIpc(() => homeWindow);
+
     await import("main/menu");
 
     // MCP settings are registered here; the read-only bridge remains off

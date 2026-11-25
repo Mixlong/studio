@@ -10,11 +10,15 @@ import {
     getDigiwiseAuthGuard, callDigiwisePublicApiWithSession,
     onDigiwiseAuthSessionChanged
 } from "main/digiwise-auth";
-import { addDigiStudioToCodex } from "./codex-import";
+import {
+    addDigiStudioToCodex,
+    getDigiStudioMcpClientConfig
+} from "./codex-import";
 
 const STATUS_CHANNEL = "digistudio:mcp:status";
 const TOGGLE_CHANNEL = "digistudio:mcp:toggle";
 const CODEX_CHANNEL = "digistudio:mcp:install-codex";
+const CLIENT_CONFIG_CHANNEL = "digistudio:mcp:client-config";
 const POLICY_CHANGED_CHANNEL = "digistudio:mcp:policy-changed";
 
 let initialized = false;
@@ -294,6 +298,15 @@ export async function registerMcpIntegration(window: BrowserWindow) {
         return addDigiStudioToCodex();
     });
 
+    ipcMain.handle(CLIENT_CONFIG_CHANNEL, async event => {
+        checkSender(event);
+        if (!await accountAuthorized()) {
+            await disconnectSession(true);
+            throw new Error("MCP is not authorized for this IDE account");
+        }
+        return getDigiStudioMcpClientConfig();
+    });
+
     const unsubscribe = onDigiwiseAuthSessionChanged(() => {
         ++policyCheckSequence;
         void disconnectSession(true);
@@ -303,7 +316,12 @@ export async function registerMcpIntegration(window: BrowserWindow) {
         unsubscribe();
         ++policyCheckSequence;
         void disconnectSession(true);
-        for (const channel of [STATUS_CHANNEL, TOGGLE_CHANNEL, CODEX_CHANNEL]) {
+        for (const channel of [
+            STATUS_CHANNEL,
+            TOGGLE_CHANNEL,
+            CODEX_CHANNEL,
+            CLIENT_CONFIG_CHANNEL
+        ]) {
             ipcMain.removeHandler(channel);
         }
         initialized = false;
