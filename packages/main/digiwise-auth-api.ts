@@ -32,7 +32,11 @@ import type {
     DigiwiseChangelog,
     DigiwiseChangelogLanguage
 } from "eez-studio-shared/digiwise-changelog";
-import type { DigiwiseCategory, DigiwiseBspVersion, DigiwiseBspDownloadMeta } from "eez-studio-shared/digiwise-bsp-catalog";
+import type {
+    DigiwiseCategory,
+    DigiwiseBspVersion,
+    DigiwiseBspDownloadMeta
+} from "eez-studio-shared/digiwise-bsp-catalog";
 
 type JsonObject = Record<string, unknown>;
 
@@ -49,7 +53,12 @@ function boundedString(value: unknown, maxLength: number): value is string {
 }
 
 function validPublishedAt(value: unknown): value is string | null {
-    return value === null || (typeof value === "string" && PUBLISHED_AT_PATTERN.test(value) && Number.isFinite(Date.parse(value)));
+    return (
+        value === null ||
+        (typeof value === "string" &&
+            PUBLISHED_AT_PATTERN.test(value) &&
+            Number.isFinite(Date.parse(value)))
+    );
 }
 
 export class DigiwisePublicApiError extends Error {
@@ -618,42 +627,108 @@ export class DigiwisePublicApi {
 
     async listCategories(accessToken: string): Promise<DigiwiseCategory[]> {
         const data = await this.request<unknown>("categories", { method: "GET" }, accessToken);
-        if (!Array.isArray(data) || data.length > MAX_CATEGORY_ITEMS || !data.every(item =>
-            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
-            [item.modelCode, item.categoryCode, item.modelName, item.categoryName].every(v => boundedString(v, MAX_CATALOG_STRING_LENGTH)) &&
-            (item.chipFamily === null || boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
-            (item.productType === null || (Number.isSafeInteger(item.productType) && (item.productType as number) > 0)) &&
-            (item.externalId === null || boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
-        )) {
-            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid category catalog", "category-contract");
+        if (
+            !Array.isArray(data) ||
+            data.length > MAX_CATEGORY_ITEMS ||
+            !data.every(
+                item =>
+                    isObject(item) &&
+                    Number.isSafeInteger(item.id) &&
+                    (item.id as number) > 0 &&
+                    [item.modelCode, item.categoryCode, item.modelName, item.categoryName].every(v =>
+                        boundedString(v, MAX_CATALOG_STRING_LENGTH)
+                    ) &&
+                    (item.chipFamily === undefined ||
+                        item.chipFamily === null ||
+                        item.chipFamily === "" ||
+                        boundedString(item.chipFamily, MAX_CATALOG_STRING_LENGTH)) &&
+                    (item.productType === undefined ||
+                        item.productType === null ||
+                        item.productType === "" ||
+                        Number.isSafeInteger(Number(item.productType))) &&
+                    (item.externalId === undefined ||
+                        item.externalId === null ||
+                        item.externalId === "" ||
+                        boundedString(item.externalId, MAX_CATALOG_STRING_LENGTH))
+            )
+        ) {
+            throw new DigiwisePublicApiError(
+                502,
+                "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid category catalog",
+                "category-contract"
+            );
         }
-        return data.map(({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }) =>
-            ({ id, modelCode, categoryCode, modelName, categoryName, chipFamily, externalId, productType }));
+        return data.map(item => ({
+            id: item.id as number,
+            modelCode: item.modelCode as string,
+            categoryCode: item.categoryCode as string,
+            modelName: item.modelName as string,
+            categoryName: item.categoryName as string,
+            chipFamily: typeof item.chipFamily === "string" && item.chipFamily ? item.chipFamily : null,
+            externalId: typeof item.externalId === "string" && item.externalId ? item.externalId : null,
+            productType:
+                item.productType === undefined || item.productType === null || item.productType === ""
+                    ? null
+                    : Number(item.productType)
+        }));
     }
 
     async listBspVersions(accessToken: string, categoryCode?: string): Promise<DigiwiseBspVersion[]> {
-        if (categoryCode !== undefined && (typeof categoryCode !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(categoryCode))) {
+        if (
+            categoryCode !== undefined &&
+            (typeof categoryCode !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{1,63}$/.test(categoryCode))
+        ) {
             throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid category code", "local-validation");
         }
         const query = categoryCode === undefined ? "" : `?${new URLSearchParams({ categoryCode })}`;
         const data = await this.request<unknown>(`bsp${query}`, { method: "GET" }, accessToken);
-        if (!Array.isArray(data) || data.length > MAX_BSP_ITEMS || !data.every(item =>
-            isObject(item) && Number.isSafeInteger(item.id) && (item.id as number) > 0 &&
-            Number.isSafeInteger(item.modelId) && (item.modelId as number) > 0 &&
-            Number.isSafeInteger(item.fileSize) && (item.fileSize as number) >= 0 && (item.fileSize as number) <= MAX_BSP_FILE_SIZE &&
-            boundedString(item.modelCode, MAX_CATALOG_STRING_LENGTH) &&
-            boundedString(item.categoryCode, MAX_CATALOG_STRING_LENGTH) &&
-            boundedString(item.modelName, MAX_CATALOG_STRING_LENGTH) &&
-            boundedString(item.categoryName, MAX_CATALOG_STRING_LENGTH) &&
-            boundedString(item.version, MAX_CATALOG_STRING_LENGTH) &&
-            boundedString(item.fileName, MAX_BSP_FILE_NAME_LENGTH) &&
-            typeof item.sha256 === "string" && SHA256_PATTERN.test(item.sha256) &&
-            validPublishedAt(item.publishedAt)
-        )) {
-            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP catalog", "bsp-contract");
+        if (
+            !Array.isArray(data) ||
+            data.length > MAX_BSP_ITEMS ||
+            !data.every(
+                item =>
+                    isObject(item) &&
+                    Number.isSafeInteger(item.id) &&
+                    (item.id as number) > 0 &&
+                    Number.isSafeInteger(item.modelId) &&
+                    (item.modelId as number) > 0 &&
+                    Number.isSafeInteger(item.fileSize) &&
+                    (item.fileSize as number) >= 0 &&
+                    (item.fileSize as number) <= MAX_BSP_FILE_SIZE &&
+                    boundedString(item.modelCode, MAX_CATALOG_STRING_LENGTH) &&
+                    boundedString(item.categoryCode, MAX_CATALOG_STRING_LENGTH) &&
+                    boundedString(item.modelName, MAX_CATALOG_STRING_LENGTH) &&
+                    boundedString(item.categoryName, MAX_CATALOG_STRING_LENGTH) &&
+                    boundedString(item.version, MAX_CATALOG_STRING_LENGTH) &&
+                    boundedString(item.fileName, MAX_BSP_FILE_NAME_LENGTH) &&
+                    typeof item.sha256 === "string" &&
+                    SHA256_PATTERN.test(item.sha256) &&
+                    validPublishedAt(item.publishedAt)
+            )
+        ) {
+            throw new DigiwisePublicApiError(
+                502,
+                "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid BSP catalog",
+                "bsp-contract"
+            );
         }
-        return data.map(({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }) =>
-            ({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }));
+        return data.map(
+            ({ id, modelId, modelCode, categoryCode, modelName, categoryName, version, fileName, fileSize, sha256, publishedAt }) => ({
+                id,
+                modelId,
+                modelCode,
+                categoryCode,
+                modelName,
+                categoryName,
+                version,
+                fileName,
+                fileSize,
+                sha256,
+                publishedAt
+            })
+        );
     }
 
     async prepareBspDownload(accessToken: string, bspId: number): Promise<DigiwiseBspDownloadMeta> {
@@ -661,9 +736,7 @@ export class DigiwisePublicApi {
             throw new DigiwisePublicApiError(422, "INVALID_REQUEST", "Invalid BSP id", "local-validation");
         }
         const data = await this.request<unknown>(`bsp/${bspId}/download`, { method: "GET" }, accessToken);
-        const expiresMs = isObject(data) && typeof data.expiresAt === "string"
-            ? Date.parse(data.expiresAt)
-            : NaN;
+        const expiresMs = isObject(data) && typeof data.expiresAt === "string" ? Date.parse(data.expiresAt) : NaN;
         if (
             !isObject(data) ||
             typeof data.downloadUrl !== "string" ||
@@ -682,7 +755,12 @@ export class DigiwisePublicApi {
             (data.bspId !== undefined && (!Number.isSafeInteger(data.bspId) || (data.bspId as number) !== bspId)) ||
             (data.modelId !== undefined && (!Number.isSafeInteger(data.modelId) || (data.modelId as number) <= 0))
         ) {
-            throw new DigiwisePublicApiError(502, "PUBLIC_API_INVALID_RESPONSE", "Invalid BSP download metadata", "bsp-download-contract");
+            throw new DigiwisePublicApiError(
+                502,
+                "PUBLIC_API_INVALID_RESPONSE",
+                "Invalid BSP download metadata",
+                "bsp-download-contract"
+            );
         }
         return {
             ...(data.bspId !== undefined ? { bspId: data.bspId as number } : {}),
@@ -715,7 +793,6 @@ export class DigiwisePublicApi {
             projectTypes: parseList(data.projectTypes)
         };
     }
-
     listTemplates(accessToken: string, page: number, pageSize: number) {
         const query = new URLSearchParams({
             page: String(page),

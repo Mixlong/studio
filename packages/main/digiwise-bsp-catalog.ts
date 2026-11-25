@@ -5,30 +5,45 @@ import path from "path";
 import { createHash, randomUUID } from "crypto";
 import { callDigiwisePublicApiWithSession, getDigiwiseAuthGuard } from "main/digiwise-auth";
 import type { DigiwiseIpcResult } from "eez-studio-shared/digiwise-auth";
-import type {
-    DigiwiseBspDownloadMeta,
-    DigiwiseBspDownloadProgress,
-    DigiwiseInstalledBspRecord
+import {
+    validateBspManifest,
+    type DigiwiseBspBuildGateResult,
+    type DigiwiseBspDownloadMeta,
+    type DigiwiseBspDownloadProgress,
+    type DigiwiseBspManifest,
+    type DigiwiseInstalledBspRecord,
+    type DigiwiseProjectBspBinding
 } from "eez-studio-shared/digiwise-bsp-catalog";
 
 const MAX_BSP_FILE_SIZE = 500 * 1024 * 1024;
 const MAX_BSP_ARCHIVE_ENTRIES = 20_000;
 const MAX_BSP_ARCHIVE_EXPANDED_SIZE = 1024 * 1024 * 1024;
+const MAX_MANIFEST_BYTES = 256 * 1024;
 const PROGRESS_CHANNEL = "digistudio:bsp:download-progress";
 const META_FILENAME = "bsp-install-meta.json";
+const MANIFEST_FILENAME = "bsp-manifest.json";
 
 let registered = false;
+const activeDownloadControllers = new Map<number, AbortController>();
 
 function isSafeSegment(value: unknown): value is string {
     return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value);
 }
 
+function isPrivateLanHost(hostname: string): boolean {
+    if (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1") return true;
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+    const m172 = hostname.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+    if (m172 && Number(m172[1]) >= 16 && Number(m172[1]) <= 31) return true;
+    return false;
+}
+
 function isAllowedDownloadUrl(url: URL): boolean {
     if (url.username || url.password) return false;
     if (url.protocol === "https:") return true;
-    // Allow plain HTTP only for local loopback development servers.
-    return url.protocol === "http:" &&
-        (url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "::1");
+    // Allow plain HTTP only for loopback or private RFC1918 LAN deployments.
+    return url.protocol === "http:" && isPrivateLanHost(url.hostname);
 }
 
 function bspStoreRoot(): string {
@@ -37,7 +52,12 @@ function bspStoreRoot(): string {
 
 function validateZipEntryPath(entryName: string, stageDir: string): string {
     const normalized = entryName.replace(/\\/g, "/");
-    if (!normalized || normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized) || normalized.includes("\0")) {
+    if (
+        !normalized ||
+        normalized.startsWith("/") ||
+        /^[a-zA-Z]:/.test(normalized) ||
+        normalized.includes("\0")
+    ) {
         throw new Error("BSP_ARCHIVE_INVALID");
     }
     const segments = normalized.split("/").filter(Boolean);
@@ -51,22 +71,50 @@ function validateZipEntryPath(entryName: string, stageDir: string): string {
     return destination;
 }
 
+function makeCancelledError(): Error {
+    return Object.assign(new Error("BSP download was cancelled"), {
+        code: "BSP_DOWNLOAD_CANCELLED",
+        status: 499
+    });
+}
+
+export function cancelBspDownload(bspId: number): boolean {
+    const controller = activeDownloadControllers.get(bspId);
+    if (!controller) return false;
+    controller.abort();
+    activeDownloadControllers.delete(bspId);
+    return true;
+}
+
 export async function downloadAndVerifyBspArchive(
     meta: DigiwiseBspDownloadMeta,
     tempFilePath: string,
     onProgress: (progress: DigiwiseBspDownloadProgress) => void,
     bspId: number,
-    fetchImpl: typeof fetch = fetch
+    fetchImpl: typeof fetch = fetch,
+    signal?: AbortSignal
 ): Promise<void> {
+    if (signal?.aborted) {
+        onProgress({ bspId, stage: "cancelled", receivedBytes: 0, totalBytes: meta.fileSize });
+        throw makeCancelledError();
+    }
+
     let currentUrl: URL;
     try {
         currentUrl = new URL(meta.downloadUrl);
     } catch {
-        throw Object.assign(new Error("Invalid BSP download URL"), { code: "BSP_DOWNLOAD_FAILED", status: 502 });
+        throw Object.assign(new Error("Invalid BSP download URL"), {
+            code: "BSP_DOWNLOAD_FAILED",
+            status: 502
+        });
     }
 
     let response: Response | undefined;
     for (let redirectCount = 0; redirectCount <= 3; redirectCount++) {
+        if (signal?.aborted) {
+            onProgress({ bspId, stage: "cancelled", receivedBytes: 0, totalBytes: meta.fileSize });
+            throw makeCancelledError();
+        }
         if (!isAllowedDownloadUrl(currentUrl)) {
             throw Object.assign(
                 new Error("BSP download URL must use HTTPS (or loopback HTTP for local development)"),
@@ -77,20 +125,34 @@ export async function downloadAndVerifyBspArchive(
             response = await fetchImpl(currentUrl.toString(), {
                 method: "GET",
                 headers: { Accept: "application/zip, application/octet-stream" },
-                redirect: "manual"
+                redirect: "manual",
+                signal
             });
-        } catch {
-            throw Object.assign(new Error("BSP file could not be downloaded"), { code: "BSP_DOWNLOAD_FAILED", status: 502 });
+        } catch (err: any) {
+            if (signal?.aborted || err?.name === "AbortError") {
+                onProgress({ bspId, stage: "cancelled", receivedBytes: 0, totalBytes: meta.fileSize });
+                throw makeCancelledError();
+            }
+            throw Object.assign(new Error("BSP file could not be downloaded"), {
+                code: "BSP_DOWNLOAD_FAILED",
+                status: 502
+            });
         }
         if (response.status < 300 || response.status >= 400) break;
         const location = response.headers.get("location");
         if (!location || redirectCount === 3) {
-            throw Object.assign(new Error("BSP download redirect is invalid"), { code: "BSP_DOWNLOAD_FAILED", status: 502 });
+            throw Object.assign(new Error("BSP download redirect is invalid"), {
+                code: "BSP_DOWNLOAD_FAILED",
+                status: 502
+            });
         }
         try {
             currentUrl = new URL(location, currentUrl);
         } catch {
-            throw Object.assign(new Error("BSP download redirect is invalid"), { code: "BSP_DOWNLOAD_FAILED", status: 502 });
+            throw Object.assign(new Error("BSP download redirect is invalid"), {
+                code: "BSP_DOWNLOAD_FAILED",
+                status: 502
+            });
         }
     }
 
@@ -103,7 +165,10 @@ export async function downloadAndVerifyBspArchive(
 
     const declaredLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > MAX_BSP_FILE_SIZE) {
-        throw Object.assign(new Error("BSP file exceeds allowed size"), { code: "BSP_FILE_TOO_LARGE", status: 413 });
+        throw Object.assign(new Error("BSP file exceeds allowed size"), {
+            code: "BSP_FILE_TOO_LARGE",
+            status: 413
+        });
     }
 
     await fs.promises.mkdir(path.dirname(tempFilePath), { recursive: true });
@@ -117,6 +182,11 @@ export async function downloadAndVerifyBspArchive(
             const reader = response.body.getReader();
             try {
                 while (true) {
+                    if (signal?.aborted) {
+                        await reader.cancel().catch(() => undefined);
+                        onProgress({ bspId, stage: "cancelled", receivedBytes: received, totalBytes: meta.fileSize });
+                        throw makeCancelledError();
+                    }
                     const { done, value } = await reader.read();
                     if (done) break;
                     if (!value || value.byteLength === 0) continue;
@@ -134,6 +204,10 @@ export async function downloadAndVerifyBspArchive(
                     onProgress({ bspId, stage: "downloading", receivedBytes: received, totalBytes: meta.fileSize });
                 }
             } catch (err: any) {
+                if (signal?.aborted || err?.name === "AbortError" || err?.code === "BSP_DOWNLOAD_CANCELLED") {
+                    onProgress({ bspId, stage: "cancelled", receivedBytes: received, totalBytes: meta.fileSize });
+                    throw makeCancelledError();
+                }
                 if (err && typeof err.code === "string") throw err;
                 throw Object.assign(new Error("BSP download stream was interrupted"), {
                     code: "BSP_DOWNLOAD_FAILED",
@@ -142,6 +216,10 @@ export async function downloadAndVerifyBspArchive(
             }
         } else {
             const ab = await response.arrayBuffer();
+            if (signal?.aborted) {
+                onProgress({ bspId, stage: "cancelled", receivedBytes: 0, totalBytes: meta.fileSize });
+                throw makeCancelledError();
+            }
             const buf = Buffer.from(ab);
             received = buf.byteLength;
             if (received > MAX_BSP_FILE_SIZE || received > meta.fileSize) {
@@ -174,11 +252,17 @@ export async function extractVerifiedBspArchive(zipFilePath: string, stageDir: s
     try {
         zip = new AdmZip(zipFilePath);
     } catch {
-        throw Object.assign(new Error("BSP archive is not a valid ZIP"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+        throw Object.assign(new Error("BSP archive is not a valid ZIP"), {
+            code: "BSP_ARCHIVE_INVALID",
+            status: 422
+        });
     }
     const entries = zip.getEntries();
     if (!entries.length || entries.length > MAX_BSP_ARCHIVE_ENTRIES) {
-        throw Object.assign(new Error("BSP archive entry count is invalid"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+        throw Object.assign(new Error("BSP archive entry count is invalid"), {
+            code: "BSP_ARCHIVE_INVALID",
+            status: 422
+        });
     }
     let expandedSize = 0;
     for (const entry of entries) {
@@ -186,31 +270,197 @@ export async function extractVerifiedBspArchive(zipFilePath: string, stageDir: s
         try {
             destination = validateZipEntryPath(entry.entryName, stageDir);
         } catch {
-            throw Object.assign(new Error("BSP archive contains an unsafe path"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+            throw Object.assign(new Error("BSP archive contains an unsafe path"), {
+                code: "BSP_ARCHIVE_INVALID",
+                status: 422
+            });
         }
         const unixMode = (entry.attr >>> 16) & 0xffff;
         if ((unixMode & 0o170000) === 0o120000) {
-            throw Object.assign(new Error("BSP archive must not contain symbolic links"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+            throw Object.assign(new Error("BSP archive must not contain symbolic links"), {
+                code: "BSP_ARCHIVE_INVALID",
+                status: 422
+            });
         }
         if (entry.header.encrypted) {
-            throw Object.assign(new Error("Encrypted BSP archives are not supported"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+            throw Object.assign(new Error("Encrypted BSP archives are not supported"), {
+                code: "BSP_ARCHIVE_INVALID",
+                status: 422
+            });
         }
         if (entry.isDirectory) {
             await fs.promises.mkdir(destination, { recursive: true });
             continue;
         }
         const declaredSize = entry.header.size;
-        if (!Number.isSafeInteger(declaredSize) || declaredSize < 0 || expandedSize + declaredSize > MAX_BSP_ARCHIVE_EXPANDED_SIZE) {
-            throw Object.assign(new Error("BSP archive expands beyond allowed size"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+        if (
+            !Number.isSafeInteger(declaredSize) ||
+            declaredSize < 0 ||
+            expandedSize + declaredSize > MAX_BSP_ARCHIVE_EXPANDED_SIZE
+        ) {
+            throw Object.assign(new Error("BSP archive expands beyond allowed size"), {
+                code: "BSP_ARCHIVE_INVALID",
+                status: 422
+            });
         }
         expandedSize += declaredSize;
         const data = entry.getData();
         if (data.length !== declaredSize) {
-            throw Object.assign(new Error("BSP archive contains a corrupted entry"), { code: "BSP_ARCHIVE_INVALID", status: 422 });
+            throw Object.assign(new Error("BSP archive contains a corrupted entry"), {
+                code: "BSP_ARCHIVE_INVALID",
+                status: 422
+            });
         }
         await fs.promises.mkdir(path.dirname(destination), { recursive: true });
         await fs.promises.writeFile(destination, data, { flag: "wx" });
     }
+}
+
+export async function readAndValidateInstalledManifest(
+    bspDir: string,
+    expected?: { categoryCode?: string; version?: string }
+): Promise<DigiwiseBspManifest | null> {
+    const manifestPath = path.join(bspDir, MANIFEST_FILENAME);
+    if (!fs.existsSync(manifestPath)) {
+        return null;
+    }
+    const stat = await fs.promises.stat(manifestPath);
+    if (stat.size > MAX_MANIFEST_BYTES) {
+        throw Object.assign(new Error("bsp-manifest.json exceeds maximum allowed size"), {
+            code: "BSP_MANIFEST_INVALID",
+            status: 422
+        });
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(await fs.promises.readFile(manifestPath, "utf8"));
+    } catch {
+        throw Object.assign(new Error("bsp-manifest.json is not valid JSON"), {
+            code: "BSP_MANIFEST_INVALID",
+            status: 422
+        });
+    }
+    const result = validateBspManifest(parsed, expected);
+    if (!result.ok) {
+        throw Object.assign(new Error(`Invalid bsp-manifest.json: ${result.errors.join("; ")}`), {
+            code: "BSP_MANIFEST_INVALID",
+            status: 422
+        });
+    }
+    return result.manifest;
+}
+
+/**
+ * Convention-over-configuration fallback when a generic BSP ZIP does not include bsp-manifest.json.
+ * Auto-detects CMakeLists.txt / Makefile, APP/ui directory, cmake_config_*.py metadata, and *.ld FLASH ORIGIN.
+ */
+export async function synthesizeDefaultBspManifest(
+    bspDir: string,
+    meta: { categoryCode: string; version: string; bspId?: number }
+): Promise<DigiwiseBspManifest> {
+    let entries: string[] = [];
+    try {
+        entries = await fs.promises.readdir(bspDir);
+    } catch {
+        entries = [];
+    }
+
+    const hasCMake = entries.some(e => e.toLowerCase() === "cmakelists.txt");
+    const hasMakefile = entries.some(e => e.toLowerCase() === "makefile");
+    const buildSystem: DigiwiseBspManifest["build"]["system"] = hasCMake
+        ? "cmake"
+        : hasMakefile
+          ? "make"
+          : "cmake";
+
+    let projectName = "firmware";
+    let cpuArch = "cortex-m4";
+    let targetChip = meta.categoryCode.toLowerCase();
+    let flashAddress = "0x08001000";
+
+    // Inspect cmake_config_*.py if present and plaintext
+    const configPy = entries.find(e => /^cmake_config_.*\.py$/i.test(e));
+    if (configPy) {
+        try {
+            const text = await fs.promises.readFile(path.join(bspDir, configPy), "utf8");
+            const nameMatch = text.match(/['"]project_name['"]\s*:\s*['"]([^'"]+)['"]/);
+            if (nameMatch) projectName = nameMatch[1].trim();
+            const archMatch = text.match(/['"]cpu_arch['"]\s*:\s*['"]([^'"]+)['"]/);
+            if (archMatch) cpuArch = archMatch[1].trim();
+            const chipFromFile = configPy.match(/^cmake_config_([A-Za-z0-9_-]+)\.py$/i)?.[1];
+            if (chipFromFile) targetChip = chipFromFile.toLowerCase();
+        } catch {
+            // Ignore unreadable/encrypted config files
+        }
+    }
+
+    // Inspect *.ld linker script for FLASH ORIGIN if present and plaintext
+    const ldFile = entries.find(e => /\.ld$/i.test(e));
+    if (ldFile) {
+        try {
+            const ldText = await fs.promises.readFile(path.join(bspDir, ldFile), "utf8");
+            const originMatch = ldText.match(/FLASH\b[^\n\r]*ORIGIN\s*=\s*(0x[0-9a-fA-F]+|\d+)/i);
+            if (originMatch) flashAddress = originMatch[1];
+        } catch {
+            // Ignore unreadable linker script
+        }
+    }
+
+    const generatedUiDir = fs.existsSync(path.join(bspDir, "APP", "ui"))
+        ? "APP/ui"
+        : "ui/generated";
+
+    return {
+        schemaVersion: "1.0",
+        bsp: {
+            id: `${meta.categoryCode.toLowerCase()}-generic`,
+            categoryCode: meta.categoryCode,
+            version: meta.version,
+            name: `${meta.categoryCode} ${meta.version} (通用默认规则)`,
+            minStudioVersion: "0.0.1",
+            supportedHostOs: ["windows-x64"]
+        },
+        target: {
+            chip: targetChip,
+            arch: cpuArch
+        },
+        build: {
+            system: buildSystem,
+            sourceDir: ".",
+            cmakeLists: hasCMake ? "CMakeLists.txt" : null,
+            preConfigureScript: null,
+            toolchainFile: null,
+            generator: buildSystem === "cmake" ? "Ninja" : null,
+            uiSync: {
+                strategy: "copy-to-dir",
+                generatedUiDir,
+                resourceManifest: "build/generated/embedded-resources.json"
+            },
+            env: {},
+            extraArgs: [],
+            artifacts: [
+                { role: "firmware", format: "bin", path: `build/${projectName}.bin`, required: true },
+                { role: "symbols", format: "elf", path: `build/${projectName}.elf`, required: false }
+            ]
+        },
+        toolchain: {
+            compiler: { id: "arm-none-eabi-gcc", version: "14.3.rel1" },
+            ...(buildSystem === "cmake"
+                ? { cmake: { minVersion: "3.20.0" }, ninja: { minVersion: "1.10.0" } }
+                : {})
+        },
+        download: {
+            probe: "jlink",
+            target: targetChip,
+            interface: "SWD",
+            frequencyHz: 500000,
+            flashAddress,
+            pack: null,
+            script: null,
+            verifyAfterFlash: true,
+            resetAfterFlash: true
+        }
+    };
 }
 
 export async function installVerifiedBsp(
@@ -218,10 +468,14 @@ export async function installVerifiedBsp(
     bspId: number,
     meta: DigiwiseBspDownloadMeta,
     onProgress: (progress: DigiwiseBspDownloadProgress) => void,
-    fetchImpl: typeof fetch = fetch
+    fetchImpl: typeof fetch = fetch,
+    signal?: AbortSignal
 ): Promise<DigiwiseInstalledBspRecord> {
     if (!isSafeSegment(meta.categoryCode) || !isSafeSegment(meta.version)) {
-        throw Object.assign(new Error("Invalid BSP category or version"), { code: "INVALID_REQUEST", status: 422 });
+        throw Object.assign(new Error("Invalid BSP category or version"), {
+            code: "INVALID_REQUEST",
+            status: 422
+        });
     }
     const tempId = randomUUID();
     const tempZip = path.join(storeRoot, `.tmp-${tempId}.zip`);
@@ -229,10 +483,21 @@ export async function installVerifiedBsp(
     const targetDir = path.join(storeRoot, meta.categoryCode, meta.version);
 
     try {
-        await downloadAndVerifyBspArchive(meta, tempZip, onProgress, bspId, fetchImpl);
+        await downloadAndVerifyBspArchive(meta, tempZip, onProgress, bspId, fetchImpl, signal);
         onProgress({ bspId, stage: "extracting", receivedBytes: meta.fileSize, totalBytes: meta.fileSize });
         await fs.promises.mkdir(stageDir, { recursive: true });
         await extractVerifiedBspArchive(tempZip, stageDir);
+
+        const manifest =
+            (await readAndValidateInstalledManifest(stageDir, {
+                categoryCode: meta.categoryCode,
+                version: meta.version
+            })) ||
+            (await synthesizeDefaultBspManifest(stageDir, {
+                categoryCode: meta.categoryCode,
+                version: meta.version,
+                bspId: meta.bspId ?? bspId
+            }));
 
         const record: DigiwiseInstalledBspRecord = {
             bspId: meta.bspId ?? bspId,
@@ -244,7 +509,8 @@ export async function installVerifiedBsp(
             fileSize: meta.fileSize,
             sha256: meta.sha256.toLowerCase(),
             installPath: targetDir,
-            installedAt: new Date().toISOString()
+            installedAt: new Date().toISOString(),
+            manifest
         };
         await fs.promises.writeFile(
             path.join(stageDir, META_FILENAME),
@@ -282,11 +548,17 @@ export async function scanInstalledBsps(storeRoot: string): Promise<DigiwiseInst
         }
         for (const ver of versions) {
             if (!ver.isDirectory() || ver.name.startsWith(".")) continue;
-            const metaPath = path.join(catDir, ver.name, META_FILENAME);
+            const installDir = path.join(catDir, ver.name);
+            const metaPath = path.join(installDir, META_FILENAME);
             try {
                 const parsed = JSON.parse(await fs.promises.readFile(metaPath, "utf8"));
-                if (parsed && typeof parsed.categoryCode === "string" && typeof parsed.version === "string" && typeof parsed.sha256 === "string") {
-                    records.push({ ...parsed, installPath: path.join(catDir, ver.name) });
+                if (
+                    parsed &&
+                    typeof parsed.categoryCode === "string" &&
+                    typeof parsed.version === "string" &&
+                    typeof parsed.sha256 === "string"
+                ) {
+                    records.push({ ...parsed, installPath: installDir });
                 }
             } catch {
                 // Ignore incomplete/corrupt directories.
@@ -294,6 +566,80 @@ export async function scanInstalledBsps(storeRoot: string): Promise<DigiwiseInst
         }
     }
     return records;
+}
+
+/**
+ * Online authorization gate required before Build:
+ * Local cached BSP files MUST NOT bypass current online authorization or unpublish status.
+ */
+export async function verifyBspBuildAccess(
+    storeRoot: string,
+    binding: DigiwiseProjectBspBinding,
+    listAuthorizedVersions: (categoryCode: string) => Promise<
+        Array<{ id: number; categoryCode: string; version: string; sha256: string }>
+    >
+): Promise<DigiwiseBspBuildGateResult> {
+    if (
+        !binding ||
+        !Number.isSafeInteger(binding.bspId) ||
+        binding.bspId <= 0 ||
+        !isSafeSegment(binding.categoryCode) ||
+        !isSafeSegment(binding.version) ||
+        typeof binding.sha256 !== "string" ||
+        !/^[0-9a-f]{64}$/i.test(binding.sha256)
+    ) {
+        throw Object.assign(new Error("Invalid project BSP binding"), {
+            code: "INVALID_REQUEST",
+            status: 422
+        });
+    }
+
+    const authorizedList = await listAuthorizedVersions(binding.categoryCode);
+    const match = authorizedList.find(
+        item =>
+            item.id === binding.bspId &&
+            item.categoryCode === binding.categoryCode &&
+            item.version === binding.version &&
+            item.sha256.toLowerCase() === binding.sha256.toLowerCase()
+    );
+    if (!match) {
+        throw Object.assign(
+            new Error("Bound BSP is no longer authorized, published, or digest-matched on the server"),
+            { code: "BSP_NOT_AUTHORIZED", status: 403 }
+        );
+    }
+
+    const installedList = await scanInstalledBsps(storeRoot);
+    const installed = installedList.find(
+        item =>
+            item.categoryCode === binding.categoryCode &&
+            item.version === binding.version &&
+            item.sha256.toLowerCase() === binding.sha256.toLowerCase()
+    );
+    if (!installed) {
+        throw Object.assign(new Error("Bound BSP is not installed locally; please re-download"), {
+            code: "BSP_NOT_INSTALLED",
+            status: 404
+        });
+    }
+
+    const manifest =
+        (await readAndValidateInstalledManifest(installed.installPath, {
+            categoryCode: installed.categoryCode,
+            version: installed.version
+        })) ||
+        (await synthesizeDefaultBspManifest(installed.installPath, {
+            categoryCode: installed.categoryCode,
+            version: installed.version,
+            bspId: installed.bspId
+        }));
+
+    return {
+        authorized: true,
+        installed: { ...installed, manifest },
+        manifest,
+        checkedAt: new Date().toISOString()
+    };
 }
 
 export function registerDigiwiseBspCatalogIpc(
@@ -305,20 +651,35 @@ export function registerDigiwiseBspCatalogIpc(
         typeof windowOrResolver === "function" ? windowOrResolver() : windowOrResolver;
 
     const checkSender = (event: Electron.IpcMainInvokeEvent) => {
-        const window = resolveWindow();
-        if (window.isDestroyed() || window.webContents.isDestroyed() ||
-            event.sender !== window.webContents ||
-            event.senderFrame !== window.webContents.mainFrame) {
+        const windows = electron.BrowserWindow.getAllWindows();
+        const allowed = windows.some(
+            w =>
+                !w.isDestroyed() &&
+                !w.webContents.isDestroyed() &&
+                event.sender === w.webContents &&
+                event.senderFrame === w.webContents.mainFrame
+        );
+        if (!allowed) {
             throw new Error("Unauthorized BSP catalog request");
         }
     };
-    const current = async <T>(operation: () => Promise<DigiwiseIpcResult<T>>): Promise<DigiwiseIpcResult<T>> => {
+    const current = async <T>(
+        operation: () => Promise<DigiwiseIpcResult<T>>
+    ): Promise<DigiwiseIpcResult<T>> => {
         const initialGuard = getDigiwiseAuthGuard();
         const generation = initialGuard.generation;
         const result = await operation();
         const finalGuard = getDigiwiseAuthGuard();
         if (!initialGuard.authenticated || !finalGuard.authenticated || finalGuard.generation !== generation) {
-            return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Session changed", requestId: "session-changed" } };
+            return {
+                ok: false,
+                error: {
+                    status: 401,
+                    code: "AUTH_REQUIRED",
+                    message: "Session changed",
+                    requestId: "session-changed"
+                }
+            };
         }
         return result;
     };
@@ -330,72 +691,205 @@ export function registerDigiwiseBspCatalogIpc(
     });
     ipcMain.handle("digistudio:bsp:versions", (event, categoryCode: unknown) => {
         checkSender(event);
-        return current(() => callDigiwisePublicApiWithSession((api, token) => api.listBspVersions(token, categoryCode as string | undefined)));
+        return current(() =>
+            callDigiwisePublicApiWithSession((api, token) =>
+                api.listBspVersions(token, categoryCode as string | undefined)
+            )
+        );
     });
     ipcMain.handle("digistudio:bsp:installed", async event => {
         checkSender(event);
         const guard = getDigiwiseAuthGuard();
         if (!guard.authenticated) {
-            return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" } };
+            return {
+                ok: false,
+                error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" }
+            };
         }
         const items = await scanInstalledBsps(bspStoreRoot());
         return { ok: true, data: items };
     });
-    ipcMain.handle("digistudio:bsp:download", async (event, bspId: unknown): Promise<DigiwiseIpcResult<DigiwiseInstalledBspRecord>> => {
-        checkSender(event);
-        if (typeof bspId !== "number" || !Number.isSafeInteger(bspId) || bspId <= 0) {
-            return { ok: false, error: { status: 422, code: "INVALID_REQUEST", message: "Invalid BSP id", requestId: "local-validation" } };
-        }
-        const initialGuard = getDigiwiseAuthGuard();
-        if (!initialGuard.authenticated) {
-            return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" } };
-        }
-        const emitProgress = (progress: DigiwiseBspDownloadProgress) => {
-            const win = resolveWindow();
-            if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                win.webContents.send(PROGRESS_CHANNEL, progress);
+    ipcMain.handle(
+        "digistudio:bsp:download",
+        async (event, bspId: unknown): Promise<DigiwiseIpcResult<DigiwiseInstalledBspRecord>> => {
+            checkSender(event);
+            if (typeof bspId !== "number" || !Number.isSafeInteger(bspId) || bspId <= 0) {
+                return {
+                    ok: false,
+                    error: {
+                        status: 422,
+                        code: "INVALID_REQUEST",
+                        message: "Invalid BSP id",
+                        requestId: "local-validation"
+                    }
+                };
             }
-        };
-        emitProgress({ bspId, stage: "requesting", receivedBytes: 0, totalBytes: 0 });
-        const metaResult = await callDigiwisePublicApiWithSession((api, token) => api.prepareBspDownload(token, bspId));
-        const afterMetaGuard = getDigiwiseAuthGuard();
-        if (!afterMetaGuard.authenticated || afterMetaGuard.generation !== initialGuard.generation) {
-            return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Session changed", requestId: "session-changed" } };
-        }
-        if (!metaResult.ok) {
-            return metaResult;
-        }
-        try {
-            const installed = await installVerifiedBsp(bspStoreRoot(), bspId, metaResult.data, emitProgress);
-            const afterInstallGuard = getDigiwiseAuthGuard();
-            if (!afterInstallGuard.authenticated || afterInstallGuard.generation !== initialGuard.generation) {
-                await fs.promises.rm(installed.installPath, { recursive: true, force: true }).catch(() => undefined);
-                return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Session changed during BSP download", requestId: "session-changed" } };
+            const initialGuard = getDigiwiseAuthGuard();
+            if (!initialGuard.authenticated) {
+                return {
+                    ok: false,
+                    error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" }
+                };
             }
-            return { ok: true, data: installed };
-        } catch (error: any) {
-            return {
-                ok: false,
-                error: {
-                    status: typeof error?.status === "number" ? error.status : 502,
-                    code: typeof error?.code === "string" ? error.code : "BSP_DOWNLOAD_FAILED",
-                    message: typeof error?.message === "string" ? error.message : "BSP download failed",
-                    requestId: "bsp-download"
+            const emitProgress = (progress: DigiwiseBspDownloadProgress) => {
+                const win = resolveWindow();
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(PROGRESS_CHANNEL, progress);
                 }
             };
+            const controller = new AbortController();
+            activeDownloadControllers.set(bspId, controller);
+            emitProgress({ bspId, stage: "requesting", receivedBytes: 0, totalBytes: 0 });
+            try {
+                const metaResult = await callDigiwisePublicApiWithSession((api, token) =>
+                    api.prepareBspDownload(token, bspId)
+                );
+                const afterMetaGuard = getDigiwiseAuthGuard();
+                if (!afterMetaGuard.authenticated || afterMetaGuard.generation !== initialGuard.generation) {
+                    return {
+                        ok: false,
+                        error: {
+                            status: 401,
+                            code: "AUTH_REQUIRED",
+                            message: "Session changed",
+                            requestId: "session-changed"
+                        }
+                    };
+                }
+                if (!metaResult.ok) {
+                    return metaResult;
+                }
+                const installed = await installVerifiedBsp(
+                    bspStoreRoot(),
+                    bspId,
+                    metaResult.data,
+                    emitProgress,
+                    fetch,
+                    controller.signal
+                );
+                const afterInstallGuard = getDigiwiseAuthGuard();
+                if (!afterInstallGuard.authenticated || afterInstallGuard.generation !== initialGuard.generation) {
+                    await fs.promises.rm(installed.installPath, { recursive: true, force: true }).catch(() => undefined);
+                    return {
+                        ok: false,
+                        error: {
+                            status: 401,
+                            code: "AUTH_REQUIRED",
+                            message: "Session changed during BSP download",
+                            requestId: "session-changed"
+                        }
+                    };
+                }
+                return { ok: true, data: installed };
+            } catch (error: any) {
+                return {
+                    ok: false,
+                    error: {
+                        status: typeof error?.status === "number" ? error.status : 502,
+                        code: typeof error?.code === "string" ? error.code : "BSP_DOWNLOAD_FAILED",
+                        message: typeof error?.message === "string" ? error.message : "BSP download failed",
+                        requestId: "bsp-download"
+                    }
+                };
+            } finally {
+                if (activeDownloadControllers.get(bspId) === controller) {
+                    activeDownloadControllers.delete(bspId);
+                }
+            }
         }
-    });
-    ipcMain.handle("digistudio:bsp:remove", async (event, categoryCode: unknown, version: unknown): Promise<DigiwiseIpcResult<{ removed: true }>> => {
-        checkSender(event);
-        const guard = getDigiwiseAuthGuard();
-        if (!guard.authenticated) {
-            return { ok: false, error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" } };
+    );
+    ipcMain.handle(
+        "digistudio:bsp:cancel",
+        async (event, bspId: unknown): Promise<DigiwiseIpcResult<{ cancelled: boolean }>> => {
+            checkSender(event);
+            if (typeof bspId !== "number" || !Number.isSafeInteger(bspId) || bspId <= 0) {
+                return {
+                    ok: false,
+                    error: { status: 422, code: "INVALID_REQUEST", message: "Invalid BSP id", requestId: "local-validation" }
+                };
+            }
+            return { ok: true, data: { cancelled: cancelBspDownload(bspId) } };
         }
-        if (!isSafeSegment(categoryCode) || !isSafeSegment(version)) {
-            return { ok: false, error: { status: 422, code: "INVALID_REQUEST", message: "Invalid BSP identifier", requestId: "local-validation" } };
+    );
+    ipcMain.handle(
+        "digistudio:bsp:remove",
+        async (event, categoryCode: unknown, version: unknown): Promise<DigiwiseIpcResult<{ removed: true }>> => {
+            checkSender(event);
+            const guard = getDigiwiseAuthGuard();
+            if (!guard.authenticated) {
+                return {
+                    ok: false,
+                    error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" }
+                };
+            }
+            if (!isSafeSegment(categoryCode) || !isSafeSegment(version)) {
+                return {
+                    ok: false,
+                    error: {
+                        status: 422,
+                        code: "INVALID_REQUEST",
+                        message: "Invalid BSP identifier",
+                        requestId: "local-validation"
+                    }
+                };
+            }
+            const targetDir = path.join(bspStoreRoot(), categoryCode, version);
+            await fs.promises.rm(targetDir, { recursive: true, force: true });
+            return { ok: true, data: { removed: true } };
         }
-        const targetDir = path.join(bspStoreRoot(), categoryCode, version);
-        await fs.promises.rm(targetDir, { recursive: true, force: true });
-        return { ok: true, data: { removed: true } };
-    });
+    );
+    ipcMain.handle(
+        "digistudio:bsp:verify-build-access",
+        async (event, binding: unknown): Promise<DigiwiseIpcResult<DigiwiseBspBuildGateResult>> => {
+            checkSender(event);
+            const initialGuard = getDigiwiseAuthGuard();
+            if (!initialGuard.authenticated) {
+                return {
+                    ok: false,
+                    error: { status: 401, code: "AUTH_REQUIRED", message: "Sign in required", requestId: "local-auth" }
+                };
+            }
+            try {
+                const result = await verifyBspBuildAccess(
+                    bspStoreRoot(),
+                    binding as DigiwiseProjectBspBinding,
+                    async categoryCode => {
+                        const res = await callDigiwisePublicApiWithSession((api, token) =>
+                            api.listBspVersions(token, categoryCode)
+                        );
+                        if (!res.ok) {
+                            throw Object.assign(new Error(res.error.message), {
+                                code: res.error.code,
+                                status: res.error.status
+                            });
+                        }
+                        return res.data;
+                    }
+                );
+                const finalGuard = getDigiwiseAuthGuard();
+                if (!finalGuard.authenticated || finalGuard.generation !== initialGuard.generation) {
+                    return {
+                        ok: false,
+                        error: {
+                            status: 401,
+                            code: "AUTH_REQUIRED",
+                            message: "Session changed",
+                            requestId: "session-changed"
+                        }
+                    };
+                }
+                return { ok: true, data: result };
+            } catch (error: any) {
+                return {
+                    ok: false,
+                    error: {
+                        status: typeof error?.status === "number" ? error.status : 403,
+                        code: typeof error?.code === "string" ? error.code : "BSP_NOT_AUTHORIZED",
+                        message: typeof error?.message === "string" ? error.message : "BSP build authorization failed",
+                        requestId: "bsp-build-gate"
+                    }
+                };
+            }
+        }
+    );
 }

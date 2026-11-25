@@ -29,14 +29,12 @@ export type EmbeddedExecutionMode = "real" | "mock";
 export const DEFAULT_EMBEDDED_BUILD_OUTPUT_DIRECTORY = "build";
 
 export const DEFAULT_LOCAL_WEBSOCKET_ENDPOINT =
-    "ws://192.168.124.144:8765";
+    "ws://127.0.0.1:8765";
 
-const DEFAULT_REMOTE_PROJECT_DIRECTORY = "D:/__PRJ__/S350_EEZ";
-const DEFAULT_REMOTE_CONFIG_FILE =
-    "D:/__PRJ__/S350_EEZ/cmake_config_MH2457.py";
-const DEFAULT_REMOTE_BUILD_DIRECTORY = "D:/__PRJ__/S350_EEZ/build";
-const DEFAULT_REMOTE_FIRMWARE_PATH =
-    "D:/__PRJ__/S350_EEZ/build/HMI_MH2457.bin";
+const DEFAULT_REMOTE_PROJECT_DIRECTORY = ".";
+const DEFAULT_REMOTE_CONFIG_FILE = "cmake_config_MH2457.py";
+const DEFAULT_REMOTE_BUILD_DIRECTORY = "build";
+const DEFAULT_REMOTE_FIRMWARE_PATH = "build/HMI_MH2457.bin";
 
 const LEGACY_EMBEDDED_BUILD_OUTPUT_DIRECTORY = "build/firmware";
 const LEGACY_LOCAL_WEBSOCKET_ENDPOINTS = new Set([
@@ -88,6 +86,10 @@ function isValidWebSocketEndpoint(value: string) {
 
 export class EmbeddedBsp extends EezObject {
     name: string;
+    bspId: number;
+    categoryCode: string;
+    version: string;
+    sha256: string;
     rootPath: string;
     cmakeListsPath: string;
     toolchainFile: string;
@@ -102,6 +104,10 @@ export class EmbeddedBsp extends EezObject {
         label: () => "BSP",
         properties: [
             { name: "name", type: PropertyType.String },
+            { name: "bspId", displayName: "Managed BSP ID", type: PropertyType.Number },
+            { name: "categoryCode", displayName: "BSP category", type: PropertyType.String },
+            { name: "version", displayName: "BSP version", type: PropertyType.String },
+            { name: "sha256", displayName: "BSP SHA-256", type: PropertyType.String },
             { name: "rootPath", displayName: "BSP root", type: PropertyType.RelativeFolder },
             { name: "cmakeListsPath", displayName: "CMakeLists", type: PropertyType.RelativeFile },
             { name: "toolchainFile", displayName: "Toolchain file", type: PropertyType.RelativeFile },
@@ -114,6 +120,10 @@ export class EmbeddedBsp extends EezObject {
         ],
         defaultValue: {
             name: "Generic BSP",
+            bspId: 0,
+            categoryCode: "",
+            version: "",
+            sha256: "",
             rootPath: "",
             cmakeListsPath: "",
             toolchainFile: "",
@@ -123,6 +133,12 @@ export class EmbeddedBsp extends EezObject {
             ramSize: 0,
             flashSize: 0,
             serialPortCount: 0
+        },
+        beforeLoadHook: (_object: EmbeddedBsp, jsObject: Partial<EmbeddedBsp>) => {
+            if (jsObject.bspId === undefined) jsObject.bspId = 0;
+            if (jsObject.categoryCode === undefined) jsObject.categoryCode = "";
+            if (jsObject.version === undefined) jsObject.version = "";
+            if (jsObject.sha256 === undefined) jsObject.sha256 = "";
         },
         check: (object: EmbeddedBsp, messages: IMessage[]) => {
             if (!object.name) {
@@ -143,6 +159,10 @@ export class EmbeddedBsp extends EezObject {
         super.makeEditable();
         makeObservable(this, {
             name: observable,
+            bspId: observable,
+            categoryCode: observable,
+            version: observable,
+            sha256: observable,
             rootPath: observable,
             cmakeListsPath: observable,
             toolchainFile: observable,
@@ -155,6 +175,11 @@ export class EmbeddedBsp extends EezObject {
         });
     }
 }
+
+export {
+    applyManagedBspToEmbeddedBsp,
+    restoreManagedBspOnOpen
+} from "eez-studio-shared/digiwise-bsp-catalog";
 
 registerClass("EmbeddedBsp", EmbeddedBsp);
 
@@ -573,7 +598,7 @@ export class EmbeddedWebSocketSettings extends EezObject {
             }
         ],
         defaultValue: {
-            enabled: true,
+            enabled: false,
             environment: "local",
             localEndpoint: DEFAULT_LOCAL_WEBSOCKET_ENDPOINT,
             productionEndpoint: "",
@@ -584,7 +609,7 @@ export class EmbeddedWebSocketSettings extends EezObject {
             jsObject: Partial<EmbeddedWebSocketSettings> & { endpoint?: string }
         ) => {
             if (jsObject.enabled === undefined) {
-                jsObject.enabled = true;
+                jsObject.enabled = false;
             }
             if (jsObject.environment === undefined) {
                 jsObject.environment = "local";

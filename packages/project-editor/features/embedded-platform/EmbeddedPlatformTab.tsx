@@ -50,6 +50,7 @@ import {
     getEmbeddedWorkspaceItems,
     type EmbeddedWorkspaceItem
 } from "project-editor/features/embedded-platform/workspace-navigation";
+import { LocalPipelinePanel } from "project-editor/features/embedded-platform/LocalPipelinePanel";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -496,6 +497,8 @@ export const EmbeddedPlatformTab = observer(
 
         renderConfiguration(platform: any, selectedWorkspace: string) {
             switch (selectedWorkspace) {
+                case "local-pipeline":
+                    return <LocalPipelinePanel />;
                 case "protocols":
                     return <ProtocolCenter />;
                 case "resources":

@@ -34,6 +34,17 @@ import {
     type EmbeddedTransformModel,
     type EmbeddedTransformType
 } from "project-editor/features/embedded-platform/embedded-protocol";
+import { digiwiseLocalPipeline } from "home/digiwise-local-pipeline";
+
+function hasManagedBspBinding(platform: EmbeddedPlatform): boolean {
+    return (
+        Number.isSafeInteger(platform.bsp.bspId) &&
+        platform.bsp.bspId > 0 &&
+        Boolean(platform.bsp.categoryCode?.trim()) &&
+        Boolean(platform.bsp.version?.trim()) &&
+        /^[0-9a-f]{64}$/i.test(platform.bsp.sha256 || "")
+    );
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -948,6 +959,57 @@ export async function runEmbeddedBuild(
     const sourceDirectory = getBspSourceDirectory(projectStore, platform, managedBsp);
     const cwd = projectDirectory(projectStore);
 
+    // Managed BSP local build path (T04-LB02 -> LB03 -> LB04 in Electron Main)
+    if (hasManagedBspBinding(platform)) {
+        const unsubscribe = digiwiseLocalPipeline.onLocalBuildLog(ev => {
+            const msgType =
+                ev.stream === "error"
+                    ? MessageType.ERROR
+                    : ev.stream === "stderr"
+                      ? MessageType.WARNING
+                      : MessageType.INFO;
+            output(projectStore, msgType, `[${ev.stage}] ${ev.line}`);
+            options.onLog?.(ev.line);
+            if (ev.progress !== undefined) {
+                options.onProgress?.(ev.progress);
+            }
+        });
+        try {
+            const assetDir = projectStore.getAbsoluteFilePath(
+                projectStore.project.settings.build.destinationFolder || "."
+            );
+            const result = await digiwiseLocalPipeline.runLocalBuild({
+                projectDir: cwd,
+                outputDir: outputDirectory,
+                generatedUiSourceDir: fs.existsSync(assetDir) ? assetDir : undefined,
+                binding: {
+                    bspId: platform.bsp.bspId,
+                    categoryCode: platform.bsp.categoryCode,
+                    version: platform.bsp.version,
+                    sha256: platform.bsp.sha256
+                }
+            });
+            if (!result.ok) {
+                const message = `${result.error.code}: ${result.error.message}`;
+                output(projectStore, MessageType.ERROR, message);
+                return { success: false, message, outputDirectory };
+            }
+            const primaryFirmware =
+                result.data.artifacts.find(a => a.role === "firmware") || result.data.artifacts[0];
+            options.onProgress?.(100);
+            const message = `Managed local firmware build completed (${result.data.artifacts.length} artifact(s)).`;
+            output(projectStore, MessageType.INFO, message);
+            return {
+                success: true,
+                message,
+                outputDirectory,
+                firmwarePath: primaryFirmware?.path
+            };
+        } finally {
+            unsubscribe();
+        }
+    }
+
     try {
         if (platform.build.scriptPath) {
             const script = resolveConfiguredPath(projectStore, platform.build.scriptPath);
@@ -1117,6 +1179,32 @@ export async function detectEmbeddedTarget(
         );
     }
 
+    if (hasManagedBspBinding(platform)) {
+        const gate = await digiwiseLocalPipeline.verifyBspBuildAccess({
+            bspId: platform.bsp.bspId,
+            categoryCode: platform.bsp.categoryCode,
+            version: platform.bsp.version,
+            sha256: platform.bsp.sha256
+        });
+        if (!gate.ok) {
+            const msg = `${gate.error.code}: ${gate.error.message}`;
+            output(projectStore, MessageType.ERROR, msg);
+            return { success: false, message: msg };
+        }
+        const probe = gate.data.manifest?.download?.probe || platform.download.tool || "pyocd";
+        const detect = await digiwiseLocalPipeline.detectLocalProbe(probe);
+        if (!detect.ok) {
+            const msg = `${detect.error.code}: ${detect.error.message}`;
+            output(projectStore, MessageType.ERROR, msg);
+            return { success: false, message: msg };
+        }
+        const msg = detect.data.connected
+            ? `${detect.data.message} (${detect.data.devices.join(", ")})`
+            : `${detect.data.message}${detect.data.recoveryHint ? " — " + detect.data.recoveryHint : ""}`;
+        output(projectStore, detect.data.connected ? MessageType.INFO : MessageType.WARNING, msg);
+        return { success: detect.data.connected, message: msg };
+    }
+
     const settings = projectStore.project.embeddedPlatform.download;
     const command = settings.executablePath || defaultDownloadExecutable(settings.tool);
 
@@ -1227,6 +1315,64 @@ export async function runEmbeddedDownload(
         platform,
         outputDirectory
     );
+
+    if (hasManagedBspBinding(platform)) {
+        const gate = await digiwiseLocalPipeline.verifyBspBuildAccess({
+            bspId: platform.bsp.bspId,
+            categoryCode: platform.bsp.categoryCode,
+            version: platform.bsp.version,
+            sha256: platform.bsp.sha256
+        });
+        if (!gate.ok) {
+            const message = `${gate.error.code}: ${gate.error.message}`;
+            output(projectStore, MessageType.ERROR, message);
+            return { success: false, message, outputDirectory };
+        }
+        if (!gate.data.manifest) {
+            const message = "BSP_MANIFEST_MISSING: Installed BSP does not contain bsp-manifest.json.";
+            output(projectStore, MessageType.ERROR, message);
+            return { success: false, message, outputDirectory };
+        }
+        const resolvedFirmware = firmwarePath || findFirmwareFile(outputDirectory, managedBsp);
+        if (!resolvedFirmware || !fs.existsSync(resolvedFirmware)) {
+            const message = "No firmware image was found. Build the firmware or choose a .bin/.hex file.";
+            output(projectStore, MessageType.ERROR, message);
+            return { success: false, message, outputDirectory };
+        }
+        const unsubscribe = digiwiseLocalPipeline.onLocalDownloadLog(ev => {
+            const msgType =
+                ev.stream === "error"
+                    ? MessageType.ERROR
+                    : ev.stream === "stderr"
+                      ? MessageType.WARNING
+                      : MessageType.INFO;
+            output(projectStore, msgType, `[${ev.stage}] ${ev.line}`);
+            options.onLog?.(ev.line);
+            if (ev.progress !== undefined) {
+                options.onProgress?.(ev.progress);
+            }
+        });
+        try {
+            const dlRes = await digiwiseLocalPipeline.runLocalDownload({
+                projectDir: projectDirectory(projectStore),
+                manifest: gate.data.manifest,
+                firmwarePath: resolvedFirmware,
+                bspInstallDir: gate.data.installed.installPath
+            });
+            if (!dlRes.ok) {
+                const message = `${dlRes.error.code}: ${dlRes.error.message}`;
+                output(projectStore, MessageType.ERROR, message);
+                return { success: false, message, outputDirectory, firmwarePath: resolvedFirmware };
+            }
+            const message = `Firmware flashed and verified by ${dlRes.data.probe} (sha256=${dlRes.data.firmwareSha256.slice(0, 16)}...).`;
+            output(projectStore, MessageType.INFO, message);
+            options.onProgress?.(100);
+            return { success: true, message, outputDirectory, firmwarePath: resolvedFirmware };
+        } finally {
+            unsubscribe();
+        }
+    }
+
     const resolvedFirmware = firmwarePath || findFirmwareFile(outputDirectory, managedBsp);
 
     if (!resolvedFirmware || !fs.existsSync(resolvedFirmware)) {
