@@ -1,0 +1,47 @@
+name: "🤖 AI Agent IDE 研发任务"
+description: "创建结构化 IDE 客户端研发任务，供 AI Coding Agent（Antigravity / Codex / Copilot）直接领取并执行"
+title: "[IDE] "
+labels: ["ai-task"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: 目标与关联工单
+      description: 清晰描述 IDE 侧需求或缺陷，并注明关联的主项目工单（如 Mixlong/DigiwiseStudio-Admin-Java#13）。
+      placeholder: |
+        - 关联主工单：Mixlong/DigiwiseStudio-Admin-Java#<id>
+        - 目标：...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope_files
+    attributes:
+      label: 涉及模块与关键文件（可选）
+      placeholder: |
+        - packages/main/...
+        - packages/mcp/...
+        - packages/home/...
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: 验收标准（Checklist）
+      placeholder: |
+        - [ ] 功能与后端契约一致
+        - [ ] TypeScript 编译与回归测试通过
+        - [ ] 不泄露令牌/密钥/工程原文
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: 必跑验证命令与红线
+      value: |
+        - 独立分支开发，不动现有未提交修改和 `codex/client-001`。
+        - 提 PR 使用 `Refs Mixlong/DigiwiseStudio-Admin-Java#<id>`，更新 Project #1 为 `In Review` / `待验收`，禁止自签收。
+    validations:
+      required: false
