@@ -13,7 +13,15 @@ import {
     DigiwisePublicApi,
     DigiwisePublicApiError
 } from "main/digiwise-auth-api";
-import { callDigiwisePublicApiWithSession } from "main/digiwise-auth";
+import {
+    callDigiwisePublicApiWithSession,
+    getDigiwiseDownloadUrlPolicy
+} from "main/digiwise-auth";
+import {
+    DigiwiseDownloadRedirectError,
+    DigiwiseDownloadUrlPolicy,
+    fetchDigiwiseDownload
+} from "main/digiwise-download-policy";
 
 const TEMPLATE_PAGE_SIZE = 100;
 const MAX_TEMPLATE_COUNT = 1_000_000;
@@ -51,15 +59,28 @@ function isOptionalNullableString(
     return !(key in value) || isNullableString(value[key]);
 }
 
-function isSecureCoverUrl(value: unknown) {
-    return (
-        typeof value === "undefined" ||
-        value === null ||
-        (typeof value === "string" && value.startsWith("https://"))
-    );
+function isSecureCoverUrl(
+    value: unknown,
+    policy: DigiwiseDownloadUrlPolicy
+) {
+    if (typeof value === "undefined" || value === null) {
+        return true;
+    }
+    if (typeof value !== "string") {
+        return false;
+    }
+    try {
+        policy.validate(value);
+        return true;
+    } catch (_error) {
+        return false;
+    }
 }
 
-function isTemplateItem(value: unknown): value is DigiwiseTemplateItem {
+function isTemplateItem(
+    value: unknown,
+    policy: DigiwiseDownloadUrlPolicy
+): value is DigiwiseTemplateItem {
     if (!isRecord(value)) {
         return false;
     }
@@ -69,7 +90,7 @@ function isTemplateItem(value: unknown): value is DigiwiseTemplateItem {
         typeof value.name === "string" &&
         isOptionalNullableString(value, "description") &&
         isOptionalNullableString(value, "category") &&
-        isSecureCoverUrl(value.coverUrl) &&
+        isSecureCoverUrl(value.coverUrl, policy) &&
         typeof value.version === "string" &&
         typeof value.projectType === "string" &&
         isOptionalNullableString(value, "lvglVersion") &&
@@ -87,7 +108,8 @@ function isTemplateItem(value: unknown): value is DigiwiseTemplateItem {
 
 async function listAllTemplates(
     api: DigiwisePublicApi,
-    accessToken: string
+    accessToken: string,
+    policy: DigiwiseDownloadUrlPolicy
 ): Promise<DigiwiseTemplateItem[]> {
     const allItems: DigiwiseTemplateItem[] = [];
     let expectedTotal: number | undefined;
@@ -122,7 +144,7 @@ async function listAllTemplates(
             throw invalidResponse("The template list changed while loading pages");
         }
 
-        if (!result.items.every(isTemplateItem)) {
+        if (!result.items.every(item => isTemplateItem(item, policy))) {
             throw invalidResponse("The template list contains an invalid item");
         }
 
@@ -190,7 +212,8 @@ function validateProjectName(name: string) {
 
 function validateTemplateDownload(
     value: unknown,
-    input: DigiwiseTemplateCreateRequest
+    input: DigiwiseTemplateCreateRequest,
+    policy: DigiwiseDownloadUrlPolicy
 ) {
     if (!isRecord(value)) {
         throw invalidResponse("The template download response is invalid");
@@ -198,7 +221,7 @@ function validateTemplateDownload(
     const download = value as unknown as DigiwiseTemplateDownload;
     let downloadUrl: URL | undefined;
     try {
-        downloadUrl = new URL(download.downloadUrl);
+        downloadUrl = policy.validate(download.downloadUrl);
     } catch (_error) {
         // Report the same contract error as other malformed download metadata.
     }
@@ -219,10 +242,7 @@ function validateTemplateDownload(
         typeof download.expiresAt !== "string" ||
         !Number.isFinite(Date.parse(download.expiresAt)) ||
         Date.parse(download.expiresAt) <= Date.now() ||
-        !downloadUrl ||
-        downloadUrl.protocol !== "https:" ||
-        downloadUrl.username ||
-        downloadUrl.password
+        !downloadUrl
     ) {
         throw invalidResponse("The template download response is invalid");
     }
@@ -232,75 +252,42 @@ function validateTemplateDownload(
 async function downloadTemplateFile(
     url: URL,
     expectedSize: number,
-    onProgress: (progress: DigiwiseTemplateCreateProgress) => void
+    onProgress: (progress: DigiwiseTemplateCreateProgress) => void,
+    policy: DigiwiseDownloadUrlPolicy
 ) {
-    let currentUrl = url;
-    let response: Response | undefined;
-    for (let redirectCount = 0; redirectCount <= 3; redirectCount++) {
-        if (currentUrl.protocol !== "https:") {
-            throw templateError(
-                "TEMPLATE_DOWNLOAD_FAILED",
-                "The template download URL must use HTTPS",
-                502
-            );
-        }
-        try {
-            response = await fetch(currentUrl, {
+    let response: Response;
+    try {
+        response = await fetchDigiwiseDownload(
+            url,
+            policy,
+            fetch,
+            {
                 method: "GET",
-                headers: { Accept: "application/octet-stream" },
-                redirect: "manual"
-            });
-        } catch (_error) {
-            throw templateError(
-                "TEMPLATE_DOWNLOAD_FAILED",
-                "The template file could not be downloaded",
-                502
-            );
-        }
-
-        if (response.status < 300 || response.status >= 400) {
-            break;
-        }
-        const location = response.headers.get("location");
-        if (!location || redirectCount === 3) {
+                headers: { Accept: "application/octet-stream" }
+            }
+        );
+    } catch (error) {
+        if (error instanceof DigiwiseDownloadRedirectError) {
             throw templateError(
                 "TEMPLATE_DOWNLOAD_FAILED",
                 "The template download redirect is invalid",
                 502
             );
         }
-        try {
-            currentUrl = new URL(location, currentUrl);
-        } catch (_error) {
-            throw templateError(
-                "TEMPLATE_DOWNLOAD_FAILED",
-                "The template download redirect is invalid",
-                502
-            );
-        }
-    }
-
-    if (!response || !response.ok || !response.body) {
         throw templateError(
             "TEMPLATE_DOWNLOAD_FAILED",
             "The template file could not be downloaded",
             502
         );
     }
-    if (response.url) {
-        try {
-            if (new URL(response.url).protocol !== "https:") {
-                throw new Error("Insecure final URL");
-            }
-        } catch (_error) {
-            throw templateError(
-                "TEMPLATE_DOWNLOAD_FAILED",
-                "The template download did not remain on HTTPS",
-                502
-            );
-        }
-    }
 
+    if (!response.ok || !response.body) {
+        throw templateError(
+            "TEMPLATE_DOWNLOAD_FAILED",
+            "The template file could not be downloaded",
+            502
+        );
+    }
     const contentLength = Number(response.headers.get("content-length"));
     if (
         Number.isFinite(contentLength) &&
@@ -789,6 +776,7 @@ async function createDigiwiseTemplate(
         throw templateError("INVALID_REQUEST", "Invalid template create request");
     }
     const projectName = validateProjectName(input.projectName);
+    const policy = getDigiwiseDownloadUrlPolicy();
     if (
         !path.isAbsolute(input.targetDirectory) ||
         input.targetDirectory.includes("\0")
@@ -810,7 +798,7 @@ async function createDigiwiseTemplate(
             sha256: input.template.sha256,
             fileFormat: input.template.fileFormat,
             publishedAt: new Date(0).toISOString()
-        })
+        }, policy)
     ) {
         throw templateError(
             "INVALID_REQUEST",
@@ -824,11 +812,12 @@ async function createDigiwiseTemplate(
         input.template.id,
         input.template.version
     );
-    const validatedDownload = validateTemplateDownload(download, input);
+    const validatedDownload = validateTemplateDownload(download, input, policy);
     const fileData = await downloadTemplateFile(
         validatedDownload.downloadUrl,
         download.fileSize,
-        onProgress
+        onProgress,
+        policy
     );
     onProgress({ stage: "verifying" });
     verifyTemplateBytes(
@@ -847,7 +836,9 @@ export function registerDigiwiseTemplateIpc() {
     ipcRegistered = true;
 
     ipcMain.handle("digistudio:templates:list", () =>
-        callDigiwisePublicApiWithSession(listAllTemplates)
+        callDigiwisePublicApiWithSession((api, accessToken) =>
+            listAllTemplates(api, accessToken, getDigiwiseDownloadUrlPolicy())
+        )
     );
     ipcMain.handle(
         "digistudio:templates:create",

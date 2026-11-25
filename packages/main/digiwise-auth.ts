@@ -20,6 +20,10 @@ import {
     DigiwisePublicApi,
     DigiwisePublicApiError
 } from "main/digiwise-auth-api";
+import {
+    createDigiwiseDownloadUrlPolicy,
+    DigiwiseDownloadUrlPolicy
+} from "main/digiwise-download-policy";
 
 interface StoredAuthSession {
     accessToken: string;
@@ -58,6 +62,15 @@ let currentSession: StoredAuthSession | null = null;
 let authGeneration = 0;
 let ipcRegistered = false;
 const sessionListeners = new Set<() => void>();
+
+export function getDigiwiseDownloadUrlPolicy(): DigiwiseDownloadUrlPolicy {
+    return createDigiwiseDownloadUrlPolicy({
+        isPackaged: app.isPackaged,
+        allowLocalHttp: process.env.DIGIWISE_ALLOW_LOCAL_HTTP === "1",
+        apiBaseUrl: publicApiBaseUrl
+    });
+}
+
 export function onDigiwiseAuthSessionChanged(listener: () => void): () => void {
     sessionListeners.add(listener);
     return () => sessionListeners.delete(listener);
