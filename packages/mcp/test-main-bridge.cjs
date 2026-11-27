@@ -136,11 +136,11 @@ const policy = {
         // Main is not safe to use until renderer registered its actual agent.
         await assert.rejects(callBridge("get_current_project", {}),
             err => err.code === "IPC_UNAVAILABLE" && err.message.includes("initializing"));
-        const advertiseReady = (sender=webContents, version="mcp-2026-11-13-r19w37-central-stage") =>
+        const advertiseReady = (sender=webContents, version="mcp-2026-11-27-implementation-edit") =>
             ipcMain.emit("digi:mcp:renderer-ready", {
                 sender, senderFrame: sender.mainFrame
             }, version);
-        advertiseReady({mainFrame:{id:99}}, "mcp-2026-11-13-r19w37-central-stage");
+        advertiseReady({mainFrame:{id:99}}, "mcp-2026-11-27-implementation-edit");
         await assert.rejects(callBridge("get_current_project", {}),
             err => err.code === "IPC_UNAVAILABLE");
         advertiseReady(webContents, "mcp-incompatible-registry");
@@ -178,7 +178,7 @@ const policy = {
         locale = "en";
 
         const originalMetadata = readFileSync(session, "utf8");
-        assert.equal(JSON.parse(originalMetadata).registryVersion, "mcp-2026-11-13-r19w37-central-stage");
+        assert.equal(JSON.parse(originalMetadata).registryVersion, "mcp-2026-11-27-implementation-edit");
         const staleMainMetadata = JSON.parse(originalMetadata);
         delete staleMainMetadata.registryVersion;
         writeFileSync(session, JSON.stringify(staleMainMetadata));

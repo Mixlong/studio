@@ -21,7 +21,7 @@ const result = () => ({
     decisionId: crypto.randomUUID(),
     bindingId: original.bindingId,
     modelId: 350, tool: "add_widget", permission: "project.edit",
-    riskGroup: "project.edit", registryVersion: "mcp-2026-11-13-r19w37-central-stage",
+    riskGroup: "project.edit", registryVersion: "mcp-2026-11-27-implementation-edit",
     clientSessionId: session, projectFingerprint: original.projectFingerprint,
     projectRevision: 1, parameterDigest: digest, serverDecision: "allow",
     globalPolicyRevision: 2, accountPolicyRevision: 4,

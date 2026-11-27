@@ -194,7 +194,9 @@ export function validateWriteArguments(
         set_default_style: ["expectedProjectPath", "stylePath", "styleId", "enabled"],
         import_bitmap: ["expectedProjectPath", "filePath", "name"],
         create_variable: ["expectedProjectPath", "name", "type", "initialValue"],
+        set_variable_implementation: ["expectedProjectPath", "variableName", "variableId", "native"],
         create_action: ["expectedProjectPath", "name"],
+        set_action_implementation: ["expectedProjectPath", "actionName", "actionId", "implementationType"],
         add_action_node: ["expectedProjectPath", "actionName", "actionId", "nodeType", "left", "top", "name", "milliseconds", "variableName", "value", "conditionVariableName", "conditionValue", "targetActionName", "screenName"],
         connect_action_nodes: ["expectedProjectPath", "actionName", "actionId", "sourceId", "targetId", "output"],
         disconnect_action_line: ["expectedProjectPath", "actionName", "actionId", "lineId"],
@@ -323,6 +325,16 @@ export function validateWriteArguments(
                 typeof val === "number" && Number.isFinite(val) && Math.abs(val) <= 1_000_000 &&
                 (args.type !== "integer" || Number.isSafeInteger(val));
             if (!isValid) fail("initialValue does not match variable type");
+        }
+    } else if (tool === "set_variable_implementation") {
+        if (!safeLabel(args.variableName) || !validObjectId(args.variableId) ||
+            typeof args.native !== "boolean") {
+            fail("variableName, variableId and native are required; use identity from list_variables");
+        }
+    } else if (tool === "set_action_implementation") {
+        if (!safeLabel(args.actionName) || !validObjectId(args.actionId) ||
+            !["flow", "native"].includes(args.implementationType as string)) {
+            fail("actionName, actionId and implementationType (flow or native) are required; use identity from list_actions");
         }
     } else if (["bind_widget_variable", "unbind_widget_variable"].includes(tool)) {
         if (!isIndexPath(args.widgetPath)) fail("Invalid widgetPath");

@@ -326,10 +326,30 @@ function createServer() {
             destructive: false
         },
         {
+            name: "set_variable_implementation",
+            description: "Switch an existing global variable between Native and Flow using variableName + variableId from list_variables. Preserves the variable value and references; editor Undoable.",
+            schema: z.object({
+                variableName: z.string().min(1).max(64),
+                variableId: z.string().min(1).max(128),
+                native: z.boolean()
+            }),
+            destructive: true
+        },
+        {
             name: "create_action",
             description: "Create a named Flow Action container in a Flow-enabled LVGL project. Use add_action_node and connect_action_nodes to define a basic sequence graph.",
             schema: z.object({ name: z.string().min(1).max(64) }),
             destructive: false
+        },
+        {
+            name: "set_action_implementation",
+            description: "Switch an existing Action between Flow and Native using actionName + actionId from list_actions. An empty Native Action converted to Flow receives a Start-to-End no-op graph; existing Flow nodes are preserved but are inactive while Native. This does not generate Native C/C++ source. Undoable.",
+            schema: z.object({
+                actionName: z.string().min(1).max(64),
+                actionId: z.string().min(1).max(128),
+                implementationType: z.enum(["flow", "native"])
+            }),
+            destructive: true
         },
         {
             name: "add_action_node",

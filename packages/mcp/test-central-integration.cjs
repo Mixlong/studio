@@ -37,7 +37,7 @@ const api = {
         calls.push({name: "connect", token, input});
         if (!online) throw new Error("offline");
         if (!allowed) throw Object.assign(new Error("denied"), {status: 403, code: "ACCESS_DENIED"});
-        assert.equal(input.registryVersion, "mcp-2026-11-13-r19w37-central-stage");
+        assert.equal(input.registryVersion, "mcp-2026-11-27-implementation-edit");
         assert.match(input.clientSessionId, /^[A-Za-z0-9_-]{16,128}$/);
         return {
             connected: true, requestId: crypto.randomUUID(),
@@ -60,7 +60,7 @@ const api = {
         calls.push({name: "authorize", token, input});
         if (!online) throw new Error("offline");
         if (!allowed) throw Object.assign(new Error("denied"), {status: 403, code: "ACCESS_DENIED"});
-        assert.equal(input.registryVersion, "mcp-2026-11-13-r19w37-central-stage");
+        assert.equal(input.registryVersion, "mcp-2026-11-27-implementation-edit");
         assert.match(input.parameterDigest, /^[0-9a-f]{64}$/);
         const riskGroup = input.tool === "start_project_build" ? "build.run" :
             input.tool === "add_widget" ? "project.edit" : "project.view";

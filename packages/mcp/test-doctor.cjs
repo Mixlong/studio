@@ -12,7 +12,7 @@ const path = require("node:path");
         assert.equal(readSessionStatus(filename).session, "missing");
         fs.writeFileSync(filename, "{invalid");
         assert.equal(readSessionStatus(filename).session, "invalid");
-        const create = (version = "mcp-2026-11-13-r19w37-central-stage") =>
+        const create = (version = "mcp-2026-11-27-implementation-edit") =>
             fs.writeFileSync(filename, JSON.stringify({
                 pid: 13579, registryVersion: version, token: "PRIVATE-NEVER-PRINT"
             }));

@@ -20,7 +20,7 @@ export function locateSessionFile() {
 // Keep in sync with MCP_TOOL_REGISTRY_VERSION in protocol.ts and main-server.ts.
 // A stale Main process may accept old tools while a hot-reloaded Renderer
 // advertises newer ones; fail before sending any request in that case.
-export const EXPECTED_REGISTRY_VERSION = "mcp-2026-11-13-r19w37-central-stage";
+export const EXPECTED_REGISTRY_VERSION = "mcp-2026-11-27-implementation-edit";
 
 // All mutations require local approval, which can take up to 125 seconds.
 // Classifying by the bounded read-only list prevents newly added write tools

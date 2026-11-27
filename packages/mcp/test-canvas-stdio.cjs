@@ -52,7 +52,7 @@ const { join } = require("node:path");
             server.listen(socketPath, resolve);
         });
         writeFileSync(sessionFile, JSON.stringify({
-            version: 1, registryVersion: "mcp-2026-11-13-r19w37-central-stage",
+            version: 1, registryVersion: "mcp-2026-11-27-implementation-edit",
             pid: process.pid, socketPath, token
         }), { mode: 0o600 });
         child = spawn(process.execPath, [join(__dirname, "stdio-cli.mjs")], {

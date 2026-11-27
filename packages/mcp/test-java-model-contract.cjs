@@ -36,7 +36,7 @@ for (const key of ["READ", "BUILD", "EDIT"]) {
 }
 const javaTools = [...groups.READ, ...groups.BUILD, ...groups.EDIT];
 const clientTools = [...MCP_READ_TOOLS, ...MCP_WRITE_TOOLS];
-assert.equal(javaTools.length, 56);
+assert.equal(javaTools.length, 58);
 assert.equal(new Set(javaTools).size, 56, "Overlapping Java tool permission groups");
 assert.deepEqual(groups.READ.slice().sort(), MCP_READ_TOOLS.slice().sort());
 assert.deepEqual([...groups.BUILD, ...groups.EDIT].sort(), MCP_WRITE_TOOLS.slice().sort());

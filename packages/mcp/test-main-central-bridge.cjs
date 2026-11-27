@@ -121,7 +121,7 @@ const policy={
         assert.ok(existsSync(process.env.DIGISTUDIO_MCP_SESSION_FILE));
         ipcMain.emit("digi:mcp:renderer-ready",{
             sender:webContents,senderFrame:webContents.mainFrame
-        },"mcp-2026-11-13-r19w37-central-stage");
+        },"mcp-2026-11-27-implementation-edit");
         discoverable=false;
         await assert.rejects(callBridge("get_mcp_capabilities",{}),
             e=>e.code==="MCP_POLICY_UNAVAILABLE");

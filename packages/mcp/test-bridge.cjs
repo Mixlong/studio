@@ -36,7 +36,7 @@ const { writeFileSync, mkdtempSync, rmSync } = require("node:fs");
         });
         writeFileSync(session, JSON.stringify({
             version: 1,
-            registryVersion: "mcp-2026-11-13-r19w37-central-stage",
+            registryVersion: "mcp-2026-11-27-implementation-edit",
             pid: process.pid,
             token,
             socketPath
@@ -45,7 +45,7 @@ const { writeFileSync, mkdtempSync, rmSync } = require("node:fs");
         const { callBridge, READ_ONLY_TOOLS, bridgeRequestTimeoutMs, EXPECTED_REGISTRY_VERSION } = await import("./bridge-client.mjs");
         const { MCP_READ_TOOLS, MCP_WRITE_TOOLS } = require("../../build/mcp/protocol.js");
         const assert = require("node:assert/strict");
-        assert.equal(EXPECTED_REGISTRY_VERSION, "mcp-2026-11-13-r19w37-central-stage");
+        assert.equal(EXPECTED_REGISTRY_VERSION, "mcp-2026-11-27-implementation-edit");
         assert.deepEqual([...READ_ONLY_TOOLS].sort(), [...MCP_READ_TOOLS].sort(),
             "Transport short-timeout set must match exact registered read tools");
         for (const tool of MCP_READ_TOOLS) assert.equal(bridgeRequestTimeoutMs(tool), 8500);

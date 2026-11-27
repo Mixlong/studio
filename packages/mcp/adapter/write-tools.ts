@@ -548,6 +548,70 @@ export async function executeWriteTool(
         return { moved: true, widgetId: widget.objID, sourcePageName: sourcePage.name,
             targetPageName: targetPage.name, widgetPath: movedPath };
     }
+    if (tool === "set_variable_implementation") {
+        const variable = store.project.variables?.globalVariables.find(item =>
+            item.name === a.variableName && item.objID === a.variableId);
+        if (!variable) fail("INVALID_STATE", "Variable identity is stale; call list_variables again");
+        const native = a.native as boolean;
+        if (!native && !store.projectTypeTraits.hasFlowSupport) {
+            fail("INVALID_STATE", "Flow support is required to convert this variable to Flow");
+        }
+        if (!!variable.native === native) {
+            return { changed: false, name: variable.name, variableId: variable.objID,
+                native: !!variable.native };
+        }
+        transaction(store, () => store.updateObject(variable, { native }));
+        return { changed: true, name: variable.name, variableId: variable.objID, native };
+    }
+
+    if (tool === "set_action_implementation") {
+        const action = store.project.actions.find(item =>
+            item.name === a.actionName && item.objID === a.actionId);
+        if (!action) fail("INVALID_STATE", "Action identity is stale; call list_actions again");
+        const implementationType = a.implementationType as "flow" | "native";
+        const previous = action.implementationType || "flow";
+        if (previous === implementationType) {
+            return { changed: false, name: action.name, actionId: action.objID,
+                implementationType, preservedFlowNodes: action.components.length };
+        }
+        if (implementationType === "flow" && !store.projectTypeTraits.hasFlowSupport) {
+            fail("INVALID_STATE", "Flow support is required to convert this Action to Flow");
+        }
+        let seededNoop = false;
+        let start: StartActionComponent | undefined;
+        let end: EndActionComponent | undefined;
+        let line: ConnectionLine | undefined;
+        if (implementationType === "flow" && action.components.length === 0) {
+            if (action.connectionLines.length !== 0) {
+                fail("INVALID_STATE", "Action has connection lines but no Flow nodes; inspect the project before conversion");
+            }
+            start = createObject(store, {
+                ...(getDefaultValue(store, StartActionComponent.classInfo) || {}),
+                type: "StartActionComponent", left: 0, top: 0
+            }, StartActionComponent);
+            end = createObject(store, {
+                ...(getDefaultValue(store, EndActionComponent.classInfo) || {}),
+                type: "EndActionComponent", left: 220, top: 0
+            }, EndActionComponent);
+            line = createObject<ConnectionLine>(store, {
+                source: start.objID, output: "@seqout", target: end.objID,
+                input: "@seqin", disabled: false
+            }, ConnectionLine);
+            seededNoop = true;
+        }
+        transaction(store, () => {
+            store.updateObject(action, { implementationType });
+            if (start && end && line) {
+                store.addObject(action.components, start);
+                store.addObject(action.components, end);
+                store.addObject(action.connectionLines, line);
+            }
+        });
+        return { changed: true, name: action.name, actionId: action.objID,
+            previousImplementationType: previous, implementationType, seededNoop,
+            preservedFlowNodes: action.components.length };
+    }
+
     if (tool === "create_action") {
         if (!store.projectTypeTraits.hasFlowSupport) {
             fail("INVALID_STATE", "Flow support is required to create a Flow Action");

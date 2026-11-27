@@ -64,7 +64,7 @@ child.stderr.on("data", chunk => { errors += chunk.toString(); });
             "list_actions", "get_action_graph", "list_pages", "list_widgets",
             "list_styles", "get_style", "list_assets",
             "get_widget_details", "list_widget_events", "get_widget_schema",
-            "create_project", "create_page", "rename_page", "delete_page", "create_style", "rename_style", "delete_style", "set_default_style", "import_bitmap", "create_variable", "create_action", "add_action_node", "connect_action_nodes", "disconnect_action_line", "delete_action_node", "bind_widget_variable", "unbind_widget_variable", "add_widget", "update_widget", "duplicate_widget", "move_widget", "reorder_widget", "start_project_check", "start_project_build", "start_preview", "stop_preview", "preview_tap", "delete_widget",
+            "create_project", "create_page", "rename_page", "delete_page", "create_style", "rename_style", "delete_style", "set_default_style", "import_bitmap", "create_variable", "set_variable_implementation", "create_action", "set_action_implementation", "add_action_node", "connect_action_nodes", "disconnect_action_line", "delete_action_node", "bind_widget_variable", "unbind_widget_variable", "add_widget", "update_widget", "duplicate_widget", "move_widget", "reorder_widget", "start_project_check", "start_project_build", "start_preview", "stop_preview", "preview_tap", "delete_widget",
             "set_style_property", "set_widget_property", "set_widget_properties",
             "set_widget_local_style", "add_widget_event", "remove_widget_event",
             "save_project", "undo", "redo"

@@ -47,6 +47,17 @@ const FLOW_NODE_CAPABILITIES = {
         "sequence cycles and Action recursion refused", "editor write approval required"]
 };
 
+const IMPLEMENTATION_EDITING_CAPABILITIES = {
+    variableTool: "set_variable_implementation",
+    actionTool: "set_action_implementation",
+    identity: "variableName + variableId from list_variables; actionName + actionId from list_actions",
+    variableBehavior: "switches Native/Flow without changing type, default value or references",
+    emptyNativeActionToFlow: "creates a Start -> End no-op graph",
+    existingFlowGraph: "preserved when switching implementation; inactive while Native",
+    nativeCode: "switching to Native does not generate or modify C/C++ implementation source",
+    undoable: true
+};
+
 function creatableWidgetTypes(store: ProjectStore) {
     return getClassesDerivedFrom(store, LVGLWidget)
         .filter(entry => /^LVGL[A-Za-z0-9]+Widget$/.test(entry.name) &&
@@ -143,6 +154,7 @@ export function getMcpCapabilitiesWithoutProject() {
         creatableWidgetTypes: [],
         widgetAuthoring: WIDGET_AUTHORING_CAPABILITIES,
         flowNodes: FLOW_NODE_CAPABILITIES,
+        implementationEditing: IMPLEMENTATION_EDITING_CAPABILITIES,
         workflow: ["get_mcp_capabilities", "create_project", "get_current_project",
             "list_pages", "get_widget_schema", "add_action_node", "get_action_graph", "save_project"],
         constraints: {
@@ -183,6 +195,7 @@ export function runReadTool(
             creatableWidgetTypes: creatableWidgetTypes(projectStore),
             widgetAuthoring: WIDGET_AUTHORING_CAPABILITIES,
             flowNodes: FLOW_NODE_CAPABILITIES,
+            implementationEditing: IMPLEMENTATION_EDITING_CAPABILITIES,
             constraints: {
                 writesRequireLocalApproval: true,
                 objectIdentity: "widgetPath + widgetId (Style: stylePath + styleId)",

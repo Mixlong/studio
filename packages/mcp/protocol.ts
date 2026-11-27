@@ -9,7 +9,7 @@ export const MCP_RENDERER_PROBE_CHANNEL = "digi:mcp:renderer-probe";
 export const MCP_SESSION_NAME = "mcp-session.json";
 // Main process and stand-alone Stdio client must advertise the exact same
 // allowed tool set. Bump when MCP_READ_TOOLS / MCP_WRITE_TOOLS change.
-export const MCP_TOOL_REGISTRY_VERSION = "mcp-2026-11-13-r19w37-central-stage";
+export const MCP_TOOL_REGISTRY_VERSION = "mcp-2026-11-27-implementation-edit";
 export const MCP_TIMEOUT_MS = 8_000;
 export const MCP_MAX_REQUEST_BYTES = 64 * 1024;
 export const MCP_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -70,7 +70,9 @@ export const MCP_WRITE_TOOLS = [
     "set_default_style",
     "import_bitmap",
     "create_variable",
+    "set_variable_implementation",
     "create_action",
+    "set_action_implementation",
     "add_action_node",
     "connect_action_nodes",
     "disconnect_action_line",
